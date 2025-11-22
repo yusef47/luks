@@ -2,29 +2,29 @@ import React from 'react';
 import { Agent } from '../types';
 
 export const SearchIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-6" }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-  </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+    </svg>
 );
 
 export const MapIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-6" }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503-6.998l-6.862 3.686M6.75 12l6.862 3.686m0-11.372L12 3.75l-6.75 3.686m13.5 0l-6.75 3.686m6.75 0V15m-6.75-8.25v11.25m0 0l6.75-3.686M12 21l-6.75-3.686m6.75 0l6.75-3.686M3.75 6.75l6.75-3.686m0 0l6.75 3.686M3.75 6.75V15m6.75-8.25v3.686" />
-  </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503-6.998l-6.862 3.686M6.75 12l6.862 3.686m0-11.372L12 3.75l-6.75 3.686m13.5 0l-6.75 3.686m6.75 0V15m-6.75-8.25v11.25m0 0l6.75-3.686M12 21l-6.75-3.686m6.75 0l6.75-3.686M3.75 6.75l6.75-3.686m0 0l6.75 3.686M3.75 6.75V15m6.75-8.25v3.686" />
+    </svg>
 );
 
 export const VisionIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-6" }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.432 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-  </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.432 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
 );
 
 export const VideoIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-6" }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" />
-  </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" />
+    </svg>
 );
 
 export const OrchestratorIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-6" }) => (
@@ -84,13 +84,13 @@ export const MoonIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-
 
 export const ComputerIcon: React.FC<{ className?: string }> = ({ className = "w-6 h-6" }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-1.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-1.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z" />
     </svg>
 );
 
 export const ClockIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
 );
 
@@ -118,7 +118,13 @@ export const WindowCloseIcon: React.FC<{ className?: string }> = ({ className = 
 );
 export const ArrowUpIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={className}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
+    </svg>
+);
+
+export const ArrowRightIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
     </svg>
 );
 
@@ -136,28 +142,28 @@ export const CogIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5
 
 
 export const AgentIcon: React.FC<{ agent: Agent, className?: string }> = ({ agent, className }) => {
-  switch (agent) {
-    case Agent.SearchAgent:
-      return <SearchIcon className={className} />;
-    case Agent.MapsAgent:
-      return <MapIcon className={className} />;
-    case Agent.VisionAgent:
-      return <VisionIcon className={className} />;
-    case Agent.VideoAgent:
-      return <VideoIcon className={className} />;
-    case Agent.EmailAgent:
-      return <EmailIcon className={className} />;
-    case Agent.SheetsAgent:
-        return <SheetsIcon className={className} />;
-    case Agent.DriveAgent:
-        return <DriveIcon className={className} />;
-    case Agent.ImageGenerationAgent:
-        return <ImageIcon className={className} />;
-    case Agent.Orchestrator:
-        return <OrchestratorIcon className={className} />;
-    case Agent.User:
-        return <UserIcon className={className} />;
-    default:
-      return null;
-  }
+    switch (agent) {
+        case Agent.SearchAgent:
+            return <SearchIcon className={className} />;
+        case Agent.MapsAgent:
+            return <MapIcon className={className} />;
+        case Agent.VisionAgent:
+            return <VisionIcon className={className} />;
+        case Agent.VideoAgent:
+            return <VideoIcon className={className} />;
+        case Agent.EmailAgent:
+            return <EmailIcon className={className} />;
+        case Agent.SheetsAgent:
+            return <SheetsIcon className={className} />;
+        case Agent.DriveAgent:
+            return <DriveIcon className={className} />;
+        case Agent.ImageGenerationAgent:
+            return <ImageIcon className={className} />;
+        case Agent.Orchestrator:
+            return <OrchestratorIcon className={className} />;
+        case Agent.User:
+            return <UserIcon className={className} />;
+        default:
+            return null;
+    }
 };

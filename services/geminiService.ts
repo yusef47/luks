@@ -5,7 +5,7 @@ const API_KEY = process.env.API_KEY;
 const API_URL = process.env.VITE_API_URL || 'http://localhost:5000/api';
 
 if (!API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+    throw new Error("API_KEY environment variable not set");
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
@@ -15,32 +15,32 @@ let apiErrorCount = 0;
 let lastErrorTime = 0;
 
 const handleAPIError = (error: any) => {
-  const errorCode = error?.status || error?.code;
-  const now = Date.now();
-  
-  if (errorCode === 429 || errorCode === 503) {
-    apiErrorCount++;
-    lastErrorTime = now;
-    console.warn(`⚠️ API Error ${errorCode}: ${error?.message}. Count: ${apiErrorCount}`);
-    
-    // Reset count after 1 minute
-    if (now - lastErrorTime > 60000) {
-      apiErrorCount = 0;
+    const errorCode = error?.status || error?.code;
+    const now = Date.now();
+
+    if (errorCode === 429 || errorCode === 503) {
+        apiErrorCount++;
+        lastErrorTime = now;
+        console.warn(`⚠️ API Error ${errorCode}: ${error?.message}. Count: ${apiErrorCount}`);
+
+        // Reset count after 1 minute
+        if (now - lastErrorTime > 60000) {
+            apiErrorCount = 0;
+        }
     }
-  }
-  
-  return errorCode;
+
+    return errorCode;
 };
 
 const fileToGenerativePart = async (file: File) => {
-  const base64EncodedDataPromise = new Promise<string>((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-    reader.readAsDataURL(file);
-  });
-  return {
-    inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
-  };
+    const base64EncodedDataPromise = new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(file);
+    });
+    return {
+        inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
+    };
 };
 
 const planResponseSchema = {
@@ -81,27 +81,27 @@ const planResponseSchema = {
 
 // FIX: Correctly type the history parameter to match the data being passed from App.tsx.
 export const generatePlan = async (prompt: string, hasImage: boolean, hasVideo: boolean, history: { prompt: string; results: StepResult[] }[], cycleCount: number): Promise<{ plan?: PlanStep[]; clarification?: Clarification }> => {
-  const historyText = history.length > 0
-    ? history
-        .map(c => {
-            const orchestratorResults = (c.results || []).filter(r => r.agent === Agent.Orchestrator && r.status === 'completed');
-            
-            let lukasResponse = 'I executed the request.';
-            if (orchestratorResults.length > 0) {
-                // Find the result from the orchestrator step with the highest step number, which is the final answer.
-                const finalResult = orchestratorResults.reduce((prev, current) => (prev.step > current.step) ? prev : current);
-                lukasResponse = finalResult.result;
-            }
-            
-            // To keep the history prompt concise for the model
-            const conciseResponse = lukasResponse.length > 400 ? lukasResponse.substring(0, 400) + '...' : lukasResponse;
+    const historyText = history.length > 0
+        ? history
+            .map(c => {
+                const orchestratorResults = (c.results || []).filter(r => r.agent === Agent.Orchestrator && r.status === 'completed');
 
-            return `User: ${c.prompt}\nLukas: ${conciseResponse}`;
-        })
-        .join('\n---\n')
-    : 'No history yet.';
+                let lukasResponse = 'I executed the request.';
+                if (orchestratorResults.length > 0) {
+                    // Find the result from the orchestrator step with the highest step number, which is the final answer.
+                    const finalResult = orchestratorResults.reduce((prev, current) => (prev.step > current.step) ? prev : current);
+                    lukasResponse = finalResult.result;
+                }
 
-  let fullPrompt = `You are "Lukas", an AI Orchestrator. Your job is to create a plan for your team of specialized AI agents based on the user's request and the conversation history.
+                // To keep the history prompt concise for the model
+                const conciseResponse = lukasResponse.length > 10000 ? lukasResponse.substring(0, 10000) + '...' : lukasResponse;
+
+                return `User: ${c.prompt}\nLukas: ${conciseResponse}`;
+            })
+            .join('\n---\n')
+        : 'No history yet.';
+
+    let fullPrompt = `You are "Lukas", an AI Orchestrator. Your job is to create a plan for your team of specialized AI agents based on the user's request and the conversation history.
 
 Your available agents are:
 - SearchAgent: For web searches (news, facts, real-time info).
@@ -136,71 +136,71 @@ Your Task:
 This creates a cycle: Plan (To-Do) -> Act -> Validate -> Act -> Validate -> ... -> Synthesize.
 
 Your response must be a single JSON object matching the provided schema, containing EITHER a 'plan' OR a 'clarification_needed' field, but not both.`;
-  
-  if (hasImage) {
-    fullPrompt += "\nAn image has been provided. The VisionAgent must be used.";
-  }
-  if (hasVideo) {
-    fullPrompt += "\nA video has been provided. The VideoAgent must be used.";
-  }
-  
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: fullPrompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: planResponseSchema,
-      },
-    });
-    const resultText = response.text.trim();
-    const resultJson = JSON.parse(resultText);
 
-    if (resultJson.plan) {
-        return { plan: resultJson.plan };
-    } else if (resultJson.clarification_needed) {
-        return { clarification: resultJson.clarification_needed };
-    } else {
-        throw new Error("AI response did not contain a plan or a clarification request.");
+    if (hasImage) {
+        fullPrompt += "\nAn image has been provided. The VisionAgent must be used.";
     }
-  } catch (error: any) {
-    const errorCode = handleAPIError(error);
-    console.error("Error generating plan:", error);
-    
-    // If it's a quota/rate limit error, log it but continue
-    if (errorCode === 429 || errorCode === 503) {
-      console.warn(`⚠️ API Quota/Rate Limit Error. The server will automatically switch to another key.`);
+    if (hasVideo) {
+        fullPrompt += "\nA video has been provided. The VideoAgent must be used.";
     }
-    
-    // Fallback: Generate a simple default plan based on the prompt
-    console.log("Using fallback plan generation...");
-    const defaultPlan: PlanStep[] = [
-      {
-        step: 1,
-        agent: Agent.Orchestrator,
-        task: "Create a to-do list for: " + prompt.substring(0, 100)
-      },
-      {
-        step: 2,
-        agent: Agent.SearchAgent,
-        task: "Search for information about: " + prompt.substring(0, 100)
-      },
-      {
-        step: 3,
-        agent: Agent.Orchestrator,
-        task: "Validate the search results and synthesize the final answer"
-      }
-    ];
-    
-    return { plan: defaultPlan };
-  }
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: fullPrompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: planResponseSchema,
+            },
+        });
+        const resultText = response.text.trim();
+        const resultJson = JSON.parse(resultText);
+
+        if (resultJson.plan) {
+            return { plan: resultJson.plan };
+        } else if (resultJson.clarification_needed) {
+            return { clarification: resultJson.clarification_needed };
+        } else {
+            throw new Error("AI response did not contain a plan or a clarification request.");
+        }
+    } catch (error: any) {
+        const errorCode = handleAPIError(error);
+        console.error("Error generating plan:", error);
+
+        // If it's a quota/rate limit error, log it but continue
+        if (errorCode === 429 || errorCode === 503) {
+            console.warn(`⚠️ API Quota/Rate Limit Error. The server will automatically switch to another key.`);
+        }
+
+        // Fallback: Generate a simple default plan based on the prompt
+        console.log("Using fallback plan generation...");
+        const defaultPlan: PlanStep[] = [
+            {
+                step: 1,
+                agent: Agent.Orchestrator,
+                task: "Create a to-do list for: " + prompt.substring(0, 100)
+            },
+            {
+                step: 2,
+                agent: Agent.SearchAgent,
+                task: "Search for information about: " + prompt.substring(0, 100)
+            },
+            {
+                step: 3,
+                agent: Agent.Orchestrator,
+                task: "Validate the search results and synthesize the final answer"
+            }
+        ];
+
+        return { plan: defaultPlan };
+    }
 };
 
 
 const streamContent = async (
-    model: string, 
-    contents: any, 
-    config: any, 
+    model: string,
+    contents: any,
+    config: any,
     onChunk: (chunk: string) => void
 ) => {
     const responseStream = await ai.models.generateContentStream({ model, contents, config });
@@ -215,7 +215,7 @@ export const executeSearch = async (task: string, onChunk: (chunk: string) => vo
         contents: task,
         config: { tools: [{ googleSearch: {} }] },
     });
-    
+
     onChunk(response.text);
 
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
@@ -235,8 +235,8 @@ export const executeMap = async (task: string, location: Geolocation | null, onC
         model: "gemini-2.5-flash",
         contents: task,
         config: {
-          tools: [{googleMaps: {}}],
-          toolConfig: location ? { retrievalConfig: { latLng: { latitude: location.latitude, longitude: location.longitude } } } : undefined,
+            tools: [{ googleMaps: {} }],
+            toolConfig: location ? { retrievalConfig: { latLng: { latitude: location.latitude, longitude: location.longitude } } } : undefined,
         },
     });
 
@@ -286,7 +286,7 @@ export const executeImageGeneration = async (task: string, onChunk: (chunk: stri
 
 export const executeEmail = async (task: string, onChunk: (chunk: string) => void) => {
     const result = `Simulated sending email based on task: "${task}".\n\nEmail prepared and sent successfully.`;
-    onChunk(result); 
+    onChunk(result);
     return {};
 };
 
@@ -311,19 +311,19 @@ Based on the instruction, process the raw data and generate a JSON object. The J
     });
 
     let resultText = response.text.trim();
-    
+
     // In case the model still returns markdown, strip it.
     if (resultText.startsWith("```json")) {
         resultText = resultText.substring(7, resultText.length - 3).trim();
     } else if (resultText.startsWith("```")) {
-         resultText = resultText.substring(3, resultText.length - 3).trim();
+        resultText = resultText.substring(3, resultText.length - 3).trim();
     }
 
     const resultJson = JSON.parse(resultText);
-    
+
     const rowCount = resultJson.data?.length || 0;
     const summaryMessage = `Successfully formatted ${rowCount} rows of data from the previous step.`;
-    
+
     onChunk(summaryMessage);
 
     return { sheetData: resultJson.data };
@@ -358,7 +358,7 @@ Your response must be user-facing.
 - If your task is to "validate" or "check progress", you MUST respond with a brief, conversational status update (1-2 sentences). Explain what you've just done and what you'll do next (e.g., "I've found the cafes, now I'll get their addresses.").
 
 Do not talk about agents or internal plans. Speak naturally to the user.`;
-    
+
     await streamContent("gemini-2.5-flash", synthesisPrompt, {}, onChunk);
     return {};
 };
@@ -374,7 +374,7 @@ ${results.map(r => `- ${r.agent} (Task: "${r.task}"):\n  - Result: ${r.result}`)
 
 Synthesize these results into a final, user-friendly response. Address the user's original request directly. Do not mention the step-by-step process unless it's relevant to the answer. Use markdown for formatting.
 Crucially, DO NOT include any raw JSON data, JSON objects, or code blocks in your final answer. Present information in a clean, readable, natural language format. If a spreadsheet was created, simply state that it was created successfully and briefly describe its contents.`;
-    
+
     await streamContent("gemini-2.5-flash", synthesisPrompt, {}, onChunk);
     return {};
 };
