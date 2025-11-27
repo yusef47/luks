@@ -8,6 +8,7 @@ import { GoogleGenAI } from '@google/genai';
 import keyRotationManager from './backend/utils/keyRotation.js';
 import quotaManager from './backend/utils/quotaManager.js';
 import smartKeyRotation from './backend/utils/smartKeyRotation.js';
+import mastraRoutes from './backend/routes/mastraRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -642,6 +643,11 @@ app.get('/api/health', (req, res) => {
     keyStats: keyRotationManager.getStatus()
   });
 });
+
+// =============================================
+// MASTRA ROUTES - All AI Agent Orchestration
+// =============================================
+app.use('/api/mastra', mastraRoutes);
 
 // Start Server
 app.listen(PORT, () => {

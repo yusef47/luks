@@ -5,7 +5,17 @@
 
 export { useAppContext } from '../context';
 
-// سيتم إضافة hooks إضافية هنا:
-// export { useChat } from './useChat';
-// export { useLucasStream } from './useLucasStream';
-// إلخ...
+// English Tutor Hook
+export { useEnglishTutor } from './useEnglishTutor';
+export type { TutorState, TutorSession, TutorMode } from './useEnglishTutor';
+
+// Conversations Hook
+export { useConversations } from './useConversations';
+export type { ConversationsState } from './useConversations';
+
+// Streaming Chat Hook
+export { default as useStreamingChat } from './useStreamingChat';
+
+// Mastra Hook - للتواصل مع Backend
+export { useMastra } from './useMastra';
+export type { MastraState, OrchestratorResult, TutorResult } from './useMastra';

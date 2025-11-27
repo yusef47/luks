@@ -1,11 +1,20 @@
 /**
  * Backend Workflows - تعريف سير العمل بين الوكلاء
- * سيتم إضافة workflows هنا في المراحل القادمة
+ * جميع الـ Workflows مع Mastra Framework
  */
 
-module.exports = {
-  // سيتم إضافة workflows هنا
-  // searchFlow: require('./searchFlow'),
-  // visionFlow: require('./visionFlow'),
-  // إلخ...
+import orchestratorFlow from './orchestratorFlow.js';
+import searchFlow from './searchFlow.js';
+import englishTutorFlow from './englishTutorFlow.js';
+
+export {
+  orchestratorFlow,
+  searchFlow,
+  englishTutorFlow
+};
+
+export default {
+  orchestratorFlow,
+  searchFlow,
+  englishTutorFlow
 };

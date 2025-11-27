@@ -3,10 +3,20 @@
  * تصدير جميع المكونات الرئيسية
  */
 
-// سيتم إضافة المكونات هنا:
-// export { ChatInterface } from './ChatInterface';
-// export { QuickActions } from './QuickActions';
-// export { KeysDashboard } from './KeysDashboard';
-// إلخ...
+// Sidebar Components
+export { Sidebar, TutorControls } from './sidebar';
 
-export default {};
+// Chat Components
+export { ChatPanel, ChatInput } from './chat';
+
+// Computer Components
+export { VirtualComputer, AgentVisualizer, TaskProgress } from './computer';
+
+// Common Components
+export { SettingsPopover } from './common';
+
+// Existing Components
+export { ChatMessage } from './ChatMessage';
+export { ClarificationRequest } from './ClarificationRequest';
+export { StreamingMarkdownRenderer } from './StreamingMarkdownRenderer';
+export { KeysDashboard } from './KeysDashboard';

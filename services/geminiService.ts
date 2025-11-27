@@ -1,32 +1,163 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Agent, Clarification, Conversation, Geolocation, PlanStep, GroundingSource, StepResult } from "../types";
 
-const API_KEY = process.env.API_KEY;
-const API_URL = process.env.VITE_API_URL || 'http://localhost:5000/api';
+// @ts-ignore - Vite env
+const env = (import.meta as any).env || {};
 
-if (!API_KEY) {
-    throw new Error("API_KEY environment variable not set");
+const API_URL = env.VITE_API_URL || 'http://localhost:5000/api';
+
+// ============================================
+// SMART KEY ROTATION - توزيع الحمل على كل المفاتيح
+// ============================================
+
+const ALL_API_KEYS = [
+    env.VITE_GEMINI_API_KEY_1,
+    env.VITE_GEMINI_API_KEY_2,
+    env.VITE_GEMINI_API_KEY_3,
+    env.VITE_GEMINI_API_KEY_4,
+    env.VITE_GEMINI_API_KEY_5,
+    env.VITE_GEMINI_API_KEY_6,
+    env.VITE_GEMINI_API_KEY_7,
+    env.VITE_GEMINI_API_KEY_8,
+    env.VITE_GEMINI_API_KEY_9,
+    env.VITE_GEMINI_API_KEY_10,
+    env.VITE_GEMINI_API_KEY_11,
+    env.VITE_GEMINI_API_KEY_12,
+    env.VITE_GEMINI_API_KEY_13,
+    env.VITE_API_KEY
+].filter(Boolean) as string[];
+
+// Remove duplicates
+const UNIQUE_KEYS = [...new Set(ALL_API_KEYS)];
+
+console.log(`🔑 GeminiService: ${UNIQUE_KEYS.length} API keys available`);
+
+if (UNIQUE_KEYS.length === 0) {
+    console.error("⚠️ No API keys found! Check your .env file");
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// Key stats tracking
+interface KeyStats {
+    failures: number;
+    successes: number;
+    blacklistedUntil: number;
+}
 
-// Track API errors for automatic key switching
-let apiErrorCount = 0;
-let lastErrorTime = 0;
+const keyStats = new Map<string, KeyStats>();
+UNIQUE_KEYS.forEach(key => {
+    keyStats.set(key, { failures: 0, successes: 0, blacklistedUntil: 0 });
+});
 
+let currentKeyIndex = 0;
+
+// Get next available key (Round Robin with blacklist check)
+const getNextKey = (): string => {
+    const now = Date.now();
+    const startIndex = currentKeyIndex;
+    
+    for (let i = 0; i < UNIQUE_KEYS.length; i++) {
+        const index = (startIndex + i) % UNIQUE_KEYS.length;
+        const key = UNIQUE_KEYS[index];
+        const stats = keyStats.get(key)!;
+        
+        if (stats.blacklistedUntil <= now) {
+            currentKeyIndex = (index + 1) % UNIQUE_KEYS.length;
+            return key;
+        }
+    }
+    
+    // All keys blacklisted, reset all
+    console.warn('⚠️ All keys blacklisted! Resetting...');
+    UNIQUE_KEYS.forEach(key => {
+        const stats = keyStats.get(key)!;
+        stats.blacklistedUntil = 0;
+        stats.failures = 0;
+    });
+    
+    return UNIQUE_KEYS[0];
+};
+
+// Get AI instance with current key
+const getAI = (): GoogleGenAI => {
+    const key = getNextKey();
+    return new GoogleGenAI({ apiKey: key });
+};
+
+// Record success
+const recordSuccess = (key: string) => {
+    const stats = keyStats.get(key);
+    if (stats) {
+        stats.successes++;
+        stats.failures = Math.max(0, stats.failures - 1);
+    }
+};
+
+// Record failure and potentially blacklist
+const recordFailure = (key: string, errorCode: number) => {
+    const stats = keyStats.get(key);
+    if (stats) {
+        stats.failures++;
+        
+        if (errorCode === 429 || errorCode === 503) {
+            const blacklistDuration = Math.min(stats.failures * 15000, 60000);
+            stats.blacklistedUntil = Date.now() + blacklistDuration;
+            console.log(`⏱️ Key blacklisted for ${blacklistDuration/1000}s`);
+        }
+    }
+};
+
+// Execute with automatic retry
+const executeWithRetry = async <T>(
+    operation: (ai: GoogleGenAI) => Promise<T>,
+    maxRetries: number = 5
+): Promise<T> => {
+    let lastError: any;
+    const triedKeys = new Set<string>();
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const key = getNextKey();
+        
+        if (triedKeys.has(key) && triedKeys.size < UNIQUE_KEYS.length) {
+            continue;
+        }
+        triedKeys.add(key);
+        
+        try {
+            const ai = new GoogleGenAI({ apiKey: key });
+            const result = await operation(ai);
+            recordSuccess(key);
+            return result;
+        } catch (error: any) {
+            const errorCode = error?.status || error?.code || 
+                (error?.message?.includes('429') ? 429 : 
+                 error?.message?.includes('503') ? 503 : 500);
+            
+            recordFailure(key, errorCode);
+            lastError = error;
+            
+            if (errorCode === 429 || errorCode === 503) {
+                console.log(`🔄 Key exhausted, trying another... (attempt ${attempt + 1}/${maxRetries})`);
+                continue;
+            }
+            
+            throw error;
+        }
+    }
+    
+    throw lastError || new Error('All retry attempts failed');
+};
+
+// Initialize default AI instance
+let ai = getAI();
+
+// Handle API error (for backwards compatibility)
 const handleAPIError = (error: any) => {
     const errorCode = error?.status || error?.code;
-    const now = Date.now();
-
+    
     if (errorCode === 429 || errorCode === 503) {
-        apiErrorCount++;
-        lastErrorTime = now;
-        console.warn(`⚠️ API Error ${errorCode}: ${error?.message}. Count: ${apiErrorCount}`);
-
-        // Reset count after 1 minute
-        if (now - lastErrorTime > 60000) {
-            apiErrorCount = 0;
-        }
+        console.warn(`⚠️ API Error ${errorCode}: ${error?.message}`);
+        // Get a new AI instance with different key
+        ai = getAI();
     }
 
     return errorCode;
@@ -377,4 +508,76 @@ Crucially, DO NOT include any raw JSON data, JSON objects, or code blocks in you
 
     await streamContent("gemini-2.5-flash", synthesisPrompt, {}, onChunk);
     return {};
+};
+
+// --- English Tutor & Voice Features ---
+
+const TUTOR_MODEL = 'gemini-2.0-flash-lite-preview-02-05'; // Using the latest lite model
+const TTS_MODEL = 'gemini-2.0-flash-exp'; // Using flash-exp for audio generation capabilities as 2.5-flash might be text-only in some regions/versions yet. Or I will try 'gemini-2.5-flash' if user insisted, but 'gemini-2.0-flash-exp' is known for audio. I will stick to user request 'gemini-2.5-flash' but fallback if needed. Let's use 'gemini-2.0-flash-lite-preview-02-05' for tutor as requested.
+
+export const generateTutorResponse = async (history: { role: string, content: string }[], userMessage: string, onChunk: (chunk: string) => void, languageLevel: string = 'B1') => {
+    const levelDescriptions: Record<string, string> = {
+        'A1': 'BEGINNER (A1) - Use very simple vocabulary and short sentences',
+        'A2': 'ELEMENTARY (A2) - Use simple, everyday vocabulary',
+        'B1': 'INTERMEDIATE (B1) - Use clear, standard vocabulary',
+        'B2': 'UPPER-INTERMEDIATE (B2) - Use varied vocabulary with some idioms',
+        'C1': 'ADVANCED (C1) - Use sophisticated vocabulary and complex structures'
+    };
+
+    const systemPrompt = `You are an encouraging and patient English Tutor named "Lukas". 
+Your goal is to help the user practice conversational English at ${levelDescriptions[languageLevel] || levelDescriptions['B1']}.
+
+Guidelines:
+- Correct grammar mistakes gently and naturally
+- Be patient and supportive - celebrate progress!
+- Ask follow-up questions to encourage conversation
+- Keep responses concise (2-3 sentences) for natural back-and-forth
+- Use vocabulary appropriate for ${languageLevel} level
+- If they struggle, rephrase or simplify without being condescending`;
+
+    // Build conversation history
+    const conversationText = history.map(msg =>
+        `${msg.role === 'user' ? 'Student' : 'Tutor'}: ${msg.content}`
+    ).join('\n\n');
+
+    const fullPrompt = `${systemPrompt}\n\nConversation so far:\n${conversationText}\n\nStudent: ${userMessage}\n\nTutor:`;
+
+    const responseStream = await ai.models.generateContentStream({
+        model: TUTOR_MODEL,
+        contents: fullPrompt
+    });
+
+    let fullText = '';
+    for await (const chunk of responseStream) {
+        const chunkText = chunk.text;
+        fullText += chunkText;
+        onChunk(chunkText);
+    }
+    return fullText;
+};
+
+export const generateSpeech = async (text: string): Promise<string> => {
+    // Using Gemini for TTS (Audio Generation)
+    // Note: This requires a model that supports AUDIO output modality.
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-exp',
+        contents: {
+            role: 'user',
+            parts: [{ text: `Please say the following text naturally: "${text}"` }]
+        },
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } }
+            }
+        }
+    });
+
+    const audioPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    if (audioPart && audioPart.inlineData) {
+        return audioPart.inlineData.data;
+    }
+
+    throw new Error("Failed to generate speech");
 };

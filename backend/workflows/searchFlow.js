@@ -1,40 +1,91 @@
 /**
- * Search Workflow - Mastra Workflow
+ * Search Workflow
  * سير عمل البحث: البحث → التحليل → الرد
  */
 
-const { Workflow } = require('mastra');
-const SearchAgent = require('../agents/SearchAgent');
+import { GoogleGenAI } from '@google/genai';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+/**
+ * Simple Workflow Runner
+ */
+class SimpleWorkflow {
+  constructor(config) {
+    this.name = config.name;
+    this.description = config.description;
+    this.steps = config.steps;
+    this.onComplete = config.onComplete;
+    this.onError = config.onError;
+  }
+
+  async run(context) {
+    let currentContext = { ...context };
+    
+    try {
+      for (const step of this.steps) {
+        console.log(`Running step: ${step.id}`);
+        
+        const input = step.input ? step.input(currentContext) : currentContext;
+        const result = await step.process(input);
+        
+        currentContext = { ...currentContext, ...result };
+      }
+      
+      if (this.onComplete) {
+        return this.onComplete(currentContext);
+      }
+      
+      return currentContext;
+    } catch (error) {
+      if (this.onError) {
+        return this.onError(error);
+      }
+      throw error;
+    }
+  }
+}
 
 // Define workflow
-const searchFlow = new Workflow({
+const searchFlow = new SimpleWorkflow({
   name: 'searchFlow',
   description: 'سير عمل البحث الكامل',
   
   steps: [
     {
       id: 'search',
-      agent: SearchAgent,
-      input: (context) => ({
-        query: context.userMessage,
-        language: context.language || 'ar',
-        maxResults: context.maxResults || 10
-      }),
-      onSuccess: (result, context) => {
-        console.log('✅ Search completed:', result.results.length, 'results');
-        return { searchResults: result };
-      },
-      onError: (error, context) => {
-        console.error('❌ Search failed:', error);
-        // Fallback: return empty results
-        return {
-          searchResults: {
-            results: [],
-            totalResults: 0,
-            query: context.userMessage,
-            error: error.message
-          }
-        };
+      process: async (context) => {
+        console.log('🔍 Searching for:', context.userMessage);
+        
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
+        
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: context.userMessage,
+            config: { tools: [{ googleSearch: {} }] }
+          });
+          
+          console.log('✅ Search completed');
+          return { 
+            searchResults: {
+              results: [{ content: response.text }],
+              totalResults: 1,
+              query: context.userMessage
+            }
+          };
+        } catch (error) {
+          console.error('❌ Search failed:', error);
+          return {
+            searchResults: {
+              results: [],
+              totalResults: 0,
+              query: context.userMessage,
+              error: error.message
+            }
+          };
+        }
       }
     },
     {
@@ -89,4 +140,4 @@ const searchFlow = new Workflow({
   }
 });
 
-module.exports = searchFlow;
+export default searchFlow;
