@@ -154,10 +154,10 @@ export const generatePresentation = async (
  * Calculate optimal slide count based on document size
  */
 const calculateOptimalSlideCount = (text: string, pages: number): number => {
-    // Formula: 1 slide per 500 words + 1 per page, capped between 8-25
+    // Formula: 1 slide per 300 words (more detailed) + 1 per page, capped between 10-30
     const wordCount = text.split(/\s+/).length;
-    const slideCount = Math.ceil(wordCount / 500) + Math.ceil(pages / 2);
-    return Math.max(8, Math.min(25, slideCount));
+    const slideCount = Math.ceil(wordCount / 300) + Math.ceil(pages / 1.5);
+    return Math.max(10, Math.min(30, slideCount));
 };
 
 // ============================================
@@ -178,47 +178,71 @@ const readAndUnderstand = async (
         ? `الرجاء تقديم التحليل بالعربية الفصحى. استخدم لغة احترافية وواضحة.`
         : `Provide analysis in professional English.`;
 
-    const prompt = `You are an expert document analyst specializing in comprehensive document understanding. Your task is to deeply analyze the ENTIRE document provided.
+    const prompt = `CRITICAL INSTRUCTION: You are an EXPERT document analyst. Your ONLY job is to READ and UNDERSTAND the ENTIRE document provided, then extract REAL content from it.
 
 ${languageInstruction}
 
-DOCUMENT CONTENT (${text.length} characters):
-${text.substring(0, 1200000)}
+DOCUMENT TO ANALYZE (${text.length} characters, ${Math.ceil(text.length / 1000)} pages):
+===========================================
+${text.substring(0, 1500000)}
+===========================================
 
-COMPREHENSIVE ANALYSIS INSTRUCTIONS:
-1. Read and understand the COMPLETE document thoroughly
-2. Identify the main topic, purpose, and context
-3. Extract ALL logical sections/chapters (even if not explicitly labeled)
-4. For each section, provide:
-   - Clear, descriptive, engaging title
-   - Comprehensive 2-3 sentence summary capturing the essence
-   - 4-5 specific, detailed key points (NOT generic)
-   - Importance rating (1-10) based on impact and relevance
-5. Extract 5-7 overall key takeaways from the entire document
-6. Determine the target audience and their needs
+MANDATORY ANALYSIS PROCESS:
+1. READ THE ENTIRE DOCUMENT CAREFULLY - Do not skip any section
+2. UNDERSTAND the core message, structure, and key concepts
+3. IDENTIFY all major sections, topics, and subtopics
+4. EXTRACT specific examples, data, and insights from the document
+5. CREATE detailed summaries that reflect the actual content
+6. RATE importance based on how much the document emphasizes each topic
 
-CRITICAL REQUIREMENTS:
-- Extract REAL, SPECIFIC content from the document
-- NO placeholder or generic text whatsoever
-- Each key point must be detailed and actionable
-- Importance ratings must be justified by content significance
-- Summaries must capture unique aspects of each section
-- Take time to understand the document deeply
-- Provide comprehensive analysis, not superficial overview
+FOR EACH SECTION/CHAPTER:
+- Title: Use the actual section title or create one that reflects the content
+- Summary: Write 2-3 sentences that capture the REAL content of this section
+- Key Points: Extract 5-7 SPECIFIC points directly from the document content
+  * Include actual examples, numbers, or concepts mentioned
+  * Do NOT use generic placeholder text
+  * Each point must be meaningful and unique to this section
+- Importance: Rate 1-10 based on how much space/emphasis the document gives it
 
-Return ONLY valid JSON (no markdown, no code blocks):
+OVERALL DOCUMENT ANALYSIS:
+- Main Theme: What is the document ACTUALLY about?
+- Key Takeaways: What are the 5-7 most important messages?
+- Target Audience: Who is this document written for?
+
+ABSOLUTE REQUIREMENTS:
+✓ Extract REAL content from the document - NO generic text
+✓ Each point must be SPECIFIC and DETAILED
+✓ Include actual examples, data, or concepts from the document
+✓ Summaries must reflect the actual content
+✓ Do NOT invent or assume content
+✓ If something is not in the document, do NOT include it
+✓ Provide comprehensive analysis of ALL content
+
+Return ONLY valid JSON (no markdown, no code blocks, no explanations):
 {
-  "mainTheme": "Specific, detailed main topic of the document",
+  "mainTheme": "The actual main topic of this document",
   "chapters": [
     {
-      "title": "Specific section title",
-      "summary": "Detailed 2-3 sentence summary of this section's content and significance",
-      "keyPoints": ["Specific, detailed point 1", "Specific, detailed point 2", "Specific, detailed point 3", "Specific, detailed point 4"],
+      "title": "Actual section title from document",
+      "summary": "2-3 sentences describing what this section actually contains",
+      "keyPoints": [
+        "Specific point 1 with actual content from document",
+        "Specific point 2 with actual content from document",
+        "Specific point 3 with actual content from document",
+        "Specific point 4 with actual content from document",
+        "Specific point 5 with actual content from document"
+      ],
       "importance": 8
     }
   ],
-  "keyPoints": ["Detailed key takeaway 1", "Detailed key takeaway 2", "Detailed key takeaway 3"],
-  "targetAudience": "Specific description of intended audience and their needs"
+  "keyPoints": [
+    "Most important message from the document",
+    "Second most important message",
+    "Third most important message",
+    "Fourth most important message",
+    "Fifth most important message"
+  ],
+  "targetAudience": "Who this document is written for and why"
 }`;
 
     // Schema for structured output
@@ -519,44 +543,69 @@ const generateSlideContent = async (
 ): Promise<Slide[]> => {
     const { streamPresentationContent, MODELS } = await import('./geminiService');
 
-    const prompt = `You are a world-class presentation designer and content strategist. Your task is to refine and enhance each slide's content to be professional, impactful, and presentation-ready.
+    const prompt = `You are a WORLD-CLASS presentation designer, content strategist, and visual communicator. Your task is to transform these slides into STUNNING, PROFESSIONAL, IMPACTFUL presentations.
 
-SLIDE STRUCTURE TO REFINE:
+SLIDE STRUCTURE TO ENHANCE:
 ${JSON.stringify(structure, null, 2)}
 
-CONTENT REFINEMENT GUIDELINES:
-1. For each slide:
-   - Enhance the title to be more engaging and specific
-   - Refine bullet points to be:
-     * Clear and concise (max 10 words per point)
-     * Specific and actionable (not generic)
-     * Logically ordered
-     * Professional in tone
-   - Improve speaker notes with:
-     * Key talking points
-     * Transition suggestions
-     * Audience engagement tips
+CONTENT ENHANCEMENT REQUIREMENTS:
 
-2. Quality Standards:
-   - Use professional business language
-   - Ensure consistency across all slides
-   - Make content presentation-ready
-   - Maintain the original meaning and intent
-   - Avoid placeholder or generic text
+1. **TITLES** - Make them POWERFUL and ENGAGING:
+   - Use strong action verbs and compelling language
+   - Make titles specific and memorable
+   - Create curiosity and interest
+   - Keep them concise but impactful (5-10 words max)
 
-3. Structure Requirements:
-   - Keep the same slide types and order
-   - Maintain the same number of slides
-   - Preserve all metadata (imageQuery, notes)
+2. **CONTENT POINTS** - Make them DETAILED and IMPRESSIVE:
+   - Each point should be 15-20 words (detailed, not just bullets)
+   - Include specific examples, numbers, or data when possible
+   - Make points actionable and meaningful
+   - Use parallel structure for consistency
+   - Order points logically (most important first)
+   - Add context and implications
 
-Return ONLY valid JSON array (no markdown, no extra text):
+3. **SPEAKER NOTES** - Make them COMPREHENSIVE:
+   - Detailed talking points for each slide
+   - Smooth transitions between slides
+   - Audience engagement strategies
+   - Key statistics or examples to mention
+   - Suggested pauses for emphasis
+   - Questions to engage the audience
+
+4. **VISUAL ELEMENTS**:
+   - Suggest specific, relevant images that enhance the message
+   - Recommend visual metaphors or concepts
+   - Suggest colors or design elements that fit the content
+
+5. **OVERALL PRESENTATION QUALITY**:
+   - Ensure professional, polished language throughout
+   - Maintain consistent tone and style
+   - Create a compelling narrative flow
+   - Build momentum and engagement
+   - End with powerful conclusions
+   - Make it memorable and impactful
+
+QUALITY STANDARDS:
+✓ Professional business language throughout
+✓ Specific, detailed content (NOT generic)
+✓ Visually interesting and engaging
+✓ Logically structured and flowing
+✓ Audience-focused and relevant
+✓ Impactful and memorable
+✓ Ready for executive presentation
+
+Return ONLY valid JSON array (no markdown, no code blocks):
 [
   {
     "type": "title|content|conclusion",
-    "title": "Refined, engaging title",
-    "content": ["Refined point 1", "Refined point 2", "Refined point 3"],
-    "imageQuery": "relevant search term",
-    "notes": "Enhanced speaker notes",
+    "title": "Powerful, engaging title",
+    "content": [
+      "Detailed, specific point 1 with context",
+      "Detailed, specific point 2 with implications",
+      "Detailed, specific point 3 with examples"
+    ],
+    "imageQuery": "specific visual concept",
+    "notes": "Comprehensive speaker notes with talking points and transitions",
     "index": 1
   }
 ]`;
@@ -718,12 +767,14 @@ const buildPPTX = async (slides: Slide[], title: string): Promise<Blob> => {
                 });
 
                 if (slide.content && slide.content.length > 0) {
-                    // Convert string array to bullet points with better formatting
+                    // Convert string array to bullet points with enhanced formatting
                     const bulletText = slide.content.map((item, idx) => ({
                         text: item || `Point ${idx + 1}`,
                         options: { 
                             bullet: true,
-                            level: 0
+                            level: 0,
+                            fontSize: 16,
+                            lineSpacing: 28
                         }
                     }));
                     pptxSlide.addText(bulletText, {
@@ -731,9 +782,10 @@ const buildPPTX = async (slides: Slide[], title: string): Promise<Blob> => {
                         y: 1.5,
                         w: slide.imageUrl ? 5.5 : 9,
                         h: 4.5,
-                        fontSize: 18,
-                        color: '444444',
-                        valign: 'top'
+                        fontSize: 16,
+                        color: '333333',
+                        valign: 'top',
+                        lineSpacing: 28
                     });
                 } else {
                     // Add placeholder if no content
