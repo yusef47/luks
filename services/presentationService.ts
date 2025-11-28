@@ -74,7 +74,7 @@ export const PRESENTATION_MODELS = {
 // ============================================
 
 /**
- * Generate presentation from PDF
+ * Generate presentation from PDF with intelligent slide count
  */
 export const generatePresentation = async (
     parsedPDF: ParsedPDF,
@@ -85,31 +85,37 @@ export const generatePresentation = async (
     const startTime = Date.now();
 
     try {
+        // Step 0: Determine optimal slide count (10%)
+        onProgress?.('Analyzing document size and complexity...', 0);
+        const optimalSlideCount = calculateOptimalSlideCount(parsedPDF.text, parsedPDF.pages);
+        const maxSlides = options.maxSlides || optimalSlideCount;
+        onProgress?.('Analyzing document size and complexity...', 10);
+
         // Step 1: Deep Reading & Understanding (30%)
-        onProgress?.('Reading and understanding content...', 0);
+        onProgress?.('Reading and understanding content deeply...', 10);
         const summary = await readAndUnderstand(parsedPDF.text, onChunk);
-        onProgress?.('Reading and understanding content...', 30);
+        onProgress?.('Reading and understanding content deeply...', 30);
 
         // Step 2: Content Analysis (50%)
-        onProgress?.('Analyzing content structure...', 30);
+        onProgress?.('Analyzing document structure and key concepts...', 30);
         const breakdown = await analyzeContent(summary, onChunk);
-        onProgress?.('Analyzing content structure...', 50);
+        onProgress?.('Analyzing document structure and key concepts...', 50);
 
         // Step 3: Slide Planning (65%)
-        onProgress?.('Planning slide structure...', 50);
-        const slideStructure = await planSlides(breakdown, options, onChunk);
-        onProgress?.('Planning slide structure...', 65);
+        onProgress?.('Planning optimal slide structure...', 50);
+        const slideStructure = await planSlides(breakdown, { ...options, maxSlides }, onChunk);
+        onProgress?.('Planning optimal slide structure...', 65);
 
         // Step 4: Content Generation (80%)
-        onProgress?.('Generating professional content...', 65);
+        onProgress?.('Generating professional content from document...', 65);
         const slides = await generateSlideContent(slideStructure, onChunk);
-        onProgress?.('Generating professional content...', 80);
+        onProgress?.('Generating professional content from document...', 80);
 
         // Step 5: Add Images (90%)
         if (options.includeImages !== false) {
-            onProgress?.('Adding images...', 80);
+            onProgress?.('Adding visual elements...', 80);
             await addImages(slides, options.imageSource || 'unsplash');
-            onProgress?.('Adding images...', 90);
+            onProgress?.('Adding visual elements...', 90);
         }
 
         // Step 6: Build PPTX (95%)
@@ -143,6 +149,16 @@ export const generatePresentation = async (
     }
 };
 
+/**
+ * Calculate optimal slide count based on document size
+ */
+const calculateOptimalSlideCount = (text: string, pages: number): number => {
+    // Formula: 1 slide per 500 words + 1 per page, capped between 8-25
+    const wordCount = text.split(/\s+/).length;
+    const slideCount = Math.ceil(wordCount / 500) + Math.ceil(pages / 2);
+    return Math.max(8, Math.min(25, slideCount));
+};
+
 // ============================================
 // Step 1: Read & Understand
 // ============================================
@@ -156,30 +172,43 @@ const readAndUnderstand = async (
 ): Promise<BookSummary> => {
     const { callPresentationModel, MODELS } = await import('./geminiService');
 
-    const prompt = `You are analyzing a book/document for presentation creation.
+    const prompt = `You are an expert document analyst. Your task is to deeply understand and analyze the complete document provided.
 
-Content:
+DOCUMENT CONTENT:
 ${text.substring(0, 1000000)}
 
-Please provide a comprehensive analysis:
-1. Main theme/topic
-2. Chapter breakdown (if applicable)
-3. Key points and takeaways
-4. Target audience
+ANALYSIS INSTRUCTIONS:
+1. Understand the ENTIRE document structure, themes, and key concepts
+2. Identify the main topic and its context
+3. Extract logical sections/chapters (even if not explicitly labeled)
+4. For each section, identify:
+   - Clear, descriptive title
+   - Comprehensive summary (2-3 sentences)
+   - 3-5 most important key points
+   - Importance rating (1-10 scale)
+5. Identify overall key takeaways
+6. Determine the target audience
 
-Return as JSON with this structure:
+IMPORTANT:
+- Be thorough and extract REAL content from the document
+- Do NOT use placeholder text
+- Each key point should be specific and meaningful
+- Importance should reflect actual significance in the document
+- Summaries should capture the essence of each section
+
+Return ONLY valid JSON (no markdown, no extra text):
 {
-  "mainTheme": "...",
+  "mainTheme": "Clear, specific main topic of the document",
   "chapters": [
     {
-      "title": "...",
-      "summary": "...",
-      "keyPoints": ["...", "..."],
+      "title": "Section title",
+      "summary": "2-3 sentence summary of this section",
+      "keyPoints": ["Specific point 1", "Specific point 2", "Specific point 3"],
       "importance": 8
     }
   ],
-  "keyPoints": ["...", "..."],
-  "targetAudience": "..."
+  "keyPoints": ["Overall key takeaway 1", "Overall key takeaway 2", "Overall key takeaway 3"],
+  "targetAudience": "Specific audience description"
 }`;
 
     // Schema for structured output
@@ -253,17 +282,37 @@ const analyzeContent = async (
 ): Promise<ChapterSummary[]> => {
     const { callPresentationModel, MODELS } = await import('./geminiService');
 
-    const prompt = `Analyze this book summary for presentation planning:
+    const prompt = `You are a presentation strategist. Analyze and refine this document analysis for optimal presentation structure.
 
+DOCUMENT ANALYSIS:
 ${JSON.stringify(summary, null, 2)}
 
-For each chapter/section:
-1. Refine the title
-2. Extract 3-5 most important points
-3. Rate importance (1-10)
-4. Suggest visual elements
+REFINEMENT TASK:
+For each chapter/section, perform these steps:
+1. Create a clear, presentation-friendly title (5-8 words max)
+2. Identify and extract the 3-5 MOST IMPORTANT points (not generic, but specific to this section)
+3. Rate importance on 1-10 scale based on:
+   - Impact on overall message
+   - Relevance to audience
+   - Actionability
+4. Ensure each point is distinct and non-overlapping
 
-Return as JSON array of chapters with the same structure.`;
+CRITICAL REQUIREMENTS:
+- Do NOT use generic or placeholder text
+- Each point must be specific to the actual content
+- Points should be presentation-ready (concise, impactful)
+- Importance ratings should be realistic and justified
+- Maintain the original meaning and context
+
+Return ONLY valid JSON array (no markdown):
+[
+  {
+    "title": "Refined section title",
+    "summary": "Original summary",
+    "keyPoints": ["Specific, actionable point 1", "Specific, actionable point 2", "Specific, actionable point 3"],
+    "importance": 8
+  }
+]`;
 
     const schema = {
         type: 'array',
@@ -303,31 +352,49 @@ const planSlides = async (
     const { callPresentationModel, MODELS } = await import('./geminiService');
     const maxSlides = options.maxSlides || 15;
 
-    const prompt = `Create a presentation outline from this content:
+    const prompt = `You are a master presentation designer. Create an optimal presentation structure from this content analysis.
 
+CONTENT BREAKDOWN:
 ${JSON.stringify(breakdown, null, 2)}
 
-Create ${maxSlides} slides with this structure:
-1. Title slide
-2. Overview/Agenda (1 slide)
-3. Content slides (1-2 per chapter, prioritize by importance)
-4. Key takeaways (1 slide)
-5. Conclusion (1 slide)
+PRESENTATION DESIGN TASK:
+Create exactly ${maxSlides} slides with this structure:
+1. Title slide (1 slide) - Main topic and subtitle
+2. Overview/Agenda (1 slide) - Key sections to be covered
+3. Content slides (${maxSlides - 4} slides) - Distribute chapters by importance:
+   - High importance (8-10): 2 slides each
+   - Medium importance (5-7): 1 slide each
+   - Lower importance: combine or skip
+4. Key takeaways (1 slide) - Main conclusions
+5. Conclusion (1 slide) - Call to action or closing remarks
 
-Return as JSON array:
+SLIDE CONTENT REQUIREMENTS:
+- Each slide must have specific, non-generic content from the breakdown
+- Content points should be actionable and meaningful
+- Titles should be clear and engaging
+- Include speaker notes for presenter guidance
+- Suggest relevant image search terms
+
+Return ONLY valid JSON array (no markdown, no extra text):
 [
   {
     "type": "title",
-    "title": "...",
-    "content": ["subtitle", "author"],
+    "title": "Main presentation title",
+    "content": ["Subtitle or key message", "Optional: Author/Date"],
     "notes": "Opening remarks"
   },
   {
     "type": "content",
-    "title": "...",
-    "content": ["point 1", "point 2", "point 3"],
-    "imageQuery": "search term for image",
-    "notes": "Talking points"
+    "title": "Section title",
+    "content": ["Specific point 1 from content", "Specific point 2 from content", "Specific point 3 from content"],
+    "imageQuery": "relevant search term",
+    "notes": "Presenter talking points"
+  },
+  {
+    "type": "conclusion",
+    "title": "Key Takeaways",
+    "content": ["Main conclusion 1", "Main conclusion 2", "Main conclusion 3"],
+    "notes": "Summary and next steps"
   }
 ]`;
 
@@ -410,19 +477,47 @@ const generateSlideContent = async (
 ): Promise<Slide[]> => {
     const { streamPresentationContent, MODELS } = await import('./geminiService');
 
-    const prompt = `You are a professional presentation designer. Write compelling content for these slides:
+    const prompt = `You are a world-class presentation designer and content strategist. Your task is to refine and enhance each slide's content to be professional, impactful, and presentation-ready.
 
+SLIDE STRUCTURE TO REFINE:
 ${JSON.stringify(structure, null, 2)}
 
-Guidelines:
-- Clear, concise bullet points
-- Professional business language
-- Actionable insights
-- Engaging titles
-- Helpful speaker notes
+CONTENT REFINEMENT GUIDELINES:
+1. For each slide:
+   - Enhance the title to be more engaging and specific
+   - Refine bullet points to be:
+     * Clear and concise (max 10 words per point)
+     * Specific and actionable (not generic)
+     * Logically ordered
+     * Professional in tone
+   - Improve speaker notes with:
+     * Key talking points
+     * Transition suggestions
+     * Audience engagement tips
 
-Refine and polish each slide's content to professional standards.
-Return the SAME JSON structure but with improved content.`;
+2. Quality Standards:
+   - Use professional business language
+   - Ensure consistency across all slides
+   - Make content presentation-ready
+   - Maintain the original meaning and intent
+   - Avoid placeholder or generic text
+
+3. Structure Requirements:
+   - Keep the same slide types and order
+   - Maintain the same number of slides
+   - Preserve all metadata (imageQuery, notes)
+
+Return ONLY valid JSON array (no markdown, no extra text):
+[
+  {
+    "type": "title|content|conclusion",
+    "title": "Refined, engaging title",
+    "content": ["Refined point 1", "Refined point 2", "Refined point 3"],
+    "imageQuery": "relevant search term",
+    "notes": "Enhanced speaker notes",
+    "index": 1
+  }
+]`;
 
     try {
         let responseText = '';

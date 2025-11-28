@@ -18,6 +18,7 @@ export default function PresentationGenerator({ onComplete }: PresentationGenera
     const [error, setError] = useState<string | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
     const [showPreview, setShowPreview] = useState(false);
+    const [slideCount, setSlideCount] = useState<number | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,7 +53,7 @@ export default function PresentationGenerator({ onComplete }: PresentationGenera
             const result = await generatePresentation(
                 parsedPDF,
                 {
-                    maxSlides: 15,
+                    maxSlides: slideCount || undefined, // Use user-selected count or auto-calculate
                     includeImages: false // Skip images for now
                 },
                 (stage, prog) => {
@@ -147,12 +148,38 @@ export default function PresentationGenerator({ onComplete }: PresentationGenera
                         />
 
                         {file && !isGenerating && !presentation && (
-                            <button
-                                onClick={handleGenerate}
-                                className="mt-6 w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-4 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg"
-                            >
-                                🚀 Generate Presentation
-                            </button>
+                            <div className="mt-6 space-y-4">
+                                {/* Slide Count Selector */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                        Number of Slides (Optional)
+                                    </label>
+                                    <div className="flex items-center gap-4">
+                                        <input
+                                            type="range"
+                                            min="5"
+                                            max="30"
+                                            value={slideCount || 15}
+                                            onChange={(e) => setSlideCount(parseInt(e.target.value))}
+                                            className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                                        />
+                                        <span className="text-lg font-semibold text-purple-600 dark:text-purple-400 min-w-12 text-center">
+                                            {slideCount || 'Auto'}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        Leave as "Auto" for intelligent slide count based on document size
+                                    </p>
+                                </div>
+
+                                {/* Generate Button */}
+                                <button
+                                    onClick={handleGenerate}
+                                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-4 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg"
+                                >
+                                    🚀 Generate Presentation
+                                </button>
+                            </div>
                         )}
                     </div>
 
