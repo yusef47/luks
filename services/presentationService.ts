@@ -99,7 +99,7 @@ export const generatePresentation = async (
 
         // Step 2: Content Analysis (50%)
         onProgress?.('Analyzing document structure and key concepts...', 30);
-        const breakdown = await analyzeContent(summary, onChunk);
+        const breakdown = await analyzeContent(summary, onChunk, options.language);
         onProgress?.('Analyzing document structure and key concepts...', 50);
 
         // Step 3: Slide Planning (65%)
@@ -109,7 +109,7 @@ export const generatePresentation = async (
 
         // Step 4: Content Generation (80%)
         onProgress?.('Generating professional content from document...', 65);
-        const slides = await generateSlideContent(slideStructure, onChunk);
+        const slides = await generateSlideContent(slideStructure, onChunk, options.language);
         onProgress?.('Generating professional content from document...', 80);
 
         // Step 5: Add Images (90%)
@@ -312,11 +312,18 @@ Return ONLY valid JSON (no markdown, no code blocks, no explanations):
  */
 const analyzeContent = async (
     summary: BookSummary,
-    onChunk?: ChunkCallback
+    onChunk?: ChunkCallback,
+    language: 'en' | 'ar' = 'en'
 ): Promise<ChapterSummary[]> => {
     const { callPresentationModel, MODELS } = await import('./geminiService');
 
+    const languageInstruction = language === 'ar'
+        ? `الرجاء تقديم التحليل بالعربية الفصحى. استخدم لغة احترافية وواضحة.`
+        : `Provide analysis in professional English.`;
+
     const prompt = `You are a presentation strategist. Analyze and refine this document analysis for optimal presentation structure.
+
+${languageInstruction}
 
 DOCUMENT ANALYSIS:
 ${JSON.stringify(summary, null, 2)}
@@ -324,26 +331,27 @@ ${JSON.stringify(summary, null, 2)}
 REFINEMENT TASK:
 For each chapter/section, perform these steps:
 1. Create a clear, presentation-friendly title (5-8 words max)
-2. Identify and extract the 3-5 MOST IMPORTANT points (not generic, but specific to this section)
+2. Identify and extract 5-7 MOST IMPORTANT points (specific to this section, NOT generic)
 3. Rate importance on 1-10 scale based on:
    - Impact on overall message
    - Relevance to audience
-   - Actionability
-4. Ensure each point is distinct and non-overlapping
+   - Actionability and significance
+4. Ensure each point is distinct, detailed, and meaningful
 
 CRITICAL REQUIREMENTS:
 - Do NOT use generic or placeholder text
-- Each point must be specific to the actual content
+- Each point must be SPECIFIC and DETAILED
 - Points should be presentation-ready (concise, impactful)
 - Importance ratings should be realistic and justified
 - Maintain the original meaning and context
+- Use ${language === 'ar' ? 'Arabic' : 'English'} language throughout
 
 Return ONLY valid JSON array (no markdown):
 [
   {
     "title": "Refined section title",
     "summary": "Original summary",
-    "keyPoints": ["Specific, actionable point 1", "Specific, actionable point 2", "Specific, actionable point 3"],
+    "keyPoints": ["Specific, detailed point 1", "Specific, detailed point 2", "Specific, detailed point 3", "Specific, detailed point 4", "Specific, detailed point 5"],
     "importance": 8
   }
 ]`;
@@ -385,7 +393,7 @@ const planSlides = async (
 ): Promise<SlideStructure[]> => {
     const { callPresentationModel, MODELS } = await import('./geminiService');
     const maxSlides = options.maxSlides || 15;
-    const language = options.language || 'en';
+    const language: 'en' | 'ar' = (options.language as 'en' | 'ar') || 'en';
 
     const languageInstruction = language === 'ar'
         ? `الرجاء إنشاء العرض التقديمي بالعربية الفصحى. استخدم لغة احترافية وجذابة.`
@@ -539,11 +547,18 @@ Return ONLY valid JSON array (no markdown, no code blocks):
  */
 const generateSlideContent = async (
     structure: SlideStructure[],
-    onChunk?: ChunkCallback
+    onChunk?: ChunkCallback,
+    language: 'en' | 'ar' = 'en'
 ): Promise<Slide[]> => {
     const { streamPresentationContent, MODELS } = await import('./geminiService');
 
+    const languageInstruction = language === 'ar'
+        ? `الرجاء تقديم المحتوى بالعربية الفصحى. استخدم لغة احترافية وجذابة.`
+        : `Provide content in professional English.`;
+
     const prompt = `You are a WORLD-CLASS presentation designer, content strategist, and visual communicator. Your task is to transform these slides into STUNNING, PROFESSIONAL, IMPACTFUL presentations.
+
+${languageInstruction}
 
 SLIDE STRUCTURE TO ENHANCE:
 ${JSON.stringify(structure, null, 2)}
