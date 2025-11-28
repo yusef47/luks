@@ -581,3 +581,86 @@ export const generateSpeech = async (text: string): Promise<string> => {
 
     throw new Error("Failed to generate speech");
 };
+
+// ============================================
+// PRESENTATION SERVICE MODELS & FUNCTIONS
+// ============================================
+
+/**
+ * Model names for presentation generation
+ */
+export const MODELS = {
+    FLASH_LITE: 'gemini-2.0-flash-lite-preview-02-05',
+    FLASH_LIVE: 'gemini-2.5-flash-live',
+    PRO: 'gemini-2.5-pro',
+    IMAGE_GEN: 'gemini-2.5-flash-image'
+} as const;
+
+/**
+ * Call presentation model with structured output support
+ */
+export const callPresentationModel = async (
+    modelName: string,
+    prompt: string,
+    responseSchema?: any
+): Promise<any> => {
+    return await executeWithRetry(async (genAI) => {
+        const config: any = {
+            model: modelName,
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        };
+
+        // Add schema if provided for structured output
+        if (responseSchema) {
+            config.generationConfig = {
+                responseSchema: responseSchema,
+                responseMimeType: 'application/json'
+            };
+        }
+
+        const response = await genAI.models.generateContent(config);
+        const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        if (!text) {
+            throw new Error('Empty response from model');
+        }
+
+        // Parse JSON if schema was provided
+        if (responseSchema) {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('Failed to parse JSON response:', text);
+                throw new Error('Invalid JSON response from model');
+            }
+        }
+
+        return text;
+    });
+};
+
+/**
+ * Stream content from Gemini model for presentation
+ * Used for real-time feedback during generation
+ */
+export const streamPresentationContent = async (
+    modelName: string,
+    prompt: string,
+    onChunk: (chunk: string) => void
+): Promise<string> => {
+    return await executeWithRetry(async (genAI) => {
+        const responseStream = await genAI.models.generateContentStream({
+            model: modelName,
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        });
+
+        let fullText = '';
+        for await (const chunk of responseStream) {
+            const chunkText = chunk.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            fullText += chunkText;
+            onChunk(chunkText);
+        }
+
+        return fullText;
+    });
+};

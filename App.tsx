@@ -19,6 +19,7 @@ import { Sidebar } from './src/components/sidebar/Sidebar';
 import { ChatPanel } from './src/components/chat/ChatPanel';
 import { VirtualComputer } from './src/components/computer/VirtualComputer';
 import { TaskProgress } from './src/components/computer/TaskProgress';
+import PresentationGenerator from './src/components/presentation/PresentationGenerator';
 
 // Services
 import { speechService } from './src/services/speechService';
@@ -68,6 +69,9 @@ const App: React.FC = () => {
   const activeRecognitionRef = useRef<any>(null);
   const tutorConversationIdRef = useRef<string | null>(null);
   const recognitionStarterRef = useRef<(() => void) | null>(null);
+
+  // ========== PRESENTATION MODE ==========
+  const [isPresentationMode, setIsPresentationMode] = useState(false);
 
   // ========== CONVERSATIONS ==========
   const [conversations, setConversations] = useState<Conversation[]>(() => {
@@ -548,6 +552,10 @@ const App: React.FC = () => {
     }
   };
 
+
+
+
+
   // ========== RENDER ==========
 
   return (
@@ -569,42 +577,53 @@ const App: React.FC = () => {
           setPersonaId(id);
           localStorage.setItem('tutor_persona', id);
         }}
+        isPresentationMode={isPresentationMode}
+        onTogglePresentation={() => setIsPresentationMode(!isPresentationMode)}
         t={t as any}
       />
 
       {/* Main */}
       <div className="flex-grow flex flex-col min-w-0 h-full">
-        <div className={`flex-grow min-h-0 grid h-full ${showComputer ? 'grid-cols-1 lg:grid-cols-[1fr_450px]' : 'grid-cols-1'}`}>
-          {/* Chat */}
-          <ChatPanel
-            activeConversation={activeConversation || null}
-            isLoading={isLoading}
-            prompt={prompt}
-            setPrompt={setPrompt}
-            onSubmit={handleSubmit}
-            previewUrl={previewUrl}
-            onFileSelect={handleFileChange}
-            onClearAttachment={clearAttachment}
-            isListening={isListening}
-            onToggleListening={startListening}
-            isTutorMode={isTutorMode}
-            isSettingsOpen={isSettingsOpen}
-            onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
-            cycleCount={cycleCount}
-            setCycleCount={setCycleCount}
-            showComputer={showComputer}
-            onToggleComputer={() => setShowComputer(!showComputer)}
-            onClarificationResponse={handleClarificationResponse}
-            t={t as any}
+        {isPresentationMode ? (
+          // Presentation Mode
+          <PresentationGenerator
+            onComplete={(presentation) => {
+              console.log('Presentation complete:', presentation);
+              // Could show success notification here
+            }}
           />
+        ) : (
+          // Normal Chat Mode
+          <div className={`flex-grow min-h-0 grid h-full ${showComputer ? 'grid-cols-1 lg:grid-cols-[1fr_450px]' : 'grid-cols-1'}`}>
+            {/* Chat */}
+            <ChatPanel
+              activeConversation={activeConversation || null}
+              isLoading={isLoading}
+              prompt={prompt}
+              setPrompt={setPrompt}
+              onSubmit={handleSubmit}
+              previewUrl={previewUrl}
+              onFileSelect={handleFileChange}
+              onClearAttachment={clearAttachment}
+              isListening={isListening}
+              onToggleListening={startListening}
+              isTutorMode={isTutorMode}
+              isSettingsOpen={isSettingsOpen}
+              onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
+              cycleCount={cycleCount}
+              setCycleCount={setCycleCount}
+              showComputer={showComputer}
+              onToggleComputer={() => setShowComputer(!showComputer)}
+              t={t as any}
+            />
 
-          {/* Computer */}
-          {showComputer && (
-            <div className="hidden lg:flex flex-col h-full p-4 space-y-4 bg-[var(--bg-tertiary-color)] border-l border-[var(--border-color)] animate-fade-in">
-              <div className="flex-1 min-h-0">
-                <VirtualComputer viewedStep={viewedStep} t={t as any} />
-              </div>
-              <div className="flex-1 min-h-0">
+            {/* Computer */}
+            {showComputer && (
+              <div className="flex flex-col h-full min-h-0">
+                <VirtualComputer
+                  viewedStep={viewedStep}
+                  t={t as any}
+                />
                 <TaskProgress
                   plan={activeExchange?.plan || null}
                   results={activeExchange?.results || []}
@@ -613,9 +632,9 @@ const App: React.FC = () => {
                   t={t as any}
                 />
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

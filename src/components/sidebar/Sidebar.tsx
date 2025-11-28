@@ -15,7 +15,7 @@ interface SidebarProps {
   activeConversationId: string | null;
   onSelectConversation: (id: string) => void;
   onNewChat: () => void;
-  
+
   // Tutor
   isTutorMode: boolean;
   onToggleTutor: () => void;
@@ -25,7 +25,11 @@ interface SidebarProps {
   onLanguageLevelChange: (level: LanguageLevel) => void;
   personaId: string;
   onPersonaChange: (personaId: string) => void;
-  
+
+  // Presentation
+  isPresentationMode: boolean;
+  onTogglePresentation: () => void;
+
   // Localization
   t: (key: string) => string;
 }
@@ -43,6 +47,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLanguageLevelChange,
   personaId,
   onPersonaChange,
+  isPresentationMode,
+  onTogglePresentation,
   t
 }) => {
   return (
@@ -55,8 +61,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <span className="font-bold text-lg tracking-tight">Lukas</span>
         </div>
-        <button 
-          onClick={onNewChat} 
+        <button
+          onClick={onNewChat}
           className="p-2 hover:bg-[var(--hover-bg-color)] rounded-lg transition-colors"
           title="New Chat"
         >
@@ -67,12 +73,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* New Project Button */}
-      <div className="px-3 py-2">
-        <button 
-          onClick={onNewChat} 
+      <div className="px-3 py-2 space-y-2">
+        <button
+          onClick={onNewChat}
           className="w-full flex items-center gap-3 px-3 py-2.5 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl transition-all shadow-lg shadow-indigo-500/20 group"
         >
           <span className="text-sm font-medium">New Project</span>
+        </button>
+
+        {/* Presentation Mode Toggle */}
+        <button
+          onClick={onTogglePresentation}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border ${isPresentationMode
+              ? 'bg-purple-600 text-white border-purple-500 shadow-lg shadow-purple-500/20'
+              : 'bg-[var(--bg-tertiary-color)] text-[var(--text-primary-color)] border-[var(--border-color)] hover:border-purple-500/50'
+            }`}
+        >
+          <span className="text-lg">📊</span>
+          <span className="text-sm font-medium">Presentation Mode</span>
         </button>
       </div>
 
@@ -94,14 +112,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           Recents
         </div>
         {conversations.slice().reverse().map(convo => (
-          <button 
-            key={convo.id} 
-            onClick={() => onSelectConversation(convo.id)} 
-            className={`w-full text-left rtl:text-right px-3 py-2 rounded-lg text-sm truncate transition-all ${
-              activeConversationId === convo.id 
-                ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)] font-medium' 
+          <button
+            key={convo.id}
+            onClick={() => onSelectConversation(convo.id)}
+            className={`w-full text-left rtl:text-right px-3 py-2 rounded-lg text-sm truncate transition-all ${activeConversationId === convo.id
+                ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)] font-medium'
                 : 'text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]'
-            }`}
+              }`}
           >
             {convo.title || t('newChat')}
           </button>
