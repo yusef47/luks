@@ -174,8 +174,9 @@ const readAndUnderstand = async (
 ): Promise<BookSummary> => {
     const { callPresentationModel, MODELS } = await import('./geminiService');
 
-    const languageInstruction = language === 'ar' 
-        ? `الرجاء تقديم التحليل بالعربية الفصحى. استخدم لغة احترافية وواضحة.`
+    const isArabic = language === 'ar';
+    const languageInstruction = isArabic 
+        ? `الرجاء تقديم التحليل بالعربية الفصحى فقط. استخدم لغة احترافية وواضحة جداً.`
         : `Provide analysis in professional English.`;
 
     const prompt = `CRITICAL INSTRUCTION: You are an EXPERT document analyst. Your ONLY job is to READ and UNDERSTAND the ENTIRE document provided, then extract REAL content from it.
