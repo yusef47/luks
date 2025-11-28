@@ -19,6 +19,7 @@ export default function PresentationGenerator({ onComplete }: PresentationGenera
     const [logs, setLogs] = useState<string[]>([]);
     const [showPreview, setShowPreview] = useState(false);
     const [slideCount, setSlideCount] = useState<number | null>(null);
+    const [language, setLanguage] = useState<'en' | 'ar'>('en');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,7 +55,8 @@ export default function PresentationGenerator({ onComplete }: PresentationGenera
                 parsedPDF,
                 {
                     maxSlides: slideCount || undefined, // Use user-selected count or auto-calculate
-                    includeImages: false // Skip images for now
+                    includeImages: false, // Skip images for now
+                    language: language // Pass language preference
                 },
                 (stage, prog) => {
                     setCurrentStage(stage);
@@ -149,6 +151,35 @@ export default function PresentationGenerator({ onComplete }: PresentationGenera
 
                         {file && !isGenerating && !presentation && (
                             <div className="mt-6 space-y-4">
+                                {/* Language Selector */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                        Presentation Language
+                                    </label>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setLanguage('en')}
+                                            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
+                                                language === 'en'
+                                                    ? 'bg-blue-600 text-white shadow-lg'
+                                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                                            }`}
+                                        >
+                                            🇬🇧 English
+                                        </button>
+                                        <button
+                                            onClick={() => setLanguage('ar')}
+                                            className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
+                                                language === 'ar'
+                                                    ? 'bg-blue-600 text-white shadow-lg'
+                                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                                            }`}
+                                        >
+                                            🇸🇦 العربية
+                                        </button>
+                                    </div>
+                                </div>
+
                                 {/* Slide Count Selector */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

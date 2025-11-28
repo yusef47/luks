@@ -53,6 +53,7 @@ export interface PresentationOptions {
     maxSlides?: number;
     includeImages?: boolean;
     imageSource?: 'unsplash' | 'imagen';
+    language?: 'en' | 'ar';
 }
 
 export type ProgressCallback = (stage: string, progress: number) => void;
@@ -93,7 +94,7 @@ export const generatePresentation = async (
 
         // Step 1: Deep Reading & Understanding (30%)
         onProgress?.('Reading and understanding content deeply...', 10);
-        const summary = await readAndUnderstand(parsedPDF.text, onChunk);
+        const summary = await readAndUnderstand(parsedPDF.text, onChunk, options.language);
         onProgress?.('Reading and understanding content deeply...', 30);
 
         // Step 2: Content Analysis (50%)
@@ -168,47 +169,56 @@ const calculateOptimalSlideCount = (text: string, pages: number): number => {
  */
 const readAndUnderstand = async (
     text: string,
-    onChunk?: ChunkCallback
+    onChunk?: ChunkCallback,
+    language: 'en' | 'ar' = 'en'
 ): Promise<BookSummary> => {
     const { callPresentationModel, MODELS } = await import('./geminiService');
 
-    const prompt = `You are an expert document analyst. Your task is to deeply understand and analyze the complete document provided.
+    const languageInstruction = language === 'ar' 
+        ? `الرجاء تقديم التحليل بالعربية الفصحى. استخدم لغة احترافية وواضحة.`
+        : `Provide analysis in professional English.`;
 
-DOCUMENT CONTENT:
-${text.substring(0, 1000000)}
+    const prompt = `You are an expert document analyst specializing in comprehensive document understanding. Your task is to deeply analyze the ENTIRE document provided.
 
-ANALYSIS INSTRUCTIONS:
-1. Understand the ENTIRE document structure, themes, and key concepts
-2. Identify the main topic and its context
-3. Extract logical sections/chapters (even if not explicitly labeled)
-4. For each section, identify:
-   - Clear, descriptive title
-   - Comprehensive summary (2-3 sentences)
-   - 3-5 most important key points
-   - Importance rating (1-10 scale)
-5. Identify overall key takeaways
-6. Determine the target audience
+${languageInstruction}
 
-IMPORTANT:
-- Be thorough and extract REAL content from the document
-- Do NOT use placeholder text
-- Each key point should be specific and meaningful
-- Importance should reflect actual significance in the document
-- Summaries should capture the essence of each section
+DOCUMENT CONTENT (${text.length} characters):
+${text.substring(0, 1200000)}
 
-Return ONLY valid JSON (no markdown, no extra text):
+COMPREHENSIVE ANALYSIS INSTRUCTIONS:
+1. Read and understand the COMPLETE document thoroughly
+2. Identify the main topic, purpose, and context
+3. Extract ALL logical sections/chapters (even if not explicitly labeled)
+4. For each section, provide:
+   - Clear, descriptive, engaging title
+   - Comprehensive 2-3 sentence summary capturing the essence
+   - 4-5 specific, detailed key points (NOT generic)
+   - Importance rating (1-10) based on impact and relevance
+5. Extract 5-7 overall key takeaways from the entire document
+6. Determine the target audience and their needs
+
+CRITICAL REQUIREMENTS:
+- Extract REAL, SPECIFIC content from the document
+- NO placeholder or generic text whatsoever
+- Each key point must be detailed and actionable
+- Importance ratings must be justified by content significance
+- Summaries must capture unique aspects of each section
+- Take time to understand the document deeply
+- Provide comprehensive analysis, not superficial overview
+
+Return ONLY valid JSON (no markdown, no code blocks):
 {
-  "mainTheme": "Clear, specific main topic of the document",
+  "mainTheme": "Specific, detailed main topic of the document",
   "chapters": [
     {
-      "title": "Section title",
-      "summary": "2-3 sentence summary of this section",
-      "keyPoints": ["Specific point 1", "Specific point 2", "Specific point 3"],
+      "title": "Specific section title",
+      "summary": "Detailed 2-3 sentence summary of this section's content and significance",
+      "keyPoints": ["Specific, detailed point 1", "Specific, detailed point 2", "Specific, detailed point 3", "Specific, detailed point 4"],
       "importance": 8
     }
   ],
-  "keyPoints": ["Overall key takeaway 1", "Overall key takeaway 2", "Overall key takeaway 3"],
-  "targetAudience": "Specific audience description"
+  "keyPoints": ["Detailed key takeaway 1", "Detailed key takeaway 2", "Detailed key takeaway 3"],
+  "targetAudience": "Specific description of intended audience and their needs"
 }`;
 
     // Schema for structured output
@@ -351,50 +361,82 @@ const planSlides = async (
 ): Promise<SlideStructure[]> => {
     const { callPresentationModel, MODELS } = await import('./geminiService');
     const maxSlides = options.maxSlides || 15;
+    const language = options.language || 'en';
 
-    const prompt = `You are a master presentation designer. Create an optimal presentation structure from this content analysis.
+    const languageInstruction = language === 'ar'
+        ? `الرجاء إنشاء العرض التقديمي بالعربية الفصحى. استخدم لغة احترافية وجذابة.`
+        : `Create the presentation in professional English.`;
 
-CONTENT BREAKDOWN:
+    const prompt = `You are a world-class presentation strategist and designer. Your task is to create a compelling, impactful presentation structure.
+
+${languageInstruction}
+
+CONTENT BREAKDOWN (${breakdown.length} sections):
 ${JSON.stringify(breakdown, null, 2)}
 
-PRESENTATION DESIGN TASK:
-Create exactly ${maxSlides} slides with this structure:
-1. Title slide (1 slide) - Main topic and subtitle
-2. Overview/Agenda (1 slide) - Key sections to be covered
-3. Content slides (${maxSlides - 4} slides) - Distribute chapters by importance:
-   - High importance (8-10): 2 slides each
-   - Medium importance (5-7): 1 slide each
-   - Lower importance: combine or skip
-4. Key takeaways (1 slide) - Main conclusions
-5. Conclusion (1 slide) - Call to action or closing remarks
+PRESENTATION DESIGN REQUIREMENTS:
+Create exactly ${maxSlides} slides with this strategic structure:
 
-SLIDE CONTENT REQUIREMENTS:
-- Each slide must have specific, non-generic content from the breakdown
-- Content points should be actionable and meaningful
-- Titles should be clear and engaging
-- Include speaker notes for presenter guidance
-- Suggest relevant image search terms
+1. **Title Slide** (1 slide)
+   - Compelling main title from the document's core topic
+   - Engaging subtitle that captures the value proposition
+   - Professional opening remarks
 
-Return ONLY valid JSON array (no markdown, no extra text):
+2. **Overview/Agenda** (1 slide)
+   - List all major sections to be covered
+   - Show the logical flow and structure
+   - Build anticipation for key content
+
+3. **Content Slides** (${maxSlides - 4} slides)
+   - Distribute based on importance:
+     * High importance (8-10): 2-3 slides each with detailed content
+     * Medium importance (5-7): 1-2 slides each
+     * Lower importance: combine or skip
+   - Each slide must have:
+     * Specific, detailed content from the breakdown (NOT generic)
+     * 3-5 key points per slide (detailed, not just bullets)
+     * Actionable insights and practical implications
+     * Relevant speaker notes with talking points
+
+4. **Key Takeaways** (1 slide)
+   - Synthesize the most important conclusions
+   - Show business impact and implications
+   - Include actionable next steps
+
+5. **Conclusion** (1 slide)
+   - Powerful closing statement
+   - Call to action
+   - Contact/follow-up information
+
+CRITICAL CONTENT REQUIREMENTS:
+- Extract REAL, SPECIFIC content from the breakdown
+- NO generic or placeholder text
+- Each point must be detailed and meaningful
+- Titles must be engaging and specific
+- Content must flow logically and tell a story
+- Include comprehensive speaker notes
+- Suggest relevant visual elements
+
+Return ONLY valid JSON array (no markdown, no code blocks):
 [
   {
     "type": "title",
-    "title": "Main presentation title",
-    "content": ["Subtitle or key message", "Optional: Author/Date"],
-    "notes": "Opening remarks"
+    "title": "Compelling main title",
+    "content": ["Engaging subtitle", "Key value proposition"],
+    "notes": "Strong opening remarks"
   },
   {
     "type": "content",
-    "title": "Section title",
-    "content": ["Specific point 1 from content", "Specific point 2 from content", "Specific point 3 from content"],
-    "imageQuery": "relevant search term",
-    "notes": "Presenter talking points"
+    "title": "Specific, engaging section title",
+    "content": ["Detailed point 1 with context", "Detailed point 2 with implications", "Detailed point 3 with examples"],
+    "imageQuery": "relevant visual concept",
+    "notes": "Comprehensive talking points and transitions"
   },
   {
     "type": "conclusion",
-    "title": "Key Takeaways",
-    "content": ["Main conclusion 1", "Main conclusion 2", "Main conclusion 3"],
-    "notes": "Summary and next steps"
+    "title": "Key Takeaways & Next Steps",
+    "content": ["Main conclusion with impact", "Business implication", "Recommended action"],
+    "notes": "Powerful closing and call to action"
   }
 ]`;
 
