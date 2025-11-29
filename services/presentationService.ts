@@ -4,6 +4,7 @@
  */
 
 import { ParsedPDF } from './pdfParser';
+import { callPresentationModel, streamPresentationContent, MODELS } from './backendProxy';
 
 // ============================================
 // Types & Interfaces
@@ -172,7 +173,7 @@ const readAndUnderstand = async (
     onChunk?: ChunkCallback,
     language: 'en' | 'ar' = 'en'
 ): Promise<BookSummary> => {
-    const { callPresentationModel, MODELS } = await import('./geminiService');
+    // Using backend proxy - no need to import geminiService
 
     const isArabic = language === 'ar';
     const languageInstruction = isArabic 
@@ -316,7 +317,7 @@ const analyzeContent = async (
     onChunk?: ChunkCallback,
     language: 'en' | 'ar' = 'en'
 ): Promise<ChapterSummary[]> => {
-    const { callPresentationModel, MODELS } = await import('./geminiService');
+    // Using backend proxy - no need to import geminiService
 
     const languageInstruction = language === 'ar'
         ? `الرجاء تقديم التحليل بالعربية الفصحى. استخدم لغة احترافية وواضحة.`
@@ -392,7 +393,7 @@ const planSlides = async (
     options: PresentationOptions,
     onChunk?: ChunkCallback
 ): Promise<SlideStructure[]> => {
-    const { callPresentationModel, MODELS } = await import('./geminiService');
+    // Using backend proxy - no need to import geminiService
     const maxSlides = options.maxSlides || 15;
     const language: 'en' | 'ar' = (options.language as 'en' | 'ar') || 'en';
 
@@ -551,7 +552,7 @@ const generateSlideContent = async (
     onChunk?: ChunkCallback,
     language: 'en' | 'ar' = 'en'
 ): Promise<Slide[]> => {
-    const { streamPresentationContent, MODELS } = await import('./geminiService');
+    // Using backend proxy - no need to import geminiService
 
     const languageInstruction = language === 'ar'
         ? `الرجاء تقديم المحتوى بالعربية الفصحى. استخدم لغة احترافية وجذابة.`
@@ -632,7 +633,6 @@ Return ONLY valid JSON array (no markdown, no code blocks):
             // Stream for real-time feedback
             responseText = await streamPresentationContent(MODELS.PRO, prompt, onChunk);
         } else {
-            const { callPresentationModel } = await import('./geminiService');
             responseText = await callPresentationModel(MODELS.PRO, prompt);
         }
 

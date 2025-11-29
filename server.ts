@@ -362,6 +362,13 @@ app.get('/api/context/:conversationId', (req: Request, res: Response) => {
   }
 });
 
+// ==================== GEMINI API PROXY ====================
+// Secure backend proxy for Gemini API calls
+
+import geminiRoutes from './api/routes/gemini';
+
+app.use('/api/gemini', geminiRoutes);
+
 // Health Check Endpoint
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -371,6 +378,7 @@ app.get('/api/health', (req: Request, res: Response) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 Database: ${dbPath}`);
+  console.log(`🔐 Gemini API Proxy: /api/gemini/call`);
 });
 
 export default app;
