@@ -143,17 +143,30 @@ Student Level: ${level}
 
 // Simple orchestrator plan endpoint
 app.post('/api/orchestrator/plan', async (req, res) => {
+  console.log(`\n🔔 POST /api/orchestrator/plan received`);
+  console.log(`   Body:`, req.body);
+  
   try {
     const { prompt } = req.body;
     console.log(`\n📋 Orchestrator plan request: "${prompt?.substring(0, 50)}..."`);
     
+    if (!prompt) {
+      console.error('❌ Missing prompt');
+      return res.status(400).json({ success: false, error: 'Missing prompt' });
+    }
+    
     const key = getNextKey();
     if (!key) {
+      console.error('❌ No API keys available');
       return res.status(500).json({ success: false, error: 'No API keys available' });
     }
 
+    console.log(`🔐 Using key: ${key.substring(0, 10)}...`);
     const ai = new GoogleGenAI({ apiKey: key });
+    console.log(`✅ GoogleGenAI initialized`);
+    
     const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash-lite-preview-02-05' });
+    console.log(`✅ Model created`);
     
     const systemPrompt = `You are an AI assistant. Answer the user's question clearly and concisely.`;
     const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}\n\nAssistant:`;
@@ -165,6 +178,7 @@ app.post('/api/orchestrator/plan', async (req, res) => {
     
     const responseText = result.response.text();
     console.log(`✅ Got plan response (${responseText.length} chars)`);
+    console.log(`📤 Sending response to client\n`);
     
     res.json({
       success: true,
@@ -174,7 +188,8 @@ app.post('/api/orchestrator/plan', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(`❌ Plan error: ${error.message}`);
+    console.error(`\n❌ Plan error: ${error.message}`);
+    console.error(`Stack: ${error.stack}\n`);
     res.status(500).json({
       success: false,
       error: error.message
