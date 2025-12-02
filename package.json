@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:full": "concurrently \"npm run server:dev\" \"npm run dev\"",
+    "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "node server-simple.js",
-    "server:dev": "nodemon server-simple.js",
+    "server": "node server-minimal.js",
+    "server:dev": "node server-minimal.js",
     "test:backend": "node test-backend.js",
     "diagnose": "node diagnose.js"
   },
