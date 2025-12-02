@@ -10,35 +10,25 @@ import { GoogleGenAI } from "@google/genai";
 // API Keys - من environment variables فقط
 // ============================================
 
+// Get API keys from environment variables
+// In production (Vercel), use VITE_ prefix
+// In development, use direct names
 const ALL_API_KEYS = [
-    process.env.VITE_GEMINI_API_KEY_1,
-    process.env.VITE_GEMINI_API_KEY_2,
-    process.env.VITE_GEMINI_API_KEY_3,
-    process.env.VITE_GEMINI_API_KEY_4,
-    process.env.VITE_GEMINI_API_KEY_5,
-    process.env.VITE_GEMINI_API_KEY_6,
-    process.env.VITE_GEMINI_API_KEY_7,
-    process.env.VITE_GEMINI_API_KEY_8,
-    process.env.VITE_GEMINI_API_KEY_9,
-    process.env.VITE_GEMINI_API_KEY_10,
-    process.env.VITE_GEMINI_API_KEY_11,
-    process.env.VITE_GEMINI_API_KEY_12,
-    process.env.VITE_GEMINI_API_KEY_13,
-    process.env.VITE_API_KEY,
-    process.env.GEMINI_API_KEY_1,
-    process.env.GEMINI_API_KEY_2,
-    process.env.GEMINI_API_KEY_3,
-    process.env.GEMINI_API_KEY_4,
-    process.env.GEMINI_API_KEY_5,
-    process.env.GEMINI_API_KEY_6,
-    process.env.GEMINI_API_KEY_7,
-    process.env.GEMINI_API_KEY_8,
-    process.env.GEMINI_API_KEY_9,
-    process.env.GEMINI_API_KEY_10,
-    process.env.GEMINI_API_KEY_11,
-    process.env.GEMINI_API_KEY_12,
-    process.env.GEMINI_API_KEY_13,
-    process.env.API_KEY
+    // Try VITE_ prefix first (Vercel)
+    process.env.VITE_GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_1,
+    process.env.VITE_GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY_2,
+    process.env.VITE_GEMINI_API_KEY_3 || process.env.GEMINI_API_KEY_3,
+    process.env.VITE_GEMINI_API_KEY_4 || process.env.GEMINI_API_KEY_4,
+    process.env.VITE_GEMINI_API_KEY_5 || process.env.GEMINI_API_KEY_5,
+    process.env.VITE_GEMINI_API_KEY_6 || process.env.GEMINI_API_KEY_6,
+    process.env.VITE_GEMINI_API_KEY_7 || process.env.GEMINI_API_KEY_7,
+    process.env.VITE_GEMINI_API_KEY_8 || process.env.GEMINI_API_KEY_8,
+    process.env.VITE_GEMINI_API_KEY_9 || process.env.GEMINI_API_KEY_9,
+    process.env.VITE_GEMINI_API_KEY_10 || process.env.GEMINI_API_KEY_10,
+    process.env.VITE_GEMINI_API_KEY_11 || process.env.GEMINI_API_KEY_11,
+    process.env.VITE_GEMINI_API_KEY_12 || process.env.GEMINI_API_KEY_12,
+    process.env.VITE_GEMINI_API_KEY_13 || process.env.GEMINI_API_KEY_13,
+    process.env.VITE_API_KEY || process.env.API_KEY
 ].filter(Boolean) as string[];
 
 const UNIQUE_KEYS = [...new Set(ALL_API_KEYS)];
