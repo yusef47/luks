@@ -31,18 +31,166 @@ export type LanguageLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 // Note: All Gemini API calls are now handled by the backend proxy
 // Frontend no longer imports directly from geminiService (deprecated)
 
+// Simple backend proxy for Orchestrator
+const BACKEND_URL = 'http://localhost:5000/api';
+
+const callBackendAPI = async (endpoint: string, data: any, onChunk?: (chunk: string) => void) => {
+  try {
+    console.log(`📤 Calling backend: ${endpoint}`);
+    const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log(`✅ Backend response:`, result);
+    
+    if (onChunk && result.data) {
+      onChunk(result.data);
+    }
+    
+    return result;
+  } catch (error: any) {
+    console.error(`❌ Backend error:`, error);
+    throw error;
+  }
+};
+
 // Stub implementations - these should be called via backend proxy in production
-const generatePlan = async (prompt: string, hasImage: boolean, hasVideo: boolean, history: any, cycleCount: number) => ({ plan: [], clarification: null });
-const executeSearch = async (task: string, onChunk: (chunk: string) => void) => ({});
-const executeMap = async (task: string, location: any, onChunk: (chunk: string) => void) => ({});
-const executeVision = async (task: string, imageFile: File, onChunk: (chunk: string) => void) => ({});
-const executeVideo = async (task: string, videoFile: File, onChunk: (chunk: string) => void) => ({});
-const synthesizeAnswer = async (prompt: string, results: any, onChunk: (chunk: string) => void) => ({});
-const executeEmail = async (task: string, onChunk: (chunk: string) => void) => ({});
-const executeSheets = async (task: string, prevData: string, onChunk: (chunk: string) => void) => ({ sheetData: [] });
-const executeDrive = async (task: string, onChunk: (chunk: string) => void) => ({});
-const executeOrchestratorIntermediateStep = async (task: string, prompt: string, results: any, onChunk: (chunk: string) => void) => ({});
-const executeImageGeneration = async (task: string, onChunk: (chunk: string) => void) => ({ imageBase64: '' });
+const generatePlan = async (prompt: string, hasImage: boolean, hasVideo: boolean, history: any, cycleCount: number) => {
+  try {
+    const result = await callBackendAPI('/orchestrator/plan', { prompt, hasImage, hasVideo, history, cycleCount });
+    return result.data || { plan: [], clarification: null };
+  } catch (error) {
+    console.error('Plan generation error:', error);
+    return { plan: [], clarification: null };
+  }
+};
+
+const executeSearch = async (task: string, onChunk: (chunk: string) => void) => {
+  try {
+    const result = await callBackendAPI('/orchestrator/search', { task }, onChunk);
+    return result.data || {};
+  } catch (error) {
+    console.error('Search error:', error);
+    return {};
+  }
+};
+
+const executeMap = async (task: string, location: any, onChunk: (chunk: string) => void) => {
+  try {
+    const result = await callBackendAPI('/orchestrator/map', { task, location }, onChunk);
+    return result.data || {};
+  } catch (error) {
+    console.error('Map error:', error);
+    return {};
+  }
+};
+
+const executeVision = async (task: string, imageFile: File, onChunk: (chunk: string) => void) => {
+  try {
+    const formData = new FormData();
+    formData.append('task', task);
+    formData.append('image', imageFile);
+    
+    const response = await fetch(`${BACKEND_URL}/orchestrator/vision`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    const result = await response.json();
+    if (onChunk && result.data) onChunk(result.data);
+    return result.data || {};
+  } catch (error) {
+    console.error('Vision error:', error);
+    return {};
+  }
+};
+
+const executeVideo = async (task: string, videoFile: File, onChunk: (chunk: string) => void) => {
+  try {
+    const formData = new FormData();
+    formData.append('task', task);
+    formData.append('video', videoFile);
+    
+    const response = await fetch(`${BACKEND_URL}/orchestrator/video`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    const result = await response.json();
+    if (onChunk && result.data) onChunk(result.data);
+    return result.data || {};
+  } catch (error) {
+    console.error('Video error:', error);
+    return {};
+  }
+};
+
+const synthesizeAnswer = async (prompt: string, results: any, onChunk: (chunk: string) => void) => {
+  try {
+    const result = await callBackendAPI('/orchestrator/synthesize', { prompt, results }, onChunk);
+    return result.data || {};
+  } catch (error) {
+    console.error('Synthesize error:', error);
+    return {};
+  }
+};
+
+const executeEmail = async (task: string, onChunk: (chunk: string) => void) => {
+  try {
+    const result = await callBackendAPI('/orchestrator/email', { task }, onChunk);
+    return result.data || {};
+  } catch (error) {
+    console.error('Email error:', error);
+    return {};
+  }
+};
+
+const executeSheets = async (task: string, prevData: string, onChunk: (chunk: string) => void) => {
+  try {
+    const result = await callBackendAPI('/orchestrator/sheets', { task, prevData }, onChunk);
+    return result.data || { sheetData: [] };
+  } catch (error) {
+    console.error('Sheets error:', error);
+    return { sheetData: [] };
+  }
+};
+
+const executeDrive = async (task: string, onChunk: (chunk: string) => void) => {
+  try {
+    const result = await callBackendAPI('/orchestrator/drive', { task }, onChunk);
+    return result.data || {};
+  } catch (error) {
+    console.error('Drive error:', error);
+    return {};
+  }
+};
+
+const executeOrchestratorIntermediateStep = async (task: string, prompt: string, results: any, onChunk: (chunk: string) => void) => {
+  try {
+    const result = await callBackendAPI('/orchestrator/intermediate', { task, prompt, results }, onChunk);
+    return result.data || {};
+  } catch (error) {
+    console.error('Intermediate step error:', error);
+    return {};
+  }
+};
+
+const executeImageGeneration = async (task: string, onChunk: (chunk: string) => void) => {
+  try {
+    const result = await callBackendAPI('/orchestrator/generate-image', { task }, onChunk);
+    return result.data || { imageBase64: '' };
+  } catch (error) {
+    console.error('Image generation error:', error);
+    return { imageBase64: '' };
+  }
+};
 
 // ============================================
 // MAIN APP COMPONENT

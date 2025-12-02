@@ -139,6 +139,49 @@ Student Level: ${level}
   }
 });
 
+// ==================== ORCHESTRATOR ENDPOINTS ====================
+
+// Simple orchestrator plan endpoint
+app.post('/api/orchestrator/plan', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    console.log(`\n📋 Orchestrator plan request: "${prompt?.substring(0, 50)}..."`);
+    
+    const key = getNextKey();
+    if (!key) {
+      return res.status(500).json({ success: false, error: 'No API keys available' });
+    }
+
+    const ai = new GoogleGenAI({ apiKey: key });
+    const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash-lite-preview-02-05' });
+    
+    const systemPrompt = `You are an AI assistant. Answer the user's question clearly and concisely.`;
+    const fullPrompt = `${systemPrompt}\n\nUser: ${prompt}\n\nAssistant:`;
+
+    console.log(`📝 Calling Gemini for plan...`);
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
+    });
+    
+    const responseText = result.response.text();
+    console.log(`✅ Got plan response (${responseText.length} chars)`);
+    
+    res.json({
+      success: true,
+      data: {
+        plan: [{ step: 1, task: responseText }],
+        clarification: null
+      }
+    });
+  } catch (error) {
+    console.error(`❌ Plan error: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ==================== START SERVER ====================
 
 console.log(`\n🚀 Starting server on port ${PORT}...`);
