@@ -19,13 +19,21 @@ const PORT = 5000;
 app.use(cors());
 app.use(express.json());
 
-// Get API keys
+// Get API keys - load ALL 13
 const ALL_API_KEYS = [
   process.env.VITE_GEMINI_API_KEY_1,
   process.env.VITE_GEMINI_API_KEY_2,
   process.env.VITE_GEMINI_API_KEY_3,
   process.env.VITE_GEMINI_API_KEY_4,
   process.env.VITE_GEMINI_API_KEY_5,
+  process.env.VITE_GEMINI_API_KEY_6,
+  process.env.VITE_GEMINI_API_KEY_7,
+  process.env.VITE_GEMINI_API_KEY_8,
+  process.env.VITE_GEMINI_API_KEY_9,
+  process.env.VITE_GEMINI_API_KEY_10,
+  process.env.VITE_GEMINI_API_KEY_11,
+  process.env.VITE_GEMINI_API_KEY_12,
+  process.env.VITE_GEMINI_API_KEY_13,
 ].filter(Boolean);
 
 const UNIQUE_KEYS = [...new Set(ALL_API_KEYS)];
@@ -63,9 +71,12 @@ app.post('/api/tutor/generate-response', async (req, res) => {
   try {
     const { history, userMessage, level = 'B1' } = req.body;
     
-    console.log(`📨 Tutor request: "${userMessage?.substring(0, 30)}..."`);
+    console.log(`\n📨 Tutor request received`);
+    console.log(`   Message: "${userMessage?.substring(0, 30)}..."`);
+    console.log(`   Level: ${level}`);
     
     if (!userMessage) {
+      console.error('❌ Missing userMessage');
       return res.status(400).json({
         success: false,
         error: 'Missing userMessage'
@@ -74,6 +85,7 @@ app.post('/api/tutor/generate-response', async (req, res) => {
 
     const key = getNextKey();
     if (!key) {
+      console.error('❌ No API keys available');
       return res.status(500).json({
         success: false,
         error: 'No API keys available'
@@ -83,7 +95,10 @@ app.post('/api/tutor/generate-response', async (req, res) => {
     console.log(`🔐 Using key: ${key.substring(0, 10)}...`);
     
     const ai = new GoogleGenAI({ apiKey: key });
+    console.log(`✅ GoogleGenAI initialized`);
+    
     const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash-lite-preview-02-05' });
+    console.log(`✅ Model created`);
     
     const conversationText = (history || []).map(msg =>
       `${msg.role === 'user' ? 'Student' : 'Tutor'}: ${msg.content}`
@@ -98,19 +113,22 @@ Student Level: ${level}
 
     const fullPrompt = `${systemPrompt}\n\nConversation:\n${conversationText}\n\nStudent: ${userMessage}\n\nTutor:`;
 
+    console.log(`📝 Sending prompt to Gemini...`);
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
     });
     
     const responseText = result.response.text();
     console.log(`✅ Got response (${responseText.length} chars)`);
+    console.log(`📤 Sending response to client\n`);
     
     res.json({
       success: true,
       data: responseText
     });
   } catch (error) {
-    console.error(`❌ Error: ${error.message}`);
+    console.error(`\n❌ Tutor Error: ${error.message}`);
+    console.error(`Stack: ${error.stack}\n`);
     res.status(500).json({
       success: false,
       error: error.message
