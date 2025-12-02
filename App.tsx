@@ -623,12 +623,14 @@ const App: React.FC = () => {
               isListening={isListening}
               onToggleListening={startListening}
               isTutorMode={isTutorMode}
+              tutorMessages={[]}
               isSettingsOpen={isSettingsOpen}
               onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
               cycleCount={cycleCount}
               setCycleCount={setCycleCount}
               showComputer={showComputer}
               onToggleComputer={() => setShowComputer(!showComputer)}
+              onClarificationResponse={handleClarificationResponse}
               t={t as any}
             />
 

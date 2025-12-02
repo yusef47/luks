@@ -217,17 +217,21 @@ export function useEnglishTutor() {
           feedback.pronunciationTips.length > 0 ? feedback.pronunciationTips[0] : ''}`;
       } else {
         // Conversation mode
+        console.log(`\n🎯 Calling generateTutorResponse...`);
         responseText = await generateTutorResponse(
           messages,
           userText,
           languageLevel
         );
+        console.log(`✅ Got response from backend:`, responseText);
       }
 
       // Add assistant message
+      console.log(`\n📝 Adding assistant message to state`);
       const assistantMessage: TutorMessage = { role: 'assistant', content: responseText };
       setMessages(prev => [...prev, assistantMessage]);
       onMessageRef.current?.(assistantMessage);
+      console.log(`✅ Message added to state`);
 
       // Speak the response with persona voice
       setIsProcessing(false);

@@ -68,6 +68,9 @@ app.get('/api/gemini/status', (req, res) => {
 
 // Tutor generate response
 app.post('/api/tutor/generate-response', async (req, res) => {
+  console.log(`\n🔔 POST /api/tutor/generate-response received`);
+  console.log(`   Body:`, req.body);
+  
   try {
     const { history, userMessage, level = 'B1' } = req.body;
     
@@ -138,10 +141,16 @@ Student Level: ${level}
 
 // ==================== START SERVER ====================
 
+console.log(`\n🚀 Starting server on port ${PORT}...`);
+console.log(`📍 Available routes:`);
+console.log(`   GET  /api/health`);
+console.log(`   GET  /api/gemini/status`);
+console.log(`   POST /api/tutor/generate-response\n`);
+
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n✅ Server running on http://localhost:${PORT}`);
-  console.log(`📍 Health: GET /api/health`);
-  console.log(`📍 Tutor: POST /api/tutor/generate-response\n`);
+  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`🔑 API keys: ${UNIQUE_KEYS.length}`);
+  console.log(`📊 Ready to accept requests!\n`);
 });
 
 // Handle errors

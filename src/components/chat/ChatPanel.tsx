@@ -11,6 +11,11 @@ import { ClarificationRequest } from '../ClarificationRequest';
 import { StreamingMarkdownRenderer } from '../StreamingMarkdownRenderer';
 import { ChatInput } from './ChatInput';
 
+interface TutorMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 interface ChatPanelProps {
   // Conversation
   activeConversation: Conversation | null;
@@ -30,6 +35,9 @@ interface ChatPanelProps {
   isListening: boolean;
   onToggleListening: () => void;
   isTutorMode: boolean;
+
+  // Tutor messages (for tutor mode)
+  tutorMessages?: TutorMessage[];
 
   // Settings
   isSettingsOpen: boolean;
@@ -60,6 +68,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   isListening,
   onToggleListening,
   isTutorMode,
+  tutorMessages = [],
   isSettingsOpen,
   onToggleSettings,
   cycleCount,
@@ -239,23 +248,49 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               )}
             </div>
           ) : (
-            // Conversation Messages
+            // Conversation Messages or Tutor Messages
             <>
-              {activeConversation.exchanges.map(exchange => (
-                <React.Fragment key={exchange.id}>
-                  <ChatMessage agent={Agent.User} content={exchange.prompt} />
-                  {renderExchangeResponse(exchange)}
-                </React.Fragment>
-              ))}
-              {isLoading && activeExchange && activeExchange.status !== 'completed' && (
-                <ChatMessage
-                  agent={Agent.Orchestrator}
-                  content={
-                    <div className="flex justify-center items-center p-2">
-                      <LoadingSpinnerIcon className="w-6 h-6" />
-                    </div>
-                  }
-                />
+              {isTutorMode ? (
+                // Tutor Mode - show tutor messages
+                <>
+                  {tutorMessages.map((msg, index) => (
+                    <ChatMessage
+                      key={index}
+                      agent={msg.role === 'user' ? Agent.User : Agent.Orchestrator}
+                      content={msg.content}
+                    />
+                  ))}
+                  {isLoading && (
+                    <ChatMessage
+                      agent={Agent.Orchestrator}
+                      content={
+                        <div className="flex justify-center items-center p-2">
+                          <LoadingSpinnerIcon className="w-6 h-6" />
+                        </div>
+                      }
+                    />
+                  )}
+                </>
+              ) : (
+                // Orchestrator Mode - show exchanges
+                <>
+                  {activeConversation.exchanges.map(exchange => (
+                    <React.Fragment key={exchange.id}>
+                      <ChatMessage agent={Agent.User} content={exchange.prompt} />
+                      {renderExchangeResponse(exchange)}
+                    </React.Fragment>
+                  ))}
+                  {isLoading && activeExchange && activeExchange.status !== 'completed' && (
+                    <ChatMessage
+                      agent={Agent.Orchestrator}
+                      content={
+                        <div className="flex justify-center items-center p-2">
+                          <LoadingSpinnerIcon className="w-6 h-6" />
+                        </div>
+                      }
+                    />
+                  )}
+                </>
               )}
               <div ref={chatEndRef} />
             </>
