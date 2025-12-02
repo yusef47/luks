@@ -8,8 +8,10 @@
     "dev:full": "concurrently \"npm run server:dev\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "node --loader ts-node/esm server.ts",
-    "server:dev": "nodemon --exec node --loader ts-node/esm server.ts"
+    "server": "node server-simple.js",
+    "server:dev": "nodemon server-simple.js",
+    "test:backend": "node test-backend.js",
+    "diagnose": "node diagnose.js"
   },
   "dependencies": {
     "@google/genai": "^1.28.0",

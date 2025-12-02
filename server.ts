@@ -86,6 +86,9 @@ interface IntentResult {
 }
 
 const intentClassifier = async (userMessage: string): Promise<IntentResult> => {
+  if (!ai) {
+    throw new Error('Gemini API not initialized - no API key available');
+  }
   const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
   const prompt = `
