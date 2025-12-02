@@ -7,7 +7,7 @@ import React from 'react';
 import { Conversation } from '../../../types';
 import { SettingsIcon } from '../../../components/icons';
 import { TutorControls } from './TutorControls';
-import { LanguageLevel } from '../../services/tutorService';
+import type { LanguageLevel } from '../../services/tutorClient';
 
 interface SidebarProps {
   // Conversations

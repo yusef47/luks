@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { LanguageLevel } from '../../services/tutorService';
+import type { LanguageLevel } from '../../services/tutorClient';
 import { PersonaSelector } from '../tutor/PersonaSelector';
 
 interface TutorControlsProps {

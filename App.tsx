@@ -23,8 +23,10 @@ import PresentationGenerator from './src/components/presentation/PresentationGen
 
 // Services
 import { speechService } from './src/services/speechService';
-import { tutorService, LanguageLevel } from './src/services/tutorService';
 import { getPersonaById, tutorPersonas } from './src/config/tutorPersonas';
+
+// Types
+export type LanguageLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 import {
   generatePlan, executeSearch, executeMap, executeVision,
   executeVideo, synthesizeAnswer, executeEmail, executeSheets,
@@ -285,7 +287,9 @@ const App: React.FC = () => {
         });
       };
 
-      const responseText = await tutorService.generateResponse(history, text, languageLevel, onChunk);
+      // Import backend tutor client
+      const { generateTutorResponse } = await import('./src/services/tutorClient');
+      const responseText = await generateTutorResponse(history, text, languageLevel);
 
       // Stop recognition before TTS
       if (activeRecognitionRef.current) {
