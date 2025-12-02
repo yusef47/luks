@@ -366,8 +366,10 @@ app.get('/api/context/:conversationId', (req: Request, res: Response) => {
 // Secure backend proxy for Gemini API calls
 
 import geminiRoutes from './api/routes/gemini';
+import tutorRoutes from './api/routes/tutor';
 
 app.use('/api/gemini', geminiRoutes);
+app.use('/api/tutor', tutorRoutes);
 
 // Health Check Endpoint
 app.get('/api/health', (req: Request, res: Response) => {

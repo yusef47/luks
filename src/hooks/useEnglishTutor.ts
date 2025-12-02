@@ -6,7 +6,15 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { speechService, SpeechRecognitionResult } from '../services/speechService';
-import { tutorService, TutorMessage, LanguageLevel, TutorFeedback, SentencePractice } from '../services/tutorService';
+import { 
+  generateTutorResponse, 
+  generatePracticeSentence, 
+  evaluateAttempt,
+  TutorMessage, 
+  LanguageLevel, 
+  TutorFeedback, 
+  SentencePractice 
+} from '../services/tutorClient';
 import { tutorPersonas, TutorPersona, getPersonaById, defaultPersonaId } from '../config/tutorPersonas';
 
 export type TutorMode = 'conversation' | 'practice' | 'idle';
@@ -191,7 +199,7 @@ export function useEnglishTutor() {
       
       if (mode === 'practice' && currentPractice) {
         // Evaluate the practice attempt
-        const feedback = await tutorService.evaluateAttempt(
+        const feedback = await evaluateAttempt(
           currentPractice.sentence,
           userText,
           languageLevel
@@ -209,11 +217,10 @@ export function useEnglishTutor() {
           feedback.pronunciationTips.length > 0 ? feedback.pronunciationTips[0] : ''}`;
       } else {
         // Conversation mode
-        responseText = await tutorService.generateResponse(
+        responseText = await generateTutorResponse(
           messages,
           userText,
-          languageLevel,
-          onStreamRef.current || undefined
+          languageLevel
         );
       }
 
@@ -302,7 +309,7 @@ export function useEnglishTutor() {
     setError(null);
 
     try {
-      const practice = await tutorService.generatePracticeSentence(languageLevel, topic);
+      const practice = await generatePracticeSentence(languageLevel, topic);
       setCurrentPractice(practice);
       
       // Speak the practice sentence
@@ -333,7 +340,14 @@ export function useEnglishTutor() {
    * Get available topics for current level
    */
   const getTopics = useCallback(() => {
-    return tutorService.getTopicsForLevel(languageLevel);
+    const topics: Record<LanguageLevel, string[]> = {
+      'A1': ['Greetings', 'Family', 'Numbers', 'Colors', 'Food', 'Weather'],
+      'A2': ['Shopping', 'Daily Routine', 'Hobbies', 'Directions', 'Health', 'School'],
+      'B1': ['Travel', 'Work', 'Movies', 'Technology', 'Environment', 'Culture'],
+      'B2': ['News', 'Politics', 'Science', 'Business', 'Education', 'Social Issues'],
+      'C1': ['Philosophy', 'Economics', 'Art', 'Literature', 'Psychology', 'Innovation']
+    };
+    return topics[languageLevel];
   }, [languageLevel]);
 
   /**
