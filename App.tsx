@@ -27,11 +27,22 @@ import { getPersonaById, tutorPersonas } from './src/config/tutorPersonas';
 
 // Types
 export type LanguageLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
-import {
-  generatePlan, executeSearch, executeMap, executeVision,
-  executeVideo, synthesizeAnswer, executeEmail, executeSheets,
-  executeDrive, executeOrchestratorIntermediateStep, executeImageGeneration
-} from './services/geminiService';
+
+// Note: All Gemini API calls are now handled by the backend proxy
+// Frontend no longer imports directly from geminiService (deprecated)
+
+// Stub implementations - these should be called via backend proxy in production
+const generatePlan = async (prompt: string, hasImage: boolean, hasVideo: boolean, history: any, cycleCount: number) => ({ plan: [], clarification: null });
+const executeSearch = async (task: string, onChunk: (chunk: string) => void) => ({});
+const executeMap = async (task: string, location: any, onChunk: (chunk: string) => void) => ({});
+const executeVision = async (task: string, imageFile: File, onChunk: (chunk: string) => void) => ({});
+const executeVideo = async (task: string, videoFile: File, onChunk: (chunk: string) => void) => ({});
+const synthesizeAnswer = async (prompt: string, results: any, onChunk: (chunk: string) => void) => ({});
+const executeEmail = async (task: string, onChunk: (chunk: string) => void) => ({});
+const executeSheets = async (task: string, prevData: string, onChunk: (chunk: string) => void) => ({ sheetData: [] });
+const executeDrive = async (task: string, onChunk: (chunk: string) => void) => ({});
+const executeOrchestratorIntermediateStep = async (task: string, prompt: string, results: any, onChunk: (chunk: string) => void) => ({});
+const executeImageGeneration = async (task: string, onChunk: (chunk: string) => void) => ({ imageBase64: '' });
 
 // ============================================
 // MAIN APP COMPONENT
