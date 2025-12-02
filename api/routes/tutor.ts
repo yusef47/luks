@@ -19,6 +19,8 @@ router.post('/generate-response', async (req: Request, res: Response) => {
     try {
         const { history, userMessage, level = 'B1' } = req.body;
         
+        console.log('📨 Tutor request received:', { userMessage: userMessage?.substring(0, 50), level });
+        
         if (!userMessage) {
             return res.status(400).json({
                 success: false,

@@ -16,12 +16,12 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb' }));
 
-// Initialize Gemini API
-const API_KEY = process.env.GEMINI_API_KEY;
+// Initialize Gemini API (optional - keys are loaded in gemini-proxy)
+const API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY_1;
 if (!API_KEY) {
-  throw new Error('GEMINI_API_KEY environment variable not set');
+  console.warn('⚠️ No primary API key found, will use key rotation in gemini-proxy');
 }
-const ai = new GoogleGenAI({ apiKey: API_KEY }) as any;
+const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) as any : null;
 
 // Initialize SQLite Database
 const dbPath = path.join(__dirname, 'lukas.db');

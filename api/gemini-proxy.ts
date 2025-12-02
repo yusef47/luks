@@ -37,6 +37,7 @@ console.log(`🔑 Gemini Proxy: ${UNIQUE_KEYS.length} API keys available`);
 
 if (UNIQUE_KEYS.length === 0) {
     console.error("⚠️ No API keys found! Check your environment variables");
+    console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes('GEMINI') || k.includes('API')));
 }
 
 // ============================================
@@ -120,6 +121,17 @@ export interface GeminiResponse {
 }
 
 export const callGeminiAPI = async (request: GeminiRequest): Promise<GeminiResponse> => {
+    console.log(`🔐 callGeminiAPI called with model: ${request.model}`);
+    console.log(`📊 Available keys: ${UNIQUE_KEYS.length}`);
+    
+    if (UNIQUE_KEYS.length === 0) {
+        console.error('❌ No API keys available!');
+        return {
+            success: false,
+            error: 'No API keys configured'
+        };
+    }
+    
     let lastError: any;
     const triedKeys = new Set<string>();
     
@@ -132,13 +144,19 @@ export const callGeminiAPI = async (request: GeminiRequest): Promise<GeminiRespo
         triedKeys.add(key);
         
         try {
+            console.log(`🔑 Attempting with key ${attempt + 1}/${UNIQUE_KEYS.length}`);
             const ai = new GoogleGenAI({ apiKey: key }) as any;
             const model = ai.getGenerativeModel({ model: request.model });
             
-            const result = await model.generateContent(request.prompt);
+            // Properly format the request
+            const result = await model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: request.prompt }] }]
+            });
+            
             const responseText = result.response.text();
             
             recordSuccess(key);
+            console.log(`✅ Success! Response length: ${responseText.length}`);
             
             return {
                 success: true,
@@ -150,6 +168,7 @@ export const callGeminiAPI = async (request: GeminiRequest): Promise<GeminiRespo
             lastError = error;
             
             console.log(`🔄 Key failed (${errorCode}), trying another... (${attempt + 1}/${UNIQUE_KEYS.length})`);
+            console.error(`Error details:`, error.message);
             
             if (errorCode !== 429 && errorCode !== 503) {
                 throw error;
@@ -157,6 +176,7 @@ export const callGeminiAPI = async (request: GeminiRequest): Promise<GeminiRespo
         }
     }
     
+    console.error('❌ All keys exhausted');
     return {
         success: false,
         error: lastError?.message || 'All API keys exhausted'
