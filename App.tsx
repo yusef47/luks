@@ -36,7 +36,6 @@ const BACKEND_URL = 'http://localhost:5000/api';
 
 const callBackendAPI = async (endpoint: string, data: any, onChunk?: (chunk: string) => void) => {
   try {
-    console.log(`📤 Calling backend: ${endpoint}`);
     const response = await fetch(`${BACKEND_URL}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,7 +47,6 @@ const callBackendAPI = async (endpoint: string, data: any, onChunk?: (chunk: str
     }
 
     const result = await response.json();
-    console.log(`✅ Backend response:`, result);
     
     if (onChunk && result.data) {
       onChunk(result.data);
@@ -132,9 +130,9 @@ const executeVideo = async (task: string, videoFile: File, onChunk: (chunk: stri
   }
 };
 
-const synthesizeAnswer = async (prompt: string, results: any, onChunk: (chunk: string) => void) => {
+const synthesizeAnswer = async (prompt: string, results: any, onChunk: (chunk: string) => void, conversationId?: string) => {
   try {
-    const result = await callBackendAPI('/orchestrator/synthesize', { prompt, results }, onChunk);
+    const result = await callBackendAPI('/orchestrator/synthesize', { prompt, results, conversationId }, onChunk);
     return result.data || {};
   } catch (error) {
     console.error('Synthesize error:', error);
@@ -632,7 +630,7 @@ const App: React.FC = () => {
         try {
           if (step.agent === Agent.Orchestrator) {
             if (step.step === plan.length) {
-              r = await synthesizeAnswer(exchange.prompt, outputs, onChunk);
+              r = await synthesizeAnswer(exchange.prompt, outputs, onChunk, convoId);
             } else {
               r = await executeOrchestratorIntermediateStep(step.task, exchange.prompt, outputs, onChunk);
             }

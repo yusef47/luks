@@ -95,7 +95,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const renderExchangeResponse = (exchange: Exchange) => {
     if (exchange.status === 'completed') {
-      const finalAnswer = exchange.results.find(r => r.agent === Agent.Orchestrator && r.step === exchange.plan?.length);
+      // Find the final answer from Orchestrator agent
+      const finalAnswer = exchange.results.find(r => r.agent === Agent.Orchestrator);
       const finalImage = exchange.results.find(r => r.imageBase64);
       if (!finalAnswer && !finalImage) return null;
 

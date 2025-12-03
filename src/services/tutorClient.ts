@@ -43,10 +43,6 @@ export const generateTutorResponse = async (
   level: LanguageLevel = 'B1'
 ): Promise<string> => {
   try {
-    console.log(`\n📤 Sending tutor request to ${BACKEND_URL}/tutor/generate-response`);
-    console.log(`   Message: "${userMessage.substring(0, 30)}..."`);
-    console.log(`   Level: ${level}`);
-    
     const response = await fetch(`${BACKEND_URL}/tutor/generate-response`, {
       method: 'POST',
       headers: {
@@ -59,20 +55,16 @@ export const generateTutorResponse = async (
       })
     });
 
-    console.log(`📥 Response status: ${response.status}`);
-
     if (!response.ok) {
       throw new Error(`Backend error: ${response.status}`);
     }
 
     const result = await response.json();
-    console.log(`✅ Got result:`, result);
 
     if (!result.success) {
       throw new Error(result.error || 'Failed to generate response');
     }
 
-    console.log(`✅ Returning response: "${result.data?.substring(0, 50)}..."`);
     return result.data || '';
   } catch (error: any) {
     console.error('❌ Tutor response error:', error);
