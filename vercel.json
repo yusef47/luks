@@ -3,14 +3,6 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "installCommand": "npm install",
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "nodejs@20"
-    },
-    "api/**/*.js": {
-      "runtime": "nodejs@20"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
