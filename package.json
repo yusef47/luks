@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.28.0",
+    "@vercel/node": "^5.5.14",
     "ai": "^5.0.93",
     "axios": "^1.13.2",
     "better-sqlite3": "^12.4.1",
@@ -26,6 +27,7 @@
     "lucide-react": "^0.555.0",
     "marked": "^16.4.1",
     "mastra": "^0.18.1",
+    "node-fetch": "^3.3.2",
     "pdfjs-dist": "^5.4.394",
     "pdfkit": "^0.17.2",
     "pino": "^10.1.0",

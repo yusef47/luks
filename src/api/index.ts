@@ -3,7 +3,10 @@
  * جميع استدعاءات API من الواجهة الأمامية
  */
 
-const API_URL = process.env.VITE_API_URL || 'http://localhost:5000/api';
+// Use /api for Vercel Functions, fallback to localhost for development
+const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+  ? 'http://localhost:5000/api' 
+  : '/api';
 
 export const apiClient = {
   /**

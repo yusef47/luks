@@ -7,7 +7,10 @@
 // @ts-ignore - Vite env
 const env = (import.meta as any).env || {};
 
-const BACKEND_URL = env.VITE_BACKEND_URL || 'http://localhost:5000/api';
+// Use /api for Vercel Functions, fallback to localhost for development
+const BACKEND_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+  ? 'http://localhost:5000/api' 
+  : '/api';
 
 export type LanguageLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
