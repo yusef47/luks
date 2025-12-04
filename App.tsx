@@ -32,7 +32,10 @@ export type LanguageLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 // Frontend no longer imports directly from geminiService (deprecated)
 
 // Simple backend proxy for Orchestrator
-const BACKEND_URL = 'http://localhost:5000/api';
+// Use /api for Vercel Functions, fallback to localhost for development
+const BACKEND_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+  ? 'http://localhost:5000/api' 
+  : '/api';
 
 const callBackendAPI = async (endpoint: string, data: any, onChunk?: (chunk: string) => void) => {
   try {
