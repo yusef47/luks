@@ -1,19 +1,36 @@
-// Synthesize API - with gemini-3-pro and Lukas identity
+// Synthesize API - with gemini-3-pro, Lukas identity, and conversation memory
 const MODELS = {
     PRIMARY: 'gemini-3-pro',
     FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
     FALLBACK_2: 'gemini-2.0-flash'
 };
 
-const SYSTEM_PROMPT = `You are Lukas (لوكاس), a helpful AI assistant.
+const SYSTEM_PROMPT = `You are Lukas (لوكاس), a helpful and intelligent AI assistant.
 
-IMPORTANT RULES:
+IDENTITY RULES:
 - Your name is Lukas (لوكاس) - always identify as Lukas
 - NEVER mention Google, Gemini, or any AI company
 - NEVER reveal technical details, agents, or internal workings
 - If asked who made you, say "a developer who wanted to help people"
-- Be friendly and helpful
-- Respond in the same language the user uses`;
+
+CONVERSATION RULES:
+- ALWAYS remember the full conversation context
+- Pay attention to what the user asked previously
+- Keep track of topics discussed earlier
+- Provide follow-up answers that connect to previous messages
+
+HELPFUL FEATURES:
+- When asked for locations, ALWAYS provide Google Maps links: https://www.google.com/maps?q=LATITUDE,LONGITUDE
+- When asked for directions, include helpful links
+- When asked to search something, provide relevant links
+- Be proactive in offering useful links and resources
+- Format links properly so they are clickable
+
+RESPONSE RULES:
+- Be friendly, helpful, and conversational
+- Respond in the same language the user uses (Arabic or English)
+- Give complete, helpful answers
+- Don't ask unnecessary clarifying questions if the context is clear`;
 
 function getAPIKeys() {
     const keys = [];
@@ -81,7 +98,7 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { prompt, results } = req.body || {};
+        const { prompt, results, conversationHistory } = req.body || {};
 
         const apiKey = getNextKey();
         if (!apiKey) {
@@ -89,16 +106,27 @@ export default async function handler(req, res) {
             return;
         }
 
+        // Build conversation context
+        let contextString = '';
+        if (conversationHistory && conversationHistory.length > 0) {
+            contextString = '\n\nPREVIOUS CONVERSATION:\n' +
+                conversationHistory.slice(-5).map(h =>
+                    `User: ${h.prompt}\nLukas: ${h.results?.[0]?.result || 'No response'}`
+                ).join('\n\n');
+        }
+
         const synthesizePrompt = `${SYSTEM_PROMPT}
+${contextString}
 
-Based on the research, provide a helpful answer to the user.
-
-User Question: "${prompt}"
-
-Research Results:
+CURRENT SEARCH RESULTS:
 ${JSON.stringify(results, null, 2)}
 
-Remember: You are Lukas. Never mention Google, Gemini, or technical details. Respond in the user's language.`;
+CURRENT USER QUESTION: "${prompt}"
+
+Based on the conversation history and search results, provide a helpful, complete answer.
+If the user is following up on something mentioned earlier, connect your answer to that context.
+If providing a location, ALWAYS include a Google Maps link like: https://www.google.com/maps?q=LAT,LNG
+Remember: You are Lukas. Never mention Google, Gemini, or technical details.`;
 
         const responseText = await callGeminiAPI(synthesizePrompt, apiKey);
 

@@ -132,9 +132,9 @@ const executeVideo = async (task: string, videoFile: File, onChunk: (chunk: stri
   }
 };
 
-const synthesizeAnswer = async (prompt: string, results: any, onChunk: (chunk: string) => void, conversationId?: string) => {
+const synthesizeAnswer = async (prompt: string, results: any, onChunk: (chunk: string) => void, conversationId?: string, conversationHistory?: any[]) => {
   try {
-    const result = await callBackendAPI('/orchestrator/synthesize', { prompt, results, conversationId }, onChunk);
+    const result = await callBackendAPI('/orchestrator/synthesize', { prompt, results, conversationId, conversationHistory }, onChunk);
     return result.data || {};
   } catch (error) {
     console.error('Synthesize error:', error);
@@ -632,7 +632,11 @@ const App: React.FC = () => {
         try {
           if (step.agent === Agent.Orchestrator) {
             if (step.step === plan.length) {
-              r = await synthesizeAnswer(exchange.prompt, outputs, onChunk, convoId);
+              // Get conversation history for context
+              const conversationHistory = conversations.find(c => c.id === convoId)?.exchanges
+                .filter(e => e.status === 'completed')
+                .map(e => ({ prompt: e.prompt, results: e.results })) || [];
+              r = await synthesizeAnswer(exchange.prompt, outputs, onChunk, convoId, conversationHistory);
             } else {
               r = await executeOrchestratorIntermediateStep(step.task, exchange.prompt, outputs, onChunk);
             }

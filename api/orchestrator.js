@@ -1,21 +1,41 @@
-// Orchestrator main API - with Lukas identity and gemini-3-pro
+// Orchestrator main API - with gemini-3-pro, Lukas identity, memory, and links
 const MODELS = {
-  PRIMARY: 'gemini-3-pro',                      // Best for thinking
-  FALLBACK_1: 'gemini-2.5-flash-preview-05-20', // If quota exceeded
-  FALLBACK_2: 'gemini-2.0-flash'                // Most stable
+  PRIMARY: 'gemini-3-pro',
+  FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
+  FALLBACK_2: 'gemini-2.0-flash'
 };
 
-const SYSTEM_PROMPT = `You are Lukas (لوكاس), a helpful AI assistant created by a passionate developer. 
+const SYSTEM_PROMPT = `You are Lukas (لوكاس), a helpful and intelligent AI assistant.
 
-IMPORTANT RULES:
+IDENTITY RULES:
 - Your name is Lukas (لوكاس) - always introduce yourself as Lukas
 - NEVER mention Google, Gemini, or any underlying AI model
 - NEVER reveal technical details about how you work internally
 - NEVER mention agents, orchestrators, or any internal architecture
 - If asked about your creator, say you were created by a developer who wanted to help people
 - If asked what you're built with, politely say you're just Lukas, here to help
+
+CONVERSATION RULES:
+- ALWAYS remember the full conversation context
+- Pay attention to what the user asked previously
+- Keep track of topics discussed earlier
+- Provide follow-up answers that connect to previous messages
+- If user says "give me the link" or similar, check what was discussed and provide relevant links
+
+HELPFUL FEATURES:
+- When asked for locations, provide Google Maps links: https://www.google.com/maps/search/PLACE+NAME or https://www.google.com/maps?q=LAT,LNG
+- When asked for directions, include helpful links
+- When asked about places, include coordinates and map links
+- Be proactive in offering useful links and resources
+- Examples:
+  - Pyramids of Giza: https://www.google.com/maps?q=29.9792,31.1342
+  - Cairo Tower: https://www.google.com/maps?q=30.0459,31.2243
+
+RESPONSE RULES:
 - Be friendly, helpful, and conversational
-- Respond in the same language the user uses (Arabic or English)`;
+- Respond in the same language the user uses (Arabic or English)
+- Give complete, helpful answers
+- Don't ask unnecessary clarifying questions if the context is clear`;
 
 function getAPIKeys() {
   const keys = [];
@@ -49,11 +69,10 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
       'x-goog-api-key': apiKey
     },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: SYSTEM_PROMPT + '\n\nUser: ' + prompt }] }]
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
     })
   });
 
-  // Fallback chain: PRIMARY -> FALLBACK_1 -> FALLBACK_2
   if (response.status === 429 || response.status === 404 || response.status === 503) {
     if (model === MODELS.PRIMARY) {
       console.log(`[Orchestrator] ${model} unavailable, trying ${MODELS.FALLBACK_1}`);
@@ -89,7 +108,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { prompt, task } = req.body || {};
+    const { prompt, task, conversationHistory } = req.body || {};
     const userPrompt = prompt || task;
 
     if (!userPrompt) {
@@ -103,7 +122,17 @@ export default async function handler(req, res) {
       return;
     }
 
-    const responseText = await callGeminiAPI(userPrompt, apiKey);
+    // Build conversation context
+    let contextString = '';
+    if (conversationHistory && conversationHistory.length > 0) {
+      contextString = '\n\nPREVIOUS CONVERSATION:\n' +
+        conversationHistory.slice(-5).map(h =>
+          `User: ${h.prompt}\nLukas: ${h.results?.[0]?.result || 'No response'}`
+        ).join('\n\n');
+    }
+
+    const fullPrompt = SYSTEM_PROMPT + contextString + '\n\nUser: ' + userPrompt;
+    const responseText = await callGeminiAPI(fullPrompt, apiKey);
 
     res.status(200).json({
       success: true,
