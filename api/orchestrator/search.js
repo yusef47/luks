@@ -1,4 +1,9 @@
-// Search API - ES Modules version
+// Search API - with model fallback
+const MODELS = {
+    PRIMARY: 'gemini-2.5-flash-preview-05-20',
+    FALLBACK: 'gemini-2.0-flash'
+};
+
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -19,8 +24,8 @@ function getNextKey() {
     return keys[Math.floor(Math.random() * keys.length)];
 }
 
-async function callGeminiWithSearch(task, apiKey) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+async function callGeminiWithSearch(task, apiKey, model = MODELS.PRIMARY) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
     const response = await fetch(url, {
         method: 'POST',
@@ -36,6 +41,12 @@ async function callGeminiWithSearch(task, apiKey) {
             tools: [{ googleSearch: {} }]
         })
     });
+
+    // Fallback if quota exceeded
+    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
+        console.log(`[Search] Fallback to ${MODELS.FALLBACK}`);
+        return callGeminiWithSearch(task, apiKey, MODELS.FALLBACK);
+    }
 
     if (!response.ok) {
         throw new Error(`Gemini API error ${response.status}`);

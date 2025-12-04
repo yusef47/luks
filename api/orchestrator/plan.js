@@ -1,4 +1,9 @@
-// Plan API endpoint - ES Modules version
+// Plan API endpoint - with model fallback
+const MODELS = {
+    PRIMARY: 'gemini-2.5-flash-preview-05-20',  // Best for thinking
+    FALLBACK: 'gemini-2.0-flash'                 // Fallback if quota exceeded
+};
+
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -10,21 +15,17 @@ function getAPIKeys() {
     if (process.env.GEMINI_API_KEY) {
         keys.push(process.env.GEMINI_API_KEY.trim());
     }
-    console.log(`[Plan] Found ${keys.length} API keys`);
     return keys;
 }
 
 function getNextKey() {
     const keys = getAPIKeys();
-    if (keys.length === 0) {
-        return null;
-    }
-    const idx = Math.floor(Math.random() * keys.length);
-    return keys[idx];
+    if (keys.length === 0) return null;
+    return keys[Math.floor(Math.random() * keys.length)];
 }
 
-async function callGeminiAPI(prompt, apiKey) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
     const payload = {
         contents: [{
@@ -36,7 +37,7 @@ async function callGeminiAPI(prompt, apiKey) {
         }
     };
 
-    console.log(`[Plan] Calling Gemini API...`);
+    console.log(`[Plan] Calling ${model}...`);
 
     const response = await fetch(url, {
         method: 'POST',
@@ -47,15 +48,21 @@ async function callGeminiAPI(prompt, apiKey) {
         body: JSON.stringify(payload)
     });
 
+    // If quota exceeded (429) or model not available (404), try fallback
+    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
+        console.log(`[Plan] ${model} quota exceeded, trying fallback...`);
+        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+    }
+
     if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Plan] Gemini API error: ${response.status} - ${errorText}`);
+        console.error(`[Plan] API error: ${response.status}`);
         throw new Error(`Gemini API error ${response.status}: ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    console.log(`[Plan] Got response: ${text.substring(0, 100)}...`);
+    console.log(`[Plan] Success with ${model}`);
     return text;
 }
 
@@ -74,26 +81,17 @@ export default async function handler(req, res) {
         return;
     }
 
-    console.log('[Plan] Received request');
-
     try {
         const { prompt, hasImage, hasVideo, history, cycleCount } = req.body || {};
 
         if (!prompt) {
-            console.log('[Plan] Missing prompt');
             res.status(400).json({ success: false, error: 'Missing prompt' });
             return;
         }
 
-        console.log(`[Plan] Processing prompt: ${prompt.substring(0, 50)}...`);
-
         const apiKey = getNextKey();
         if (!apiKey) {
-            console.error('[Plan] ERROR: No API keys configured');
-            res.status(500).json({
-                success: false,
-                error: 'No API keys available. Add GEMINI_API_KEY to Vercel environment.'
-            });
+            res.status(500).json({ success: false, error: 'No API keys available' });
             return;
         }
 
@@ -123,7 +121,6 @@ Return JSON:
         try {
             planData = JSON.parse(responseText);
         } catch (e) {
-            console.log('[Plan] JSON parse failed, trying regex');
             const jsonMatch = responseText.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 planData = JSON.parse(jsonMatch[0]);
@@ -132,7 +129,6 @@ Return JSON:
             }
         }
 
-        console.log('[Plan] Success!');
         res.status(200).json({
             success: true,
             data: planData
@@ -141,7 +137,7 @@ Return JSON:
         console.error('[Plan] Error:', error.message);
         res.status(500).json({
             success: false,
-            error: error.message || 'Internal server error'
+            error: error.message
         });
     }
 }

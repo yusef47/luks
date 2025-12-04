@@ -1,4 +1,9 @@
-// Gemini Call API - ES Modules version
+// Gemini Call API - with model fallback
+const MODELS = {
+    PRIMARY: 'gemini-2.5-flash-preview-05-20',
+    FALLBACK: 'gemini-2.0-flash'
+};
+
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -16,12 +21,11 @@ function getAPIKeys() {
 function getNextKey() {
     const keys = getAPIKeys();
     if (keys.length === 0) return null;
-    const idx = Math.floor(Math.random() * keys.length);
-    return keys[idx];
+    return keys[Math.floor(Math.random() * keys.length)];
 }
 
-async function callGeminiAPI(prompt, apiKey) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
     const response = await fetch(url, {
         method: 'POST',
@@ -33,6 +37,12 @@ async function callGeminiAPI(prompt, apiKey) {
             contents: [{ role: 'user', parts: [{ text: prompt }] }]
         })
     });
+
+    // Fallback if quota exceeded or model unavailable
+    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
+        console.log(`[Gemini] Fallback to ${MODELS.FALLBACK}`);
+        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+    }
 
     if (!response.ok) {
         const errorText = await response.text();
