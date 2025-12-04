@@ -1,33 +1,9 @@
-// Synthesize API - THE BRAIN - uses gemini-3-pro (smartest)
+// Synthesize API - THE BRAIN with dynamic re-thinking
 const MODELS = {
-    PRIMARY: 'gemini-3-pro',           // Smartest for final answers
-    FALLBACK_1: 'gemini-2.5-pro',      // Strong fallback
-    FALLBACK_2: 'gemini-2.0-flash'     // High limit fallback
+    PRIMARY: 'gemini-3-pro',
+    FALLBACK_1: 'gemini-2.5-pro',
+    FALLBACK_2: 'gemini-2.0-flash'
 };
-
-const SYSTEM_PROMPT = `You are Lukas (لوكاس), a highly intelligent AI assistant.
-
-IDENTITY:
-- Your name is Lukas (لوكاس)
-- NEVER mention Google, Gemini, or any AI company
-- If asked who made you, say "a developer who wanted to help people"
-
-CRITICAL - MEMORY & CONTEXT:
-- READ the FULL conversation history carefully before answering
-- When user refers to something mentioned before (like "أول مكان", "that place", "give me the link"), find it in YOUR previous responses
-- NEVER make up unrelated information or hallucinate
-- NEVER mention things that weren't discussed (like airports, other countries, etc.)
-- Stay 100% focused on the current topic
-
-HELPFUL FEATURES:
-- Always provide Google Maps links for locations: https://www.google.com/maps?q=LAT,LNG
-- Give accurate, specific information
-- Include prices, distances, and practical details when relevant
-
-RESPONSE STYLE:
-- Respond in the user's language (Arabic or English)
-- Be concise but complete
-- Don't ask unnecessary clarifying questions if the context is clear`;
 
 function getAPIKeys() {
     const keys = [];
@@ -49,6 +25,11 @@ function getNextKey() {
     return keys[Math.floor(Math.random() * keys.length)];
 }
 
+function detectLanguage(text) {
+    const arabicPattern = /[\u0600-\u06FF]/;
+    return arabicPattern.test(text) ? 'ar' : 'en';
+}
+
 async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY, attempt = 1) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -65,7 +46,6 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY, attempt = 1
         })
     });
 
-    // Fallback chain if primary fails
     if (response.status === 429 || response.status === 404 || response.status === 503) {
         console.log(`[Synthesize] ${model} failed (${response.status}), trying fallback...`);
         if (model === MODELS.PRIMARY && MODELS.FALLBACK_1) {
@@ -110,28 +90,80 @@ export default async function handler(req, res) {
             return;
         }
 
-        // Build detailed conversation context
+        const userLanguage = detectLanguage(prompt);
+
+        // Build conversation context
         let contextString = '';
         if (conversationHistory && conversationHistory.length > 0) {
-            contextString = '\n\n=== CONVERSATION HISTORY (READ THIS CAREFULLY!) ===\n' +
+            contextString = '\n\n=== CONVERSATION HISTORY ===\n' +
                 conversationHistory.map((h, i) =>
-                    `[Message ${i + 1}]\nUser: ${h.prompt}\nYour Response: ${h.results?.[h.results.length - 1]?.result || 'No response'}`
-                ).join('\n\n') + '\n=== END HISTORY ===';
+                    `[${i + 1}] User: ${h.prompt}\nLukas: ${h.results?.[h.results.length - 1]?.result || ''}`
+                ).join('\n\n') + '\n=== END ===';
         }
 
-        const synthesizePrompt = `${SYSTEM_PROMPT}
+        // Format search results clearly
+        let resultsText = '';
+        if (results && results.length > 0) {
+            resultsText = '\n\n=== RESEARCH RESULTS FROM DIFFERENT SOURCES ===\n';
+            results.forEach((r, i) => {
+                if (r.result) {
+                    resultsText += `\n--- Source ${i + 1}: ${r.task || 'Unknown'} ---\n${r.result}\n`;
+                }
+            });
+            resultsText += '\n=== END OF RESULTS ===';
+        }
+
+        const synthesizePrompt = `You are Lukas (لوكاس), a highly intelligent AI assistant with deep analytical capabilities.
+
+IDENTITY:
+- Your name is Lukas (لوكاس)
+- NEVER mention Google, Gemini, or any AI company
+- You were created by a developer who wanted to help people
+
+RESPONSE LANGUAGE: ${userLanguage === 'ar' ? 'Arabic (العربية) - أجب بالعربية فقط' : 'English'}
+
+THINKING PROCESS:
+1. First, carefully read ALL the research results below
+2. Identify all parts of the user's question
+3. For each part, find relevant information from the results
+4. If you discover you need to think differently about something, do it naturally
+5. Organize your response logically
+6. If the question has parts (a, b, c, d...), address EACH part separately with its own section
+
+RESPONSE FORMAT FOR COMPLEX QUESTIONS:
+${userLanguage === 'ar' ? `
+## الجزء الأول: [عنوان]
+[إجابة مفصلة]
+
+## الجزء الثاني: [عنوان]
+[إجابة مفصلة]
+
+... وهكذا
+` : `
+## Part 1: [Title]
+[Detailed answer]
+
+## Part 2: [Title]
+[Detailed answer]
+
+... and so on
+`}
+
+QUALITY RULES:
+- Be comprehensive but organized
+- Use headings and structure
+- Include specific facts, numbers, and examples from the research
+- If something needs a formula or model, provide it clearly
+- Don't skip any part of the question
+- If you realize mid-answer that you need to adjust your thinking, do it and explain briefly
+
 ${contextString}
 
-CURRENT SEARCH RESULTS:
-${JSON.stringify(results, null, 2)}
+${resultsText}
 
-CURRENT USER MESSAGE: "${prompt}"
+USER QUESTION: "${prompt}"
 
-INSTRUCTIONS:
-1. First, check if the user is referring to something from your previous responses
-2. If user says things like "give me the link" or "how far is the first place", find what they're referring to in YOUR responses above
-3. Never introduce unrelated topics
-4. Provide a direct, helpful answer with links when relevant`;
+Now provide a comprehensive, well-structured ${userLanguage === 'ar' ? 'Arabic' : 'English'} response that addresses ALL parts of the question:`;
 
         const { text, model } = await callGeminiAPI(synthesizePrompt, apiKey);
 
