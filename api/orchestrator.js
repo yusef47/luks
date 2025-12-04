@@ -34,9 +34,15 @@ module.exports = async (req, res) => {
     return;
   }
 
-  try {
-    const { prompt, task } = req.body;
+  // Only accept POST requests
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, error: 'Method not allowed' });
+  }
 
+  try {
+    const { prompt, task, results, conversationId, location, prevData, imageBase64 } = req.body;
+
+    // Validate input
     if (!prompt && !task) {
       return res.status(400).json({ success: false, error: 'Missing prompt or task' });
     }
