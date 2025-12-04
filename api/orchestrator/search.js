@@ -1,4 +1,4 @@
-// Collect API Keys from environment
+// Search API - ES Modules version
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -13,19 +13,14 @@ function getAPIKeys() {
     return keys;
 }
 
-let keyIndex = 0;
-const API_KEYS = getAPIKeys();
-
 function getNextKey() {
-    if (API_KEYS.length === 0) return null;
-    const key = API_KEYS[keyIndex % API_KEYS.length];
-    keyIndex = (keyIndex + 1) % API_KEYS.length;
-    return key;
+    const keys = getAPIKeys();
+    if (keys.length === 0) return null;
+    return keys[Math.floor(Math.random() * keys.length)];
 }
 
 async function callGeminiWithSearch(task, apiKey) {
-    // Using Gemini with grounding (search capability)
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
     const response = await fetch(url, {
         method: 'POST',
@@ -36,33 +31,21 @@ async function callGeminiWithSearch(task, apiKey) {
         body: JSON.stringify({
             contents: [{
                 role: 'user',
-                parts: [{ text: `Search and provide information about: ${task}. Provide detailed, accurate, and up-to-date information.` }]
+                parts: [{ text: `Search and provide detailed information about: ${task}` }]
             }],
-            tools: [{
-                googleSearch: {}
-            }]
+            tools: [{ googleSearch: {} }]
         })
     });
 
     if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+        throw new Error(`Gemini API error ${response.status}`);
     }
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const groundingMetadata = data.candidates?.[0]?.groundingMetadata;
-
-    return {
-        text,
-        sources: groundingMetadata?.groundingChunks?.map(chunk => ({
-            title: chunk.web?.title || 'Source',
-            url: chunk.web?.uri || ''
-        })) || []
-    };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -78,7 +61,7 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { task } = req.body;
+        const { task } = req.body || {};
 
         if (!task) {
             res.status(400).json({ success: false, error: 'Missing task' });
@@ -91,14 +74,11 @@ module.exports = async (req, res) => {
             return;
         }
 
-        console.log(`[Search] Task: ${task.substring(0, 50)}...`);
-
         const result = await callGeminiWithSearch(task, apiKey);
 
         res.status(200).json({
             success: true,
-            data: result.text,
-            sources: result.sources
+            data: result
         });
     } catch (error) {
         console.error('[Search] Error:', error.message);
@@ -107,4 +87,4 @@ module.exports = async (req, res) => {
             error: error.message
         });
     }
-};
+}

@@ -1,4 +1,4 @@
-// Tutor API endpoint
+// Tutor Chat API - ES Modules version
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -13,18 +13,14 @@ function getAPIKeys() {
     return keys;
 }
 
-let keyIndex = 0;
-const API_KEYS = getAPIKeys();
-
 function getNextKey() {
-    if (API_KEYS.length === 0) return null;
-    const key = API_KEYS[keyIndex % API_KEYS.length];
-    keyIndex = (keyIndex + 1) % API_KEYS.length;
-    return key;
+    const keys = getAPIKeys();
+    if (keys.length === 0) return null;
+    return keys[Math.floor(Math.random() * keys.length)];
 }
 
 async function callGeminiAPI(prompt, apiKey) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
     const response = await fetch(url, {
         method: 'POST',
@@ -45,7 +41,7 @@ async function callGeminiAPI(prompt, apiKey) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -61,7 +57,7 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { history, message, level } = req.body;
+        const { history, message, level } = req.body || {};
 
         const apiKey = getNextKey();
         if (!apiKey) {
@@ -69,25 +65,13 @@ module.exports = async (req, res) => {
             return;
         }
 
-        const levelGuide = {
-            'A1': 'Use very simple words and short sentences. Speak slowly.',
-            'A2': 'Use simple vocabulary and basic grammar.',
-            'B1': 'Use everyday vocabulary and moderate complexity.',
-            'B2': 'Use varied vocabulary and complex sentences.',
-            'C1': 'Use advanced vocabulary and complex structures.'
-        };
+        const tutorPrompt = `You are a friendly English tutor. Level: ${level || 'B1'}
 
-        const tutorPrompt = `You are a friendly English tutor. Help the student practice English.
-
-Level: ${level || 'B1'}
-${levelGuide[level] || levelGuide['B1']}
-
-Conversation history:
-${history?.map(h => `${h.role}: ${h.content}`).join('\n') || 'No history'}
+${history?.map(h => `${h.role}: ${h.content}`).join('\n') || ''}
 
 Student: ${message}
 
-Respond naturally as a tutor. Correct mistakes gently, and encourage the student.`;
+Respond naturally, correct mistakes gently, encourage the student.`;
 
         const responseText = await callGeminiAPI(tutorPrompt, apiKey);
 
@@ -96,10 +80,10 @@ Respond naturally as a tutor. Correct mistakes gently, and encourage the student
             data: responseText
         });
     } catch (error) {
-        console.error('[Tutor] Error:', error.message);
+        console.error('[Tutor Chat] Error:', error.message);
         res.status(500).json({
             success: false,
             error: error.message
         });
     }
-};
+}

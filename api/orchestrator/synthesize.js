@@ -1,4 +1,4 @@
-// Collect API Keys from environment
+// Synthesize API - ES Modules version
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -13,18 +13,14 @@ function getAPIKeys() {
     return keys;
 }
 
-let keyIndex = 0;
-const API_KEYS = getAPIKeys();
-
 function getNextKey() {
-    if (API_KEYS.length === 0) return null;
-    const key = API_KEYS[keyIndex % API_KEYS.length];
-    keyIndex = (keyIndex + 1) % API_KEYS.length;
-    return key;
+    const keys = getAPIKeys();
+    if (keys.length === 0) return null;
+    return keys[Math.floor(Math.random() * keys.length)];
 }
 
 async function callGeminiAPI(prompt, apiKey) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
     const response = await fetch(url, {
         method: 'POST',
@@ -45,7 +41,7 @@ async function callGeminiAPI(prompt, apiKey) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -61,7 +57,7 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { prompt, results } = req.body;
+        const { prompt, results } = req.body || {};
 
         const apiKey = getNextKey();
         if (!apiKey) {
@@ -69,14 +65,14 @@ module.exports = async (req, res) => {
             return;
         }
 
-        const synthesizePrompt = `Based on the following research results, provide a comprehensive answer to the user's question.
+        const synthesizePrompt = `Based on the research results, provide a comprehensive answer.
 
 User Question: "${prompt}"
 
 Research Results:
 ${JSON.stringify(results, null, 2)}
 
-Provide a clear, helpful, and well-organized response in the same language as the question.`;
+Provide a clear, helpful response in the same language as the question.`;
 
         const responseText = await callGeminiAPI(synthesizePrompt, apiKey);
 
@@ -91,4 +87,4 @@ Provide a clear, helpful, and well-organized response in the same language as th
             error: error.message
         });
     }
-};
+}

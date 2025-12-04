@@ -1,4 +1,4 @@
-// Generic intermediate step handler
+// Intermediate API - ES Modules version
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -13,18 +13,14 @@ function getAPIKeys() {
     return keys;
 }
 
-let keyIndex = 0;
-const API_KEYS = getAPIKeys();
-
 function getNextKey() {
-    if (API_KEYS.length === 0) return null;
-    const key = API_KEYS[keyIndex % API_KEYS.length];
-    keyIndex = (keyIndex + 1) % API_KEYS.length;
-    return key;
+    const keys = getAPIKeys();
+    if (keys.length === 0) return null;
+    return keys[Math.floor(Math.random() * keys.length)];
 }
 
 async function callGeminiAPI(prompt, apiKey) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
     const response = await fetch(url, {
         method: 'POST',
@@ -45,7 +41,7 @@ async function callGeminiAPI(prompt, apiKey) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -61,7 +57,7 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { task, prompt, results } = req.body;
+        const { task, prompt, results } = req.body || {};
 
         const apiKey = getNextKey();
         if (!apiKey) {
@@ -69,13 +65,12 @@ module.exports = async (req, res) => {
             return;
         }
 
-        const intermediatePrompt = `You are processing an intermediate step in a workflow.
-
+        const intermediatePrompt = `Process this intermediate step:
 Task: ${task}
-User's Original Request: ${prompt}
+User Request: ${prompt}
 Previous Results: ${JSON.stringify(results || [])}
 
-Process this step and provide relevant output.`;
+Provide relevant output.`;
 
         const responseText = await callGeminiAPI(intermediatePrompt, apiKey);
 
@@ -90,4 +85,4 @@ Process this step and provide relevant output.`;
             error: error.message
         });
     }
-};
+}

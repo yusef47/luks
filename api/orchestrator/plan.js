@@ -1,14 +1,12 @@
-// Collect API Keys from environment
+// Plan API endpoint - ES Modules version
 function getAPIKeys() {
     const keys = [];
-    // Check numbered keys
     for (let i = 1; i <= 13; i++) {
         const key = process.env[`GEMINI_API_KEY_${i}`];
         if (key && key.trim().length > 0) {
             keys.push(key.trim());
         }
     }
-    // Also check for single GEMINI_API_KEY
     if (process.env.GEMINI_API_KEY) {
         keys.push(process.env.GEMINI_API_KEY.trim());
     }
@@ -21,21 +19,17 @@ function getNextKey() {
     if (keys.length === 0) {
         return null;
     }
-    // Simple round-robin (note: in serverless, this resets each request)
     const idx = Math.floor(Math.random() * keys.length);
     return keys[idx];
 }
 
 async function callGeminiAPI(prompt, apiKey) {
-    // Use stable model name
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
     const payload = {
         contents: [{
             role: 'user',
-            parts: [{
-                text: prompt
-            }]
+            parts: [{ text: prompt }]
         }],
         generationConfig: {
             responseMimeType: 'application/json'
@@ -65,19 +59,16 @@ async function callGeminiAPI(prompt, apiKey) {
     return text;
 }
 
-module.exports = async (req, res) => {
-    // CORS Headers
+export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Handle OPTIONS (preflight)
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;
     }
 
-    // Only POST allowed
     if (req.method !== 'POST') {
         res.status(405).json({ success: false, error: 'Method not allowed' });
         return;
@@ -98,10 +89,10 @@ module.exports = async (req, res) => {
 
         const apiKey = getNextKey();
         if (!apiKey) {
-            console.error('[Plan] ERROR: No API keys configured in environment');
+            console.error('[Plan] ERROR: No API keys configured');
             res.status(500).json({
                 success: false,
-                error: 'No API keys available. Please add GEMINI_API_KEY to Vercel environment variables.'
+                error: 'No API keys available. Add GEMINI_API_KEY to Vercel environment.'
             });
             return;
         }
@@ -111,33 +102,19 @@ module.exports = async (req, res) => {
 User Request: "${prompt}"
 Has Image: ${hasImage || false}
 Has Video: ${hasVideo || false}
-Cycle Count: ${cycleCount || 1}
-
-Previous Context: ${history ? JSON.stringify(history.slice(-3)) : 'None'}
 
 Create a plan with steps. Each step should have:
 - step: number
-- agent: one of "SearchAgent", "MapsAgent", "VisionAgent", "VideoAgent", "EmailAgent", "DriveAgent", "SheetsAgent", "ImageGenerationAgent", "Orchestrator"
+- agent: one of "SearchAgent", "MapsAgent", "VisionAgent", "VideoAgent", "Orchestrator"
 - task: description of what to do
 
-If the request is unclear, return a clarification object instead.
-
-Return JSON in this format:
+Return JSON:
 {
   "plan": [
     {"step": 1, "agent": "SearchAgent", "task": "Search for..."},
     {"step": 2, "agent": "Orchestrator", "task": "Synthesize final answer"}
   ],
   "clarification": null
-}
-
-OR if clarification needed:
-{
-  "plan": null,
-  "clarification": {
-    "question": "What do you mean by...",
-    "options": [{"key": "1", "value": "Option 1"}, {"key": "2", "value": "Option 2"}]
-  }
 }`;
 
         const responseText = await callGeminiAPI(planPrompt, apiKey);
@@ -146,8 +123,7 @@ OR if clarification needed:
         try {
             planData = JSON.parse(responseText);
         } catch (e) {
-            console.log('[Plan] JSON parse failed, trying regex extraction');
-            // Try to extract JSON from response
+            console.log('[Plan] JSON parse failed, trying regex');
             const jsonMatch = responseText.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 planData = JSON.parse(jsonMatch[0]);
@@ -168,5 +144,4 @@ OR if clarification needed:
             error: error.message || 'Internal server error'
         });
     }
-};
-
+}

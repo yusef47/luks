@@ -1,4 +1,4 @@
-// Tutor generate-response endpoint
+// Tutor Generate Response API - ES Modules version
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -13,18 +13,14 @@ function getAPIKeys() {
     return keys;
 }
 
-let keyIndex = 0;
-const API_KEYS = getAPIKeys();
-
 function getNextKey() {
-    if (API_KEYS.length === 0) return null;
-    const key = API_KEYS[keyIndex % API_KEYS.length];
-    keyIndex = (keyIndex + 1) % API_KEYS.length;
-    return key;
+    const keys = getAPIKeys();
+    if (keys.length === 0) return null;
+    return keys[Math.floor(Math.random() * keys.length)];
 }
 
 async function callGeminiAPI(prompt, apiKey) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
     const response = await fetch(url, {
         method: 'POST',
@@ -45,7 +41,7 @@ async function callGeminiAPI(prompt, apiKey) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -61,7 +57,7 @@ module.exports = async (req, res) => {
     }
 
     try {
-        const { history, userMessage, level } = req.body;
+        const { history, userMessage, level } = req.body || {};
 
         const apiKey = getNextKey();
         if (!apiKey) {
@@ -70,31 +66,22 @@ module.exports = async (req, res) => {
         }
 
         const levelGuide = {
-            'A1': 'Use very simple words and short sentences. Speak very slowly and clearly.',
-            'A2': 'Use simple vocabulary and basic grammar structures.',
-            'B1': 'Use everyday vocabulary and moderate complexity in your sentences.',
-            'B2': 'Use varied vocabulary and more complex sentence structures.',
-            'C1': 'Use advanced vocabulary, idioms, and sophisticated structures.'
+            'A1': 'Use very simple words and short sentences.',
+            'A2': 'Use simple vocabulary and basic grammar.',
+            'B1': 'Use everyday vocabulary with moderate complexity.',
+            'B2': 'Use varied vocabulary and complex sentences.',
+            'C1': 'Use advanced vocabulary and sophisticated structures.'
         };
 
-        const tutorPrompt = `You are a friendly, encouraging English language tutor having a natural conversation with a student.
+        const tutorPrompt = `You are a friendly English tutor.
 
-Student's Level: ${level || 'B1'} (${levelGuide[level] || levelGuide['B1']})
+Level: ${level || 'B1'} - ${levelGuide[level] || levelGuide['B1']}
 
-Conversation so far:
-${history?.map(h => `${h.role === 'user' ? 'Student' : 'Tutor'}: ${h.content}`).join('\n') || 'This is the start of the conversation.'}
+${history?.map(h => `${h.role === 'user' ? 'Student' : 'Tutor'}: ${h.content}`).join('\n') || ''}
 
-Student's latest message: "${userMessage}"
+Student: ${userMessage}
 
-Instructions:
-1. Respond naturally and conversationally
-2. If the student made grammar or vocabulary mistakes, gently correct them in a friendly way
-3. Encourage the student and keep the conversation flowing
-4. Ask follow-up questions to keep them practicing
-5. Match your language complexity to their level
-6. Keep your response concise (2-4 sentences is ideal)
-
-Respond as the tutor:`;
+Respond naturally, correct mistakes gently, keep responses concise (2-4 sentences).`;
 
         const responseText = await callGeminiAPI(tutorPrompt, apiKey);
 
@@ -109,4 +96,4 @@ Respond as the tutor:`;
             error: error.message
         });
     }
-};
+}

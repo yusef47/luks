@@ -1,4 +1,4 @@
-// Collect API Keys from environment
+// Gemini Call API - ES Modules version
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -10,40 +10,18 @@ function getAPIKeys() {
     if (process.env.GEMINI_API_KEY) {
         keys.push(process.env.GEMINI_API_KEY.trim());
     }
-    console.log(`[Gemini Call] Found ${keys.length} API keys`);
     return keys;
 }
 
 function getNextKey() {
     const keys = getAPIKeys();
-    if (keys.length === 0) {
-        return null;
-    }
+    if (keys.length === 0) return null;
     const idx = Math.floor(Math.random() * keys.length);
     return keys[idx];
 }
 
-// Model mapping - use stable model names
-const MODEL_MAP = {
-    'gemini-2.0-flash-lite': 'gemini-2.0-flash',
-    'gemini-2.5-flash-live': 'gemini-2.0-flash',
-    'gemini-2.5-flash': 'gemini-2.0-flash',
-    'gemini-2.5-pro': 'gemini-2.0-flash',
-    'gemini-2.5-flash-image': 'gemini-2.0-flash'
-};
-
-async function callGeminiAPI(model, prompt, apiKey) {
-    const actualModel = MODEL_MAP[model] || 'gemini-2.0-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${actualModel}:generateContent`;
-
-    console.log(`[Gemini Call] Using model: ${actualModel}`);
-
-    const payload = {
-        contents: [{
-            role: 'user',
-            parts: [{ text: prompt }]
-        }]
-    };
+async function callGeminiAPI(prompt, apiKey) {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
     const response = await fetch(url, {
         method: 'POST',
@@ -51,12 +29,13 @@ async function callGeminiAPI(model, prompt, apiKey) {
             'Content-Type': 'application/json',
             'x-goog-api-key': apiKey
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        })
     });
 
     if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Gemini Call] API error: ${response.status}`);
         throw new Error(`Gemini API error ${response.status}: ${errorText.substring(0, 200)}`);
     }
 
@@ -64,7 +43,7 @@ async function callGeminiAPI(model, prompt, apiKey) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -79,8 +58,6 @@ module.exports = async (req, res) => {
         return;
     }
 
-    console.log('[Gemini Call] Received request');
-
     try {
         const { model, prompt } = req.body || {};
 
@@ -91,15 +68,11 @@ module.exports = async (req, res) => {
 
         const apiKey = getNextKey();
         if (!apiKey) {
-            console.error('[Gemini Call] No API keys configured');
-            res.status(500).json({
-                success: false,
-                error: 'No API keys available. Add GEMINI_API_KEY to Vercel environment.'
-            });
+            res.status(500).json({ success: false, error: 'No API keys available' });
             return;
         }
 
-        const responseText = await callGeminiAPI(model || 'gemini-2.0-flash', prompt, apiKey);
+        const responseText = await callGeminiAPI(prompt, apiKey);
 
         res.status(200).json({
             success: true,
@@ -109,7 +82,7 @@ module.exports = async (req, res) => {
         console.error('[Gemini Call] Error:', error.message);
         res.status(500).json({
             success: false,
-            error: error.message || 'Internal server error'
+            error: error.message
         });
     }
-};
+}
