@@ -7,12 +7,15 @@
 // @ts-ignore - Vite env
 const env = (import.meta as any).env || {};
 
-const BACKEND_URL = env.VITE_BACKEND_URL || 'http://localhost:5000/api';
+// Detect environment - on Vercel, we use /api directly (no localhost)
+const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+const BACKEND_URL = isProduction ? '/api' : (env.VITE_BACKEND_URL || '/api');
 
 export interface ProxyRequest {
     model: string;
     prompt: string;
 }
+
 
 export interface ProxyResponse {
     success: boolean;
@@ -26,7 +29,7 @@ export interface ProxyResponse {
 export const callGeminiViaBackend = async (request: ProxyRequest): Promise<string> => {
     try {
         console.log(`🔄 Calling backend proxy: ${BACKEND_URL}/gemini/call`);
-        
+
         const response = await fetch(`${BACKEND_URL}/gemini/call`, {
             method: 'POST',
             headers: {
@@ -69,7 +72,7 @@ export const callPresentationModel = async (
     // Parse JSON if needed
     try {
         let jsonText = response.trim();
-        
+
         // Remove markdown code blocks
         if (jsonText.startsWith('```json')) {
             jsonText = jsonText.substring(7);
@@ -80,7 +83,7 @@ export const callPresentationModel = async (
         if (jsonText.endsWith('```')) {
             jsonText = jsonText.substring(0, jsonText.length - 3);
         }
-        
+
         jsonText = jsonText.trim();
         return JSON.parse(jsonText);
     } catch (e) {

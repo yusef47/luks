@@ -4,13 +4,9 @@
  * NO API keys in frontend
  */
 
-// @ts-ignore - Vite env
-const env = (import.meta as any).env || {};
+// Use /api for both Vercel and local dev (Vite proxies to backend)
+const BACKEND_URL = '/api';
 
-// Use /api for Vercel Functions, fallback to localhost for development
-const BACKEND_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-  ? 'http://localhost:5000/api' 
-  : '/api';
 
 export type LanguageLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 

@@ -32,10 +32,9 @@ export type LanguageLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 // Frontend no longer imports directly from geminiService (deprecated)
 
 // Simple backend proxy for Orchestrator
-// Use /api for Vercel Functions, fallback to localhost for development
-const BACKEND_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-  ? 'http://localhost:5000/api' 
-  : '/api';
+// On Vercel, we use /api directly. On localhost, fallback to /api as well (for dev server)
+const BACKEND_URL = '/api';
+
 
 const callBackendAPI = async (endpoint: string, data: any, onChunk?: (chunk: string) => void) => {
   try {
@@ -50,11 +49,11 @@ const callBackendAPI = async (endpoint: string, data: any, onChunk?: (chunk: str
     }
 
     const result = await response.json();
-    
+
     if (onChunk && result.data) {
       onChunk(result.data);
     }
-    
+
     return result;
   } catch (error: any) {
     console.error(`❌ Backend error:`, error);
@@ -98,12 +97,12 @@ const executeVision = async (task: string, imageFile: File, onChunk: (chunk: str
     const formData = new FormData();
     formData.append('task', task);
     formData.append('image', imageFile);
-    
+
     const response = await fetch(`${BACKEND_URL}/orchestrator/vision`, {
       method: 'POST',
       body: formData
     });
-    
+
     const result = await response.json();
     if (onChunk && result.data) onChunk(result.data);
     return result.data || {};
@@ -118,12 +117,12 @@ const executeVideo = async (task: string, videoFile: File, onChunk: (chunk: stri
     const formData = new FormData();
     formData.append('task', task);
     formData.append('video', videoFile);
-    
+
     const response = await fetch(`${BACKEND_URL}/orchestrator/video`, {
       method: 'POST',
       body: formData
     });
-    
+
     const result = await response.json();
     if (onChunk && result.data) onChunk(result.data);
     return result.data || {};
