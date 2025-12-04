@@ -1,8 +1,7 @@
-// Intermediate API - with gemini-3-pro
+// Intermediate API - uses gemini-2.5-flash
 const MODELS = {
-    PRIMARY: 'gemini-3-pro',
-    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK_2: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-2.5-flash',
+    FALLBACK: 'gemini-2.0-flash'
 };
 
 function getAPIKeys() {
@@ -28,6 +27,8 @@ function getNextKey() {
 async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
+    console.log(`[Intermediate] Using ${model}...`);
+
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -39,19 +40,18 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
         })
     });
 
-    if (response.status === 429 || response.status === 404 || response.status === 503) {
-        if (model === MODELS.PRIMARY) {
-            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
-        } else if (model === MODELS.FALLBACK_1) {
-            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
-        }
+    if ((response.status === 429 || response.status === 404 || response.status === 503) && model === MODELS.PRIMARY) {
+        console.log(`[Intermediate] Fallback to ${MODELS.FALLBACK}...`);
+        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
     }
 
     if (!response.ok) {
-        throw new Error(`API error ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`${model} error ${response.status}: ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
+    console.log(`[Intermediate] SUCCESS with ${model}!`);
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
@@ -79,12 +79,12 @@ export default async function handler(req, res) {
             return;
         }
 
-        const intermediatePrompt = `Process this step. You are Lukas - never mention Google or technical details.
+        const intermediatePrompt = `You are Lukas. Process this step accurately.
 Task: ${task}
 User Request: ${prompt}
 Previous Results: ${JSON.stringify(results || [])}
 
-Provide relevant output.`;
+Provide relevant, accurate output. Never mention Google or Gemini.`;
 
         const responseText = await callGeminiAPI(intermediatePrompt, apiKey);
 

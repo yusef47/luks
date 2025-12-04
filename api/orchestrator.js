@@ -1,41 +1,30 @@
-// Orchestrator main API - with gemini-3-pro, Lukas identity, memory, and links
+// Main Orchestrator API - uses gemini-3-pro for smart responses
 const MODELS = {
   PRIMARY: 'gemini-3-pro',
-  FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
+  FALLBACK_1: 'gemini-2.5-pro',
   FALLBACK_2: 'gemini-2.0-flash'
 };
 
-const SYSTEM_PROMPT = `You are Lukas (لوكاس), a helpful and intelligent AI assistant.
+const SYSTEM_PROMPT = `You are Lukas (لوكاس), a highly intelligent AI assistant.
 
-IDENTITY RULES:
-- Your name is Lukas (لوكاس) - always introduce yourself as Lukas
-- NEVER mention Google, Gemini, or any underlying AI model
-- NEVER reveal technical details about how you work internally
-- NEVER mention agents, orchestrators, or any internal architecture
-- If asked about your creator, say you were created by a developer who wanted to help people
-- If asked what you're built with, politely say you're just Lukas, here to help
+IDENTITY:
+- Your name is Lukas (لوكاس)
+- NEVER mention Google, Gemini, or any AI company
+- If asked who made you, say "a developer who wanted to help people"
 
-CONVERSATION RULES:
-- ALWAYS remember the full conversation context
-- Pay attention to what the user asked previously
-- Keep track of topics discussed earlier
-- Provide follow-up answers that connect to previous messages
-- If user says "give me the link" or similar, check what was discussed and provide relevant links
+MEMORY:
+- Remember the full conversation context
+- When user refers to something mentioned before, find it
+- Never introduce unrelated topics
 
-HELPFUL FEATURES:
-- When asked for locations, provide Google Maps links: https://www.google.com/maps/search/PLACE+NAME or https://www.google.com/maps?q=LAT,LNG
-- When asked for directions, include helpful links
-- When asked about places, include coordinates and map links
-- Be proactive in offering useful links and resources
-- Examples:
-  - Pyramids of Giza: https://www.google.com/maps?q=29.9792,31.1342
-  - Cairo Tower: https://www.google.com/maps?q=30.0459,31.2243
+FEATURES:
+- Provide Google Maps links: https://www.google.com/maps?q=LAT,LNG
+- Give accurate information
+- Be helpful and conversational
 
-RESPONSE RULES:
-- Be friendly, helpful, and conversational
-- Respond in the same language the user uses (Arabic or English)
-- Give complete, helpful answers
-- Don't ask unnecessary clarifying questions if the context is clear`;
+RESPONSE:
+- Respond in the user's language
+- Be concise but complete`;
 
 function getAPIKeys() {
   const keys = [];
@@ -60,7 +49,7 @@ function getNextKey() {
 async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-  console.log(`[Orchestrator] Trying ${model}...`);
+  console.log(`[Orchestrator] Using ${model}...`);
 
   const response = await fetch(url, {
     method: 'POST',
@@ -73,12 +62,12 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
     })
   });
 
+  // Fallback chain
   if (response.status === 429 || response.status === 404 || response.status === 503) {
+    console.log(`[Orchestrator] ${model} failed, trying fallback...`);
     if (model === MODELS.PRIMARY) {
-      console.log(`[Orchestrator] ${model} unavailable, trying ${MODELS.FALLBACK_1}`);
       return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
     } else if (model === MODELS.FALLBACK_1) {
-      console.log(`[Orchestrator] ${model} unavailable, trying ${MODELS.FALLBACK_2}`);
       return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
     }
   }
@@ -88,7 +77,7 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
   }
 
   const data = await response.json();
-  console.log(`[Orchestrator] Success with ${model}`);
+  console.log(`[Orchestrator] SUCCESS with ${model}!`);
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
@@ -112,7 +101,7 @@ export default async function handler(req, res) {
     const userPrompt = prompt || task;
 
     if (!userPrompt) {
-      res.status(400).json({ success: false, error: 'Missing prompt or task' });
+      res.status(400).json({ success: false, error: 'Missing prompt' });
       return;
     }
 
@@ -122,16 +111,15 @@ export default async function handler(req, res) {
       return;
     }
 
-    // Build conversation context
     let contextString = '';
     if (conversationHistory && conversationHistory.length > 0) {
-      contextString = '\n\nPREVIOUS CONVERSATION:\n' +
+      contextString = '\n\nCONVERSATION HISTORY:\n' +
         conversationHistory.slice(-5).map(h =>
-          `User: ${h.prompt}\nLukas: ${h.results?.[0]?.result || 'No response'}`
+          `User: ${h.prompt}\nLukas: ${h.results?.[0]?.result || ''}`
         ).join('\n\n');
     }
 
-    const fullPrompt = SYSTEM_PROMPT + contextString + '\n\nUser: ' + userPrompt;
+    const fullPrompt = SYSTEM_PROMPT + contextString + '\n\nUSER: ' + userPrompt;
     const responseText = await callGeminiAPI(fullPrompt, apiKey);
 
     res.status(200).json({

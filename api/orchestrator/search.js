@@ -1,8 +1,7 @@
-// Search API - with gemini-3-pro
+// Search API - uses gemini-2.5-flash (good balance)
 const MODELS = {
-    PRIMARY: 'gemini-3-pro',
-    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK_2: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-2.5-flash',       // Good for search
+    FALLBACK: 'gemini-2.0-flash'       // High limit fallback
 };
 
 function getAPIKeys() {
@@ -28,6 +27,8 @@ function getNextKey() {
 async function callGeminiWithSearch(task, apiKey, model = MODELS.PRIMARY) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
+    console.log(`[Search] Using ${model} with Google Search...`);
+
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -37,25 +38,25 @@ async function callGeminiWithSearch(task, apiKey, model = MODELS.PRIMARY) {
         body: JSON.stringify({
             contents: [{
                 role: 'user',
-                parts: [{ text: `Search and provide detailed information about: ${task}` }]
+                parts: [{ text: `Search and provide accurate, detailed information about: ${task}. Include specific facts, current prices, distances, coordinates, and sources when available.` }]
             }],
             tools: [{ googleSearch: {} }]
         })
     });
 
-    if (response.status === 429 || response.status === 404 || response.status === 503) {
-        if (model === MODELS.PRIMARY) {
-            return callGeminiWithSearch(task, apiKey, MODELS.FALLBACK_1);
-        } else if (model === MODELS.FALLBACK_1) {
-            return callGeminiWithSearch(task, apiKey, MODELS.FALLBACK_2);
-        }
+    // Fallback if primary fails
+    if ((response.status === 429 || response.status === 404 || response.status === 503) && model === MODELS.PRIMARY) {
+        console.log(`[Search] ${model} failed, trying ${MODELS.FALLBACK}...`);
+        return callGeminiWithSearch(task, apiKey, MODELS.FALLBACK);
     }
 
     if (!response.ok) {
-        throw new Error(`API error ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`${model} error ${response.status}: ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
+    console.log(`[Search] SUCCESS with ${model}!`);
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 

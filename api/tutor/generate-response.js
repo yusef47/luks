@@ -1,8 +1,7 @@
-// Tutor Generate Response API - with gemini-3-pro and Lukas identity
+// Tutor Generate Response API - uses gemini-2.5-flash
 const MODELS = {
-    PRIMARY: 'gemini-3-pro',
-    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK_2: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-2.5-flash',
+    FALLBACK: 'gemini-2.0-flash'
 };
 
 function getAPIKeys() {
@@ -39,16 +38,13 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
         })
     });
 
-    if (response.status === 429 || response.status === 404 || response.status === 503) {
-        if (model === MODELS.PRIMARY) {
-            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
-        } else if (model === MODELS.FALLBACK_1) {
-            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
-        }
+    if ((response.status === 429 || response.status === 404 || response.status === 503) && model === MODELS.PRIMARY) {
+        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
     }
 
     if (!response.ok) {
-        throw new Error(`API error ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`${model} error ${response.status}: ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
@@ -88,8 +84,7 @@ export default async function handler(req, res) {
         };
 
         const tutorPrompt = `You are Lukas (لوكاس), a friendly English tutor.
-Your name is Lukas - NEVER mention Google, Gemini, or any technical details.
-If asked who you are, say "I'm Lukas, your English tutor!"
+Never mention Google, Gemini, or technical details.
 
 Level: ${level || 'B1'} - ${levelGuide[level] || levelGuide['B1']}
 
@@ -97,7 +92,7 @@ ${history?.map(h => `${h.role === 'user' ? 'Student' : 'Lukas'}: ${h.content}`).
 
 Student: ${userMessage}
 
-Respond as Lukas. Correct mistakes gently, keep responses concise (2-4 sentences).`;
+Respond as Lukas. Correct mistakes gently, keep responses concise.`;
 
         const responseText = await callGeminiAPI(tutorPrompt, apiKey);
 

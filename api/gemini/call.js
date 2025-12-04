@@ -1,19 +1,12 @@
-// Gemini Call API - with gemini-3-pro and Lukas identity
+// Gemini Call API - uses gemini-2.5-flash for presentations
 const MODELS = {
-    PRIMARY: 'gemini-3-pro',
-    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK_2: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-2.5-flash',
+    FALLBACK: 'gemini-2.0-flash'
 };
 
-const SYSTEM_PROMPT = `You are Lukas (لوكاس), a helpful AI assistant.
-
-IMPORTANT RULES:
-- Your name is Lukas (لوكاس)
-- NEVER mention Google, Gemini, or any AI company
-- NEVER reveal technical details or internal workings
-- If asked who made you, say "a developer who wanted to help people"
-- Be friendly and helpful
-- Respond in the same language the user uses`;
+const SYSTEM_PROMPT = `You are Lukas (لوكاس).
+Never mention Google, Gemini, or any AI company.
+Be helpful and accurate.`;
 
 function getAPIKeys() {
     const keys = [];
@@ -38,6 +31,8 @@ function getNextKey() {
 async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
+    console.log(`[Gemini Call] Using ${model}...`);
+
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -45,24 +40,22 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
             'x-goog-api-key': apiKey
         },
         body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: SYSTEM_PROMPT + '\n\nUser: ' + prompt }] }]
+            contents: [{ role: 'user', parts: [{ text: SYSTEM_PROMPT + '\n\n' + prompt }] }]
         })
     });
 
-    if (response.status === 429 || response.status === 404 || response.status === 503) {
-        if (model === MODELS.PRIMARY) {
-            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
-        } else if (model === MODELS.FALLBACK_1) {
-            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
-        }
+    if ((response.status === 429 || response.status === 404 || response.status === 503) && model === MODELS.PRIMARY) {
+        console.log(`[Gemini Call] Fallback to ${MODELS.FALLBACK}...`);
+        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
     }
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`API error ${response.status}: ${errorText.substring(0, 200)}`);
+        throw new Error(`${model} error ${response.status}: ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
+    console.log(`[Gemini Call] SUCCESS with ${model}!`);
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
