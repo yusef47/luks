@@ -7,45 +7,41 @@ function getAPIKeys() {
             keys.push(key.trim());
         }
     }
-    // Also check for single GEMINI_API_KEY
     if (process.env.GEMINI_API_KEY) {
         keys.push(process.env.GEMINI_API_KEY.trim());
     }
+    console.log(`[Gemini Call] Found ${keys.length} API keys`);
     return keys;
 }
 
-let keyIndex = 0;
-const API_KEYS = getAPIKeys();
-
 function getNextKey() {
-    if (API_KEYS.length === 0) {
+    const keys = getAPIKeys();
+    if (keys.length === 0) {
         return null;
     }
-    const key = API_KEYS[keyIndex % API_KEYS.length];
-    keyIndex = (keyIndex + 1) % API_KEYS.length;
-    return key;
+    const idx = Math.floor(Math.random() * keys.length);
+    return keys[idx];
 }
 
-// Model mapping
+// Model mapping - use stable model names
 const MODEL_MAP = {
     'gemini-2.0-flash-lite': 'gemini-2.0-flash',
-    'gemini-2.5-flash-live': 'gemini-2.5-flash-preview-05-20',
-    'gemini-2.5-flash': 'gemini-2.5-flash-preview-05-20',
-    'gemini-2.5-pro': 'gemini-2.5-pro-preview-05-06',
+    'gemini-2.5-flash-live': 'gemini-2.0-flash',
+    'gemini-2.5-flash': 'gemini-2.0-flash',
+    'gemini-2.5-pro': 'gemini-2.0-flash',
     'gemini-2.5-flash-image': 'gemini-2.0-flash'
 };
 
 async function callGeminiAPI(model, prompt, apiKey) {
-    // Map model name to actual API model
-    const actualModel = MODEL_MAP[model] || model;
+    const actualModel = MODEL_MAP[model] || 'gemini-2.0-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${actualModel}:generateContent`;
+
+    console.log(`[Gemini Call] Using model: ${actualModel}`);
 
     const payload = {
         contents: [{
             role: 'user',
-            parts: [{
-                text: prompt
-            }]
+            parts: [{ text: prompt }]
         }]
     };
 
@@ -60,7 +56,8 @@ async function callGeminiAPI(model, prompt, apiKey) {
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Gemini API error ${response.status}: ${errorText}`);
+        console.error(`[Gemini Call] API error: ${response.status}`);
+        throw new Error(`Gemini API error ${response.status}: ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
@@ -68,25 +65,24 @@ async function callGeminiAPI(model, prompt, apiKey) {
 }
 
 module.exports = async (req, res) => {
-    // CORS Headers
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Handle OPTIONS (preflight)
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;
     }
 
-    // Only POST allowed
     if (req.method !== 'POST') {
         res.status(405).json({ success: false, error: 'Method not allowed' });
         return;
     }
 
+    console.log('[Gemini Call] Received request');
+
     try {
-        const { model, prompt } = req.body;
+        const { model, prompt } = req.body || {};
 
         if (!prompt) {
             res.status(400).json({ success: false, error: 'Missing prompt' });
@@ -95,14 +91,15 @@ module.exports = async (req, res) => {
 
         const apiKey = getNextKey();
         if (!apiKey) {
-            console.error('ERROR: No API keys configured');
-            res.status(500).json({ success: false, error: 'No API keys available. Check environment variables.' });
+            console.error('[Gemini Call] No API keys configured');
+            res.status(500).json({
+                success: false,
+                error: 'No API keys available. Add GEMINI_API_KEY to Vercel environment.'
+            });
             return;
         }
 
-        console.log(`[Gemini Call] Model: ${model}, Using key index: ${keyIndex}`);
-
-        const responseText = await callGeminiAPI(model || 'gemini-2.5-flash', prompt, apiKey);
+        const responseText = await callGeminiAPI(model || 'gemini-2.0-flash', prompt, apiKey);
 
         res.status(200).json({
             success: true,
