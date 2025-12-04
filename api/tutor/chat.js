@@ -1,7 +1,8 @@
-// Tutor Chat API - with model fallback
+// Tutor Chat API - with gemini-3-pro and Lukas identity
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-3-pro',
+    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
+    FALLBACK_2: 'gemini-2.0-flash'
 };
 
 function getAPIKeys() {
@@ -38,13 +39,16 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
         })
     });
 
-    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
-        console.log(`[Tutor] Fallback to ${MODELS.FALLBACK}`);
-        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+    if (response.status === 429 || response.status === 404 || response.status === 503) {
+        if (model === MODELS.PRIMARY) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
+        } else if (model === MODELS.FALLBACK_1) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
+        }
     }
 
     if (!response.ok) {
-        throw new Error(`Gemini API error ${response.status}`);
+        throw new Error(`API error ${response.status}`);
     }
 
     const data = await response.json();
@@ -75,25 +79,21 @@ export default async function handler(req, res) {
             return;
         }
 
-        const tutorPrompt = `You are a friendly English tutor. Level: ${level || 'B1'}
+        const tutorPrompt = `You are Lukas, a friendly English tutor. 
+Your name is Lukas - never mention Google, Gemini, or technical details.
+Level: ${level || 'B1'}
 
 ${history?.map(h => `${h.role}: ${h.content}`).join('\n') || ''}
 
 Student: ${message}
 
-Respond naturally, correct mistakes gently, encourage the student.`;
+Respond naturally as Lukas the tutor. Correct mistakes gently, encourage the student.`;
 
         const responseText = await callGeminiAPI(tutorPrompt, apiKey);
 
-        res.status(200).json({
-            success: true,
-            data: responseText
-        });
+        res.status(200).json({ success: true, data: responseText });
     } catch (error) {
         console.error('[Tutor Chat] Error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 }

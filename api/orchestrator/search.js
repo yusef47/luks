@@ -1,7 +1,8 @@
-// Search API - with model fallback
+// Search API - with gemini-3-pro
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-3-pro',
+    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
+    FALLBACK_2: 'gemini-2.0-flash'
 };
 
 function getAPIKeys() {
@@ -42,14 +43,16 @@ async function callGeminiWithSearch(task, apiKey, model = MODELS.PRIMARY) {
         })
     });
 
-    // Fallback if quota exceeded
-    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
-        console.log(`[Search] Fallback to ${MODELS.FALLBACK}`);
-        return callGeminiWithSearch(task, apiKey, MODELS.FALLBACK);
+    if (response.status === 429 || response.status === 404 || response.status === 503) {
+        if (model === MODELS.PRIMARY) {
+            return callGeminiWithSearch(task, apiKey, MODELS.FALLBACK_1);
+        } else if (model === MODELS.FALLBACK_1) {
+            return callGeminiWithSearch(task, apiKey, MODELS.FALLBACK_2);
+        }
     }
 
     if (!response.ok) {
-        throw new Error(`Gemini API error ${response.status}`);
+        throw new Error(`API error ${response.status}`);
     }
 
     const data = await response.json();
@@ -87,15 +90,9 @@ export default async function handler(req, res) {
 
         const result = await callGeminiWithSearch(task, apiKey);
 
-        res.status(200).json({
-            success: true,
-            data: result
-        });
+        res.status(200).json({ success: true, data: result });
     } catch (error) {
         console.error('[Search] Error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 }

@@ -1,7 +1,8 @@
-// Tutor Generate Response API - with model fallback
+// Tutor Generate Response API - with gemini-3-pro and Lukas identity
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-3-pro',
+    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
+    FALLBACK_2: 'gemini-2.0-flash'
 };
 
 function getAPIKeys() {
@@ -38,13 +39,16 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
         })
     });
 
-    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
-        console.log(`[Tutor Generate] Fallback to ${MODELS.FALLBACK}`);
-        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+    if (response.status === 429 || response.status === 404 || response.status === 503) {
+        if (model === MODELS.PRIMARY) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
+        } else if (model === MODELS.FALLBACK_1) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
+        }
     }
 
     if (!response.ok) {
-        throw new Error(`Gemini API error ${response.status}`);
+        throw new Error(`API error ${response.status}`);
     }
 
     const data = await response.json();
@@ -83,27 +87,23 @@ export default async function handler(req, res) {
             'C1': 'Use advanced vocabulary and sophisticated structures.'
         };
 
-        const tutorPrompt = `You are a friendly English tutor.
+        const tutorPrompt = `You are Lukas (لوكاس), a friendly English tutor.
+Your name is Lukas - NEVER mention Google, Gemini, or any technical details.
+If asked who you are, say "I'm Lukas, your English tutor!"
 
 Level: ${level || 'B1'} - ${levelGuide[level] || levelGuide['B1']}
 
-${history?.map(h => `${h.role === 'user' ? 'Student' : 'Tutor'}: ${h.content}`).join('\n') || ''}
+${history?.map(h => `${h.role === 'user' ? 'Student' : 'Lukas'}: ${h.content}`).join('\n') || ''}
 
 Student: ${userMessage}
 
-Respond naturally, correct mistakes gently, keep responses concise (2-4 sentences).`;
+Respond as Lukas. Correct mistakes gently, keep responses concise (2-4 sentences).`;
 
         const responseText = await callGeminiAPI(tutorPrompt, apiKey);
 
-        res.status(200).json({
-            success: true,
-            data: responseText
-        });
+        res.status(200).json({ success: true, data: responseText });
     } catch (error) {
         console.error('[Tutor Generate] Error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 }

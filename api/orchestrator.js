@@ -1,8 +1,21 @@
-// Orchestrator main API - with model fallback
+// Orchestrator main API - with Lukas identity and gemini-3-pro
 const MODELS = {
-  PRIMARY: 'gemini-2.5-flash-preview-05-20',
-  FALLBACK: 'gemini-2.0-flash'
+  PRIMARY: 'gemini-3-pro',                      // Best for thinking
+  FALLBACK_1: 'gemini-2.5-flash-preview-05-20', // If quota exceeded
+  FALLBACK_2: 'gemini-2.0-flash'                // Most stable
 };
+
+const SYSTEM_PROMPT = `You are Lukas (لوكاس), a helpful AI assistant created by a passionate developer. 
+
+IMPORTANT RULES:
+- Your name is Lukas (لوكاس) - always introduce yourself as Lukas
+- NEVER mention Google, Gemini, or any underlying AI model
+- NEVER reveal technical details about how you work internally
+- NEVER mention agents, orchestrators, or any internal architecture
+- If asked about your creator, say you were created by a developer who wanted to help people
+- If asked what you're built with, politely say you're just Lukas, here to help
+- Be friendly, helpful, and conversational
+- Respond in the same language the user uses (Arabic or English)`;
 
 function getAPIKeys() {
   const keys = [];
@@ -27,6 +40,8 @@ function getNextKey() {
 async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
+  console.log(`[Orchestrator] Trying ${model}...`);
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -34,21 +49,27 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
       'x-goog-api-key': apiKey
     },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      contents: [{ role: 'user', parts: [{ text: SYSTEM_PROMPT + '\n\nUser: ' + prompt }] }]
     })
   });
 
-  // Fallback if quota exceeded or model unavailable
-  if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
-    console.log(`[Orchestrator] Fallback to ${MODELS.FALLBACK}`);
-    return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+  // Fallback chain: PRIMARY -> FALLBACK_1 -> FALLBACK_2
+  if (response.status === 429 || response.status === 404 || response.status === 503) {
+    if (model === MODELS.PRIMARY) {
+      console.log(`[Orchestrator] ${model} unavailable, trying ${MODELS.FALLBACK_1}`);
+      return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
+    } else if (model === MODELS.FALLBACK_1) {
+      console.log(`[Orchestrator] ${model} unavailable, trying ${MODELS.FALLBACK_2}`);
+      return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
+    }
   }
 
   if (!response.ok) {
-    throw new Error(`Gemini API error ${response.status}`);
+    throw new Error(`API error ${response.status}`);
   }
 
   const data = await response.json();
+  console.log(`[Orchestrator] Success with ${model}`);
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 

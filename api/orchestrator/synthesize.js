@@ -1,8 +1,19 @@
-// Synthesize API - with model fallback
+// Synthesize API - with gemini-3-pro and Lukas identity
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-3-pro',
+    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
+    FALLBACK_2: 'gemini-2.0-flash'
 };
+
+const SYSTEM_PROMPT = `You are Lukas (لوكاس), a helpful AI assistant.
+
+IMPORTANT RULES:
+- Your name is Lukas (لوكاس) - always identify as Lukas
+- NEVER mention Google, Gemini, or any AI company
+- NEVER reveal technical details, agents, or internal workings
+- If asked who made you, say "a developer who wanted to help people"
+- Be friendly and helpful
+- Respond in the same language the user uses`;
 
 function getAPIKeys() {
     const keys = [];
@@ -38,13 +49,16 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
         })
     });
 
-    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
-        console.log(`[Synthesize] Fallback to ${MODELS.FALLBACK}`);
-        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+    if (response.status === 429 || response.status === 404 || response.status === 503) {
+        if (model === MODELS.PRIMARY) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
+        } else if (model === MODELS.FALLBACK_1) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
+        }
     }
 
     if (!response.ok) {
-        throw new Error(`Gemini API error ${response.status}`);
+        throw new Error(`API error ${response.status}`);
     }
 
     const data = await response.json();
@@ -75,26 +89,22 @@ export default async function handler(req, res) {
             return;
         }
 
-        const synthesizePrompt = `Based on the research results, provide a comprehensive answer.
+        const synthesizePrompt = `${SYSTEM_PROMPT}
+
+Based on the research, provide a helpful answer to the user.
 
 User Question: "${prompt}"
 
 Research Results:
 ${JSON.stringify(results, null, 2)}
 
-Provide a clear, helpful response in the same language as the question.`;
+Remember: You are Lukas. Never mention Google, Gemini, or technical details. Respond in the user's language.`;
 
         const responseText = await callGeminiAPI(synthesizePrompt, apiKey);
 
-        res.status(200).json({
-            success: true,
-            data: responseText
-        });
+        res.status(200).json({ success: true, data: responseText });
     } catch (error) {
         console.error('[Synthesize] Error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 }

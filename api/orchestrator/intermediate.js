@@ -1,7 +1,8 @@
-// Intermediate API - with model fallback
+// Intermediate API - with gemini-3-pro
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-3-pro',
+    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
+    FALLBACK_2: 'gemini-2.0-flash'
 };
 
 function getAPIKeys() {
@@ -38,13 +39,16 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
         })
     });
 
-    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
-        console.log(`[Intermediate] Fallback to ${MODELS.FALLBACK}`);
-        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+    if (response.status === 429 || response.status === 404 || response.status === 503) {
+        if (model === MODELS.PRIMARY) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
+        } else if (model === MODELS.FALLBACK_1) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
+        }
     }
 
     if (!response.ok) {
-        throw new Error(`Gemini API error ${response.status}`);
+        throw new Error(`API error ${response.status}`);
     }
 
     const data = await response.json();
@@ -75,7 +79,7 @@ export default async function handler(req, res) {
             return;
         }
 
-        const intermediatePrompt = `Process this intermediate step:
+        const intermediatePrompt = `Process this step. You are Lukas - never mention Google or technical details.
 Task: ${task}
 User Request: ${prompt}
 Previous Results: ${JSON.stringify(results || [])}
@@ -84,15 +88,9 @@ Provide relevant output.`;
 
         const responseText = await callGeminiAPI(intermediatePrompt, apiKey);
 
-        res.status(200).json({
-            success: true,
-            data: responseText
-        });
+        res.status(200).json({ success: true, data: responseText });
     } catch (error) {
         console.error('[Intermediate] Error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 }

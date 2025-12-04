@@ -1,8 +1,19 @@
-// Gemini Call API - with model fallback
+// Gemini Call API - with gemini-3-pro and Lukas identity
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash-preview-05-20',
-    FALLBACK: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-3-pro',
+    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
+    FALLBACK_2: 'gemini-2.0-flash'
 };
+
+const SYSTEM_PROMPT = `You are Lukas (لوكاس), a helpful AI assistant.
+
+IMPORTANT RULES:
+- Your name is Lukas (لوكاس)
+- NEVER mention Google, Gemini, or any AI company
+- NEVER reveal technical details or internal workings
+- If asked who made you, say "a developer who wanted to help people"
+- Be friendly and helpful
+- Respond in the same language the user uses`;
 
 function getAPIKeys() {
     const keys = [];
@@ -34,19 +45,21 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
             'x-goog-api-key': apiKey
         },
         body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+            contents: [{ role: 'user', parts: [{ text: SYSTEM_PROMPT + '\n\nUser: ' + prompt }] }]
         })
     });
 
-    // Fallback if quota exceeded or model unavailable
-    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
-        console.log(`[Gemini] Fallback to ${MODELS.FALLBACK}`);
-        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+    if (response.status === 429 || response.status === 404 || response.status === 503) {
+        if (model === MODELS.PRIMARY) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
+        } else if (model === MODELS.FALLBACK_1) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
+        }
     }
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Gemini API error ${response.status}: ${errorText.substring(0, 200)}`);
+        throw new Error(`API error ${response.status}: ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
@@ -69,7 +82,7 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { model, prompt } = req.body || {};
+        const { prompt } = req.body || {};
 
         if (!prompt) {
             res.status(400).json({ success: false, error: 'Missing prompt' });
@@ -84,15 +97,9 @@ export default async function handler(req, res) {
 
         const responseText = await callGeminiAPI(prompt, apiKey);
 
-        res.status(200).json({
-            success: true,
-            data: responseText
-        });
+        res.status(200).json({ success: true, data: responseText });
     } catch (error) {
         console.error('[Gemini Call] Error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 }

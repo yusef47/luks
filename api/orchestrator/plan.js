@@ -1,8 +1,11 @@
-// Plan API endpoint - with model fallback
+// Plan API endpoint - with gemini-3-pro and Lukas identity
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash-preview-05-20',  // Best for thinking
-    FALLBACK: 'gemini-2.0-flash'                 // Fallback if quota exceeded
+    PRIMARY: 'gemini-3-pro',
+    FALLBACK_1: 'gemini-2.5-flash-preview-05-20',
+    FALLBACK_2: 'gemini-2.0-flash'
 };
+
+const LUKAS_IDENTITY = `You are Lukas, an AI assistant. Never mention Google, Gemini, or internal details.`;
 
 function getAPIKeys() {
     const keys = [];
@@ -27,43 +30,34 @@ function getNextKey() {
 async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-    const payload = {
-        contents: [{
-            role: 'user',
-            parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-            responseMimeType: 'application/json'
-        }
-    };
-
-    console.log(`[Plan] Calling ${model}...`);
-
     const response = await fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'x-goog-api-key': apiKey
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: 'application/json' }
+        })
     });
 
-    // If quota exceeded (429) or model not available (404), try fallback
-    if ((response.status === 429 || response.status === 404) && model === MODELS.PRIMARY) {
-        console.log(`[Plan] ${model} quota exceeded, trying fallback...`);
-        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+    // Fallback chain
+    if (response.status === 429 || response.status === 404 || response.status === 503) {
+        if (model === MODELS.PRIMARY) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
+        } else if (model === MODELS.FALLBACK_1) {
+            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
+        }
     }
 
     if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Plan] API error: ${response.status}`);
-        throw new Error(`Gemini API error ${response.status}: ${errorText.substring(0, 200)}`);
+        throw new Error(`API error ${response.status}: ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    console.log(`[Plan] Success with ${model}`);
-    return text;
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
 }
 
 export default async function handler(req, res) {
@@ -82,7 +76,7 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { prompt, hasImage, hasVideo, history, cycleCount } = req.body || {};
+        const { prompt, hasImage, hasVideo } = req.body || {};
 
         if (!prompt) {
             res.status(400).json({ success: false, error: 'Missing prompt' });
@@ -95,22 +89,19 @@ export default async function handler(req, res) {
             return;
         }
 
-        const planPrompt = `You are an AI orchestrator. Analyze the user's request and create a plan.
+        const planPrompt = `${LUKAS_IDENTITY}
+
+Analyze the user's request and create a plan. You are an internal planner (user doesn't see this).
 
 User Request: "${prompt}"
 Has Image: ${hasImage || false}
 Has Video: ${hasVideo || false}
 
-Create a plan with steps. Each step should have:
-- step: number
-- agent: one of "SearchAgent", "MapsAgent", "VisionAgent", "VideoAgent", "Orchestrator"
-- task: description of what to do
-
-Return JSON:
+Create a plan. Return JSON:
 {
   "plan": [
     {"step": 1, "agent": "SearchAgent", "task": "Search for..."},
-    {"step": 2, "agent": "Orchestrator", "task": "Synthesize final answer"}
+    {"step": 2, "agent": "Orchestrator", "task": "Provide final answer as Lukas"}
   ],
   "clarification": null
 }`;
@@ -125,19 +116,13 @@ Return JSON:
             if (jsonMatch) {
                 planData = JSON.parse(jsonMatch[0]);
             } else {
-                throw new Error('Failed to parse plan response');
+                throw new Error('Failed to parse response');
             }
         }
 
-        res.status(200).json({
-            success: true,
-            data: planData
-        });
+        res.status(200).json({ success: true, data: planData });
     } catch (error) {
         console.error('[Plan] Error:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 }
