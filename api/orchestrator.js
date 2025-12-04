@@ -1,5 +1,12 @@
-// API Keys from environment
-const API_KEYS = (process.env.GEMINI_API_KEYS || '').split(',').filter(k => k.trim());
+// API Keys from environment - collect all GEMINI_API_KEY_* variables
+const API_KEYS = [];
+for (let i = 1; i <= 13; i++) {
+  const key = process.env[`GEMINI_API_KEY_${i}`];
+  if (key && key.trim()) {
+    API_KEYS.push(key.trim());
+  }
+}
+
 let keyIndex = 0;
 
 const getNextKey = () => {
@@ -36,11 +43,14 @@ module.exports = async (req, res) => {
 
     const key = getNextKey();
     if (!key) {
+      console.error('No API keys available');
       return res.status(500).json({ success: false, error: 'No API keys available' });
     }
 
     const systemPrompt = `You are a helpful AI assistant. Answer the user's question clearly and concisely.`;
     const userPrompt = prompt || task;
+
+    console.log(`Using API key index: ${keyIndex - 1}, Total keys: ${API_KEYS.length}`);
 
     const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
       method: 'POST',
@@ -57,8 +67,14 @@ module.exports = async (req, res) => {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Gemini API error: ${error.error?.message || response.statusText}`);
+      let errorMsg = response.statusText;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.error?.message || errorData.message || errorMsg;
+      } catch (e) {
+        // If response is not JSON, use statusText
+      }
+      throw new Error(`Gemini API error (${response.status}): ${errorMsg}`);
     }
 
     const result = await response.json();
@@ -69,10 +85,10 @@ module.exports = async (req, res) => {
       data: truncateResponse(responseText, 2000)
     });
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error('Orchestrator Error:', error.message);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message || 'Internal server error'
     });
   }
 };
