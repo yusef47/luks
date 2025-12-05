@@ -30,6 +30,10 @@ interface SidebarProps {
   isPresentationMode: boolean;
   onTogglePresentation: () => void;
 
+  // Autonomous Mode
+  isAutonomousMode?: boolean;
+  onToggleAutonomous?: () => void;
+
   // Localization
   t: (key: string) => string;
 }
@@ -49,6 +53,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onPersonaChange,
   isPresentationMode,
   onTogglePresentation,
+  isAutonomousMode,
+  onToggleAutonomous,
   t
 }) => {
   return (
@@ -85,12 +91,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={onTogglePresentation}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border ${isPresentationMode
-              ? 'bg-purple-600 text-white border-purple-500 shadow-lg shadow-purple-500/20'
-              : 'bg-[var(--bg-tertiary-color)] text-[var(--text-primary-color)] border-[var(--border-color)] hover:border-purple-500/50'
+            ? 'bg-purple-600 text-white border-purple-500 shadow-lg shadow-purple-500/20'
+            : 'bg-[var(--bg-tertiary-color)] text-[var(--text-primary-color)] border-[var(--border-color)] hover:border-purple-500/50'
             }`}
         >
           <span className="text-lg">📊</span>
           <span className="text-sm font-medium">Presentation Mode</span>
+        </button>
+
+        {/* Autonomous Mode Toggle */}
+        <button
+          onClick={onToggleAutonomous}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border ${isAutonomousMode
+            ? 'bg-amber-600 text-white border-amber-500 shadow-lg shadow-amber-500/20'
+            : 'bg-[var(--bg-tertiary-color)] text-[var(--text-primary-color)] border-[var(--border-color)] hover:border-amber-500/50'
+            }`}
+        >
+          <span className="text-lg">🧠</span>
+          <span className="text-sm font-medium">Autonomous Mode</span>
         </button>
       </div>
 
@@ -116,8 +134,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             key={convo.id}
             onClick={() => onSelectConversation(convo.id)}
             className={`w-full text-left rtl:text-right px-3 py-2 rounded-lg text-sm truncate transition-all ${activeConversationId === convo.id
-                ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)] font-medium'
-                : 'text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]'
+              ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)] font-medium'
+              : 'text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]'
               }`}
           >
             {convo.title || t('newChat')}

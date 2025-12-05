@@ -20,6 +20,7 @@ import { ChatPanel } from './src/components/chat/ChatPanel';
 import { VirtualComputer } from './src/components/computer/VirtualComputer';
 import { TaskProgress } from './src/components/computer/TaskProgress';
 import PresentationGenerator from './src/components/presentation/PresentationGenerator';
+import AutonomousMode from './src/components/AutonomousMode';
 
 // Services
 import { speechService } from './src/services/speechService';
@@ -233,6 +234,7 @@ const App: React.FC = () => {
 
   // ========== PRESENTATION MODE ==========
   const [isPresentationMode, setIsPresentationMode] = useState(false);
+  const [isAutonomousMode, setIsAutonomousMode] = useState(false);
 
   // ========== CONVERSATIONS ==========
   const [conversations, setConversations] = useState<Conversation[]>(() => {
@@ -746,6 +748,8 @@ const App: React.FC = () => {
         }}
         isPresentationMode={isPresentationMode}
         onTogglePresentation={() => setIsPresentationMode(!isPresentationMode)}
+        isAutonomousMode={isAutonomousMode}
+        onToggleAutonomous={() => setIsAutonomousMode(!isAutonomousMode)}
         t={t as any}
       />
 
@@ -805,6 +809,13 @@ const App: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Autonomous Mode Modal */}
+      <AutonomousMode
+        isOpen={isAutonomousMode}
+        onClose={() => setIsAutonomousMode(false)}
+        language={lang}
+      />
     </div>
   );
 };
