@@ -57,18 +57,23 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
 
     const isArabic = language === 'ar';
 
+    // Unified API call function
+    const callAutonomousAPI = async (action: string, data: any = {}) => {
+        const response = await fetch(`${BACKEND_URL}/autonomous`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, ...data })
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+        return result.data;
+    };
+
     // Fetch all tasks
     const fetchTasks = useCallback(async () => {
         try {
-            const response = await fetch(`${BACKEND_URL}/autonomous/list`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({})
-            });
-            const data = await response.json();
-            if (data.success) {
-                setTasks(data.tasks);
-            }
+            const data = await callAutonomousAPI('list');
+            setTasks(data);
         } catch (error) {
             console.error('Failed to fetch tasks:', error);
         }
@@ -77,15 +82,8 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     // Fetch task details
     const fetchTaskDetails = useCallback(async (taskId: string) => {
         try {
-            const response = await fetch(`${BACKEND_URL}/autonomous/status`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ taskId })
-            });
-            const data = await response.json();
-            if (data.success) {
-                setSelectedTask(data.task);
-            }
+            const data = await callAutonomousAPI('status', { taskId });
+            setSelectedTask(data);
         } catch (error) {
             console.error('Failed to fetch task details:', error);
         }
@@ -113,20 +111,12 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
 
         setIsCreating(true);
         try {
-            const response = await fetch(`${BACKEND_URL}/autonomous/create`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt })
-            });
-            const data = await response.json();
-
-            if (data.success) {
-                setPrompt('');
-                fetchTasks();
-                // Auto-start execution
-                await handleStartExecution(data.task.id);
-                setView('list');
-            }
+            const data = await callAutonomousAPI('create', { prompt });
+            setPrompt('');
+            fetchTasks();
+            // Auto-start execution
+            await handleStartExecution(data.id);
+            setView('list');
         } catch (error) {
             console.error('Failed to create task:', error);
         } finally {
@@ -138,11 +128,7 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     const handleStartExecution = async (taskId: string) => {
         setIsExecuting(true);
         try {
-            await fetch(`${BACKEND_URL}/autonomous/execute`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ taskId, executeAll: true })
-            });
+            await callAutonomousAPI('execute', { taskId });
             fetchTasks();
         } catch (error) {
             console.error('Failed to start execution:', error);
@@ -154,11 +140,7 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     // Cancel task
     const handleCancelTask = async (taskId: string) => {
         try {
-            await fetch(`${BACKEND_URL}/autonomous/cancel`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ taskId })
-            });
+            await callAutonomousAPI('cancel', { taskId });
             fetchTasks();
         } catch (error) {
             console.error('Failed to cancel task:', error);
@@ -169,16 +151,9 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     const handleGetResults = async (taskId: string) => {
         setIsLoading(true);
         try {
-            const response = await fetch(`${BACKEND_URL}/autonomous/results`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ taskId })
-            });
-            const data = await response.json();
-            if (data.success) {
-                setResults(data);
-                setView('results');
-            }
+            const data = await callAutonomousAPI('results', { taskId });
+            setResults({ output: data });
+            setView('results');
         } catch (error) {
             console.error('Failed to get results:', error);
         } finally {
@@ -595,8 +570,8 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                                             borderRadius: '8px',
                                             marginBottom: '8px',
                                             borderLeft: `3px solid ${notif.type === 'success' ? '#22c55e' :
-                                                    notif.type === 'error' ? '#ef4444' :
-                                                        notif.type === 'warning' ? '#f59e0b' : '#6366f1'
+                                                notif.type === 'error' ? '#ef4444' :
+                                                    notif.type === 'warning' ? '#f59e0b' : '#6366f1'
                                                 }`
                                         }}
                                     >
