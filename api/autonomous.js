@@ -1,4 +1,4 @@
-// Autonomous Mode - Enhanced with Sources & Better Structure
+// TRUE AUTONOMOUS AGENT - With Planning, Stages, Live Search, Progress
 const MODELS = {
     PLANNER: 'gemini-2.5-pro',
     BRAIN: 'gemini-3-pro',
@@ -10,32 +10,33 @@ function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
         const key = process.env[`GEMINI_API_KEY_${i}`];
-        if (key && key.trim().length > 0) {
-            keys.push(key.trim());
-        }
+        if (key && key.trim().length > 0) keys.push(key.trim());
     }
-    if (process.env.GEMINI_API_KEY) {
-        keys.push(process.env.GEMINI_API_KEY.trim());
-    }
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
     return keys;
 }
 
 function getNextKey() {
     const keys = getAPIKeys();
-    if (keys.length === 0) return null;
-    return keys[Math.floor(Math.random() * keys.length)];
+    return keys.length ? keys[Math.floor(Math.random() * keys.length)] : null;
 }
 
 function detectLanguage(text) {
-    const arabicPattern = /[\u0600-\u06FF]/;
-    return arabicPattern.test(text) ? 'ar' : 'en';
+    return /[\u0600-\u06FF]/.test(text) ? 'ar' : 'en';
 }
 
-async function callGeminiAPI(prompt, apiKey, model = MODELS.SEARCH, useSearch = false) {
+async function callGeminiAPI(prompt, apiKey, model = MODELS.SEARCH, options = {}) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-    const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }] };
-    if (useSearch) body.tools = [{ googleSearch: {} }];
+    const body = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: options.json ? { responseMimeType: 'application/json' } : {}
+    };
+
+    // Always use Google Search for live data
+    if (options.search !== false) {
+        body.tools = [{ googleSearch: {} }];
+    }
 
     const response = await fetch(url, {
         method: 'POST',
@@ -43,241 +44,338 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.SEARCH, useSearch = 
         body: JSON.stringify(body)
     });
 
-    if (response.status === 429 || response.status === 404 || response.status === 503) {
-        if (model !== MODELS.FALLBACK) {
-            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK, useSearch);
-        }
+    if ([429, 404, 503].includes(response.status) && model !== MODELS.FALLBACK) {
+        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK, options);
     }
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error ${response.status}: ${errorText.substring(0, 100)}`);
-    }
+    if (!response.ok) throw new Error(`API error ${response.status}`);
 
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // Extract grounding sources if available
+    const groundingMeta = data.candidates?.[0]?.groundingMetadata;
+    const sources = groundingMeta?.groundingChunks?.map(c => ({
+        title: c.web?.title || 'Source',
+        url: c.web?.uri || ''
+    })) || [];
+
+    return {
+        text: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+        sources: sources
+    };
 }
 
-// Create a detailed plan
-async function createPlan(prompt, language, apiKey) {
-    const planPrompt = `You are a research planner. Create a plan for: "${prompt}"
+// ===========================================
+// STAGE 1: TASK PLANNER - تحليل وتخطيط المهمة
+// ===========================================
+async function planTask(prompt, language, apiKey) {
+    const planPrompt = `You are a Task Planner for an AI Research Agent.
 
-Create 6-8 specific research steps. Each step should focus on a different aspect.
+USER REQUEST: "${prompt}"
+LANGUAGE: ${language === 'ar' ? 'Arabic' : 'English'}
 
-Return JSON ONLY:
+Analyze this request and create a detailed execution plan.
+
+Return JSON:
 {
-    "taskTitle": "${language === 'ar' ? 'عنوان بالعربية' : 'Title in English'}",
-    "steps": [
-        {"id": 1, "task": "Research step description"},
-        {"id": 2, "task": "..."}
-    ]
-}`;
+    "taskTitle": "Clear title for the task",
+    "complexity": "simple|medium|complex",
+    "requiredSources": ["list of source types needed: reports, statistics, news, etc"],
+    "stages": [
+        {
+            "id": 1,
+            "name": "Data Collection",
+            "description": "What this stage will do",
+            "searchQueries": ["specific search query 1", "search query 2"],
+            "estimatedTime": "30 seconds"
+        },
+        {
+            "id": 2,
+            "name": "Analysis",
+            "description": "Analyze collected data",
+            "searchQueries": [],
+            "estimatedTime": "20 seconds"
+        }
+    ],
+    "expectedOutputs": ["Report", "Statistics", "Recommendations"],
+    "totalEstimatedTime": "2-3 minutes"
+}
 
-    const result = await callGeminiAPI(planPrompt, apiKey, MODELS.PLANNER);
+Create 4-6 stages covering:
+1. Data Collection (multiple search queries)
+2. Deep Research (specific topics)
+3. Comparison/Analysis
+4. Synthesis
+5. Report Generation
+6. Quality Check`;
+
+    const result = await callGeminiAPI(planPrompt, apiKey, MODELS.PLANNER, { search: false, json: true });
 
     try {
-        return JSON.parse(result);
+        return JSON.parse(result.text);
     } catch {
-        const match = result.match(/\{[\s\S]*\}/);
+        const match = result.text.match(/\{[\s\S]*\}/);
         if (match) return JSON.parse(match[0]);
-        return {
-            taskTitle: prompt.substring(0, 50),
-            steps: [
-                { id: 1, task: `Research main topic: ${prompt}` },
-                { id: 2, task: 'Gather statistics and data' },
-                { id: 3, task: 'Find examples and case studies' },
-                { id: 4, task: 'Identify trends and predictions' }
-            ]
-        };
+        throw new Error('Failed to create plan');
     }
 }
 
-// Execute all steps
-async function executeTask(prompt, plan, language, apiKey) {
-    const results = [];
+// ===========================================
+// STAGE 2: EXECUTE STAGES - تنفيذ المراحل
+// ===========================================
+async function executeStages(plan, prompt, language, apiKey) {
+    const stageResults = [];
+    const allSources = [];
     let context = `Original Request: ${prompt}\n\n`;
-    const sources = [];
 
-    for (const step of plan.steps) {
-        try {
-            console.log(`[Autonomous] Step ${step.id}: ${step.task}`);
+    for (const stage of plan.stages) {
+        console.log(`[Autonomous] Stage ${stage.id}: ${stage.name}`);
 
-            const result = await callGeminiAPI(
-                `Research this topic thoroughly: ${step.task}
+        const stageResult = {
+            id: stage.id,
+            name: stage.name,
+            status: 'running',
+            searchResults: [],
+            analysis: '',
+            sources: []
+        };
+
+        // Execute search queries for this stage
+        if (stage.searchQueries && stage.searchQueries.length > 0) {
+            for (const query of stage.searchQueries) {
+                try {
+                    const searchResult = await callGeminiAPI(
+                        `Search and provide detailed, current information about: ${query}
+                        
+Include:
+- Latest data and statistics (2024-2025)
+- Specific numbers and facts
+- Expert opinions if available
+- Trends and predictions
+
+Be comprehensive and factual.`,
+                        apiKey,
+                        MODELS.SEARCH,
+                        { search: true }
+                    );
+
+                    stageResult.searchResults.push({
+                        query: query,
+                        result: searchResult.text
+                    });
+
+                    // Collect sources
+                    searchResult.sources.forEach(s => {
+                        if (s.url && !allSources.find(as => as.url === s.url)) {
+                            allSources.push(s);
+                        }
+                    });
+
+                    context += `\n[${query}]\n${searchResult.text}\n`;
+                } catch (e) {
+                    console.error(`Search failed for: ${query}`, e.message);
+                }
+            }
+        }
+
+        // Analyze stage results
+        if (stageResult.searchResults.length > 0 || stage.id > 1) {
+            const analysisPrompt = `Analyze the following information for stage "${stage.name}":
+
+Stage Goal: ${stage.description}
+
+Data:
+${stageResult.searchResults.map(r => `Query: ${r.query}\nResult: ${r.result}`).join('\n\n')}
+
+Previous Context:
+${context.substring(0, 3000)}
 
 Provide:
-1. Detailed information with specific facts and numbers
-2. At least 2-3 credible sources (websites, reports, studies)
-3. Current data from 2024-2025 if available
+1. Key findings from this stage
+2. Important data points
+3. Insights and patterns
 
-Format sources as: [Source: name - url or description]`,
-                apiKey,
-                MODELS.SEARCH,
-                true
-            );
+Write in ${language === 'ar' ? 'Arabic' : 'English'}.`;
 
-            // Extract sources from result
-            const sourceMatches = result.match(/\[Source:.*?\]/g) || [];
-            sourceMatches.forEach(s => {
-                if (!sources.includes(s)) sources.push(s);
-            });
-
-            results.push({
-                stepId: step.id,
-                task: step.task,
-                result: result,
-                success: true
-            });
-
-            context += `\n=== ${step.task} ===\n${result}\n`;
-        } catch (error) {
-            console.error(`[Autonomous] Step ${step.id} failed:`, error.message);
-            results.push({
-                stepId: step.id,
-                task: step.task,
-                result: 'Failed to get information',
-                success: false
-            });
+            const analysis = await callGeminiAPI(analysisPrompt, apiKey, MODELS.BRAIN, { search: false });
+            stageResult.analysis = analysis.text;
         }
+
+        stageResult.status = 'completed';
+        stageResult.sources = allSources.slice(-5);
+        stageResults.push(stageResult);
     }
 
-    // Limit sources to 5-8
-    const limitedSources = sources.slice(0, 8);
+    return { stageResults, allSources, context };
+}
 
+// ===========================================
+// STAGE 3: SYNTHESIS - تجميع وكتابة التقرير
+// ===========================================
+async function synthesizeReport(plan, stageResults, context, language, apiKey) {
     // Generate Executive Summary
-    const summaryPrompt = `Write a brief executive summary (2-3 paragraphs) in ${language === 'ar' ? 'Arabic' : 'English'}.
+    const summaryPrompt = `Based on this multi-stage research, write an executive summary.
 
-Topic: ${prompt}
+Research Topic: ${plan.taskTitle}
 
-Research Data:
-${results.map(r => `${r.task}: ${r.result.substring(0, 400)}`).join('\n\n')}
+Stage Results:
+${stageResults.map(s => `
+Stage: ${s.name}
+Key Findings: ${s.analysis.substring(0, 500)}
+`).join('\n')}
 
-Requirements:
-- Be specific with numbers and facts
-- Highlight the most important findings
-- Write complete text, no placeholders`;
+Write a 2-3 paragraph executive summary in ${language === 'ar' ? 'Arabic' : 'English'}.
+Include the most important findings, statistics, and conclusions.
+Be specific with numbers and facts.`;
 
-    const summary = await callGeminiAPI(summaryPrompt, apiKey, MODELS.BRAIN);
+    const summary = await callGeminiAPI(summaryPrompt, apiKey, MODELS.BRAIN, { search: false });
 
-    // Generate Sections
-    const sectionsPrompt = `Create a structured report in ${language === 'ar' ? 'Arabic' : 'English'} with these EXACT sections:
+    // Generate Full Report with Sections
+    const reportPrompt = `Create a comprehensive research report.
 
-Topic: ${prompt}
+Topic: ${plan.taskTitle}
 
-Research Data:
-${context.substring(0, 8000)}
+All Research Data:
+${context.substring(0, 10000)}
 
-Generate these sections (write COMPLETE content for each, no placeholders):
+Stage Analyses:
+${stageResults.map(s => `## ${s.name}\n${s.analysis}`).join('\n\n')}
 
-SECTION 1 - INTRODUCTION:
-Write 2-3 paragraphs introducing the topic
+Create a COMPLETE report in ${language === 'ar' ? 'Arabic' : 'English'} with:
 
-SECTION 2 - KEY FINDINGS:
-List 5-8 main findings with bullet points and specific data
+## 1. المقدمة / Introduction
+(Background and importance of the topic)
 
-SECTION 3 - DETAILED ANALYSIS:
-Provide in-depth analysis with subsections, numbers, and examples
+## 2. منهجية البحث / Methodology  
+(How the research was conducted - ${stageResults.length} stages)
 
-SECTION 4 - RECOMMENDATIONS:
-List 4-6 actionable recommendations
+## 3. النتائج الرئيسية / Key Findings
+(Detailed findings with statistics and facts)
 
-SECTION 5 - CONCLUSION:
-Write 2 paragraphs summarizing the key takeaways
+## 4. التحليل العميق / Deep Analysis
+(In-depth analysis of the data)
 
-Format with clear headers using ##`;
+## 5. المقارنات / Comparisons
+(If applicable)
 
-    const sections = await callGeminiAPI(sectionsPrompt, apiKey, MODELS.BRAIN);
+## 6. التوصيات / Recommendations
+(Actionable recommendations based on findings)
 
-    // Generate Key Statistics for potential charts
-    const statsPrompt = `Extract 4-6 key statistics/numbers from this research that could be shown in a chart.
+## 7. الخلاصة / Conclusion
+(Summary and future outlook)
 
-Research: ${context.substring(0, 3000)}
+Write complete content for each section. Do NOT use placeholders.`;
 
-Return JSON array ONLY:
-[
-    {"label": "Statistic name", "value": 75, "unit": "%"},
-    {"label": "Another stat", "value": 150000, "unit": "$"}
-]`;
+    const report = await callGeminiAPI(reportPrompt, apiKey, MODELS.BRAIN, { search: false });
+
+    // Extract Key Statistics
+    const statsPrompt = `Extract 5-6 key statistics from this research.
+
+Data: ${context.substring(0, 4000)}
+
+Return JSON array:
+[{"label": "Statistic name", "value": 75, "unit": "%"}]`;
 
     let stats = [];
     try {
-        const statsResult = await callGeminiAPI(statsPrompt, apiKey, MODELS.FALLBACK);
-        const match = statsResult.match(/\[[\s\S]*\]/);
+        const statsResult = await callGeminiAPI(statsPrompt, apiKey, MODELS.FALLBACK, { search: false });
+        const match = statsResult.text.match(/\[[\s\S]*\]/);
         if (match) stats = JSON.parse(match[0]);
-    } catch (e) {
-        console.log('[Autonomous] Could not extract stats');
-    }
+    } catch { }
 
-    return { results, summary, sections, sources: limitedSources, stats };
+    return { summary: summary.text, report: report.text, stats };
 }
 
+// ===========================================
+// MAIN HANDLER
+// ===========================================
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
-    }
-
-    if (req.method !== 'POST') {
-        res.status(405).json({ success: false, error: 'Method not allowed' });
-        return;
-    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
     try {
         const { action, prompt } = req.body || {};
-
         const apiKey = getNextKey();
-        if (!apiKey) {
-            return res.status(500).json({ success: false, error: 'No API keys available' });
-        }
 
-        if (action === 'run' && prompt) {
-            const language = detectLanguage(prompt);
+        if (!apiKey) return res.status(500).json({ success: false, error: 'No API keys' });
 
-            console.log('[Autonomous] Creating plan...');
-            const plan = await createPlan(prompt, language, apiKey);
+        const language = detectLanguage(prompt || '');
 
-            console.log(`[Autonomous] Executing ${plan.steps.length} steps...`);
-            const { results, summary, sections, sources, stats } = await executeTask(prompt, plan, language, apiKey);
-
-            console.log('[Autonomous] Task completed!');
-
-            return res.status(200).json({
-                success: true,
-                data: {
-                    title: plan.taskTitle,
-                    steps: plan.steps,
-                    stepsCompleted: results.length,
-                    summary: summary,
-                    sections: sections,
-                    sources: sources,
-                    stats: stats,
-                    rawResults: results
-                }
-            });
-        }
-
+        // ===========================================
+        // ACTION: PLAN - إنشاء خطة (بدون تنفيذ)
+        // ===========================================
         if (action === 'plan' && prompt) {
-            const language = detectLanguage(prompt);
-            const plan = await createPlan(prompt, language, apiKey);
+            console.log('[Autonomous] Creating plan...');
+            const plan = await planTask(prompt, language, apiKey);
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    plan: plan,
+                    message: language === 'ar'
+                        ? 'تم إنشاء الخطة. هل تريد المتابعة؟'
+                        : 'Plan created. Do you want to proceed?'
+                }
+            });
+        }
+
+        // ===========================================
+        // ACTION: RUN - تنفيذ كامل
+        // ===========================================
+        if (action === 'run' && prompt) {
+            console.log('[Autonomous] === STARTING FULL EXECUTION ===');
+
+            // Stage 1: Planning
+            console.log('[Autonomous] Stage 1: Planning...');
+            const plan = await planTask(prompt, language, apiKey);
+
+            // Stage 2: Execute all stages
+            console.log('[Autonomous] Stage 2: Executing stages...');
+            const { stageResults, allSources, context } = await executeStages(plan, prompt, language, apiKey);
+
+            // Stage 3: Synthesize report
+            console.log('[Autonomous] Stage 3: Synthesizing report...');
+            const { summary, report, stats } = await synthesizeReport(plan, stageResults, context, language, apiKey);
+
+            console.log('[Autonomous] === EXECUTION COMPLETE ===');
 
             return res.status(200).json({
                 success: true,
                 data: {
                     title: plan.taskTitle,
-                    steps: plan.steps,
-                    estimatedTime: `${plan.steps.length * 30} seconds`
+                    complexity: plan.complexity,
+                    plan: {
+                        stages: plan.stages,
+                        totalStages: plan.stages.length,
+                        expectedOutputs: plan.expectedOutputs
+                    },
+                    execution: {
+                        stagesCompleted: stageResults.length,
+                        stageDetails: stageResults.map(s => ({
+                            id: s.id,
+                            name: s.name,
+                            status: s.status,
+                            queriesExecuted: s.searchResults?.length || 0
+                        }))
+                    },
+                    results: {
+                        summary: summary,
+                        report: report,
+                        stats: stats,
+                        sources: allSources.slice(0, 10).map(s => ({
+                            title: s.title,
+                            url: s.url
+                        }))
+                    }
                 }
             });
         }
 
-        return res.status(400).json({
-            success: false,
-            error: 'Invalid action. Use "run" or "plan" with a prompt.'
-        });
+        return res.status(400).json({ success: false, error: 'Invalid action' });
 
     } catch (error) {
         console.error('[Autonomous] Error:', error.message);
