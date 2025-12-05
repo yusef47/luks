@@ -1,6 +1,4 @@
-// Autonomous Mode - All-in-One Execution
-// Executes everything in a single request (stateless compatible)
-
+// Autonomous Mode - Enhanced with Sources & Better Structure
 const MODELS = {
     PLANNER: 'gemini-2.5-pro',
     BRAIN: 'gemini-3-pro',
@@ -62,15 +60,15 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.SEARCH, useSearch = 
 
 // Create a detailed plan
 async function createPlan(prompt, language, apiKey) {
-    const planPrompt = `You are a task planner. Create an execution plan for: "${prompt}"
+    const planPrompt = `You are a research planner. Create a plan for: "${prompt}"
 
-Create 5-10 specific search/research steps.
+Create 6-8 specific research steps. Each step should focus on a different aspect.
 
 Return JSON ONLY:
 {
     "taskTitle": "${language === 'ar' ? 'عنوان بالعربية' : 'Title in English'}",
     "steps": [
-        {"id": 1, "task": "${language === 'ar' ? 'وصف المهمة' : 'Task description'}"},
+        {"id": 1, "task": "Research step description"},
         {"id": 2, "task": "..."}
     ]
 }`;
@@ -84,27 +82,45 @@ Return JSON ONLY:
         if (match) return JSON.parse(match[0]);
         return {
             taskTitle: prompt.substring(0, 50),
-            steps: [{ id: 1, task: prompt }]
+            steps: [
+                { id: 1, task: `Research main topic: ${prompt}` },
+                { id: 2, task: 'Gather statistics and data' },
+                { id: 3, task: 'Find examples and case studies' },
+                { id: 4, task: 'Identify trends and predictions' }
+            ]
         };
     }
 }
 
-// Execute all steps and generate final report
+// Execute all steps
 async function executeTask(prompt, plan, language, apiKey) {
     const results = [];
     let context = `Original Request: ${prompt}\n\n`;
+    const sources = [];
 
-    // Execute each step
     for (const step of plan.steps) {
         try {
-            console.log(`[Autonomous] Executing step ${step.id}: ${step.task}`);
+            console.log(`[Autonomous] Step ${step.id}: ${step.task}`);
 
             const result = await callGeminiAPI(
-                `Research and provide detailed information about: ${step.task}\n\nContext: ${context.substring(0, 2000)}`,
+                `Research this topic thoroughly: ${step.task}
+
+Provide:
+1. Detailed information with specific facts and numbers
+2. At least 2-3 credible sources (websites, reports, studies)
+3. Current data from 2024-2025 if available
+
+Format sources as: [Source: name - url or description]`,
                 apiKey,
                 MODELS.SEARCH,
                 true
             );
+
+            // Extract sources from result
+            const sourceMatches = result.match(/\[Source:.*?\]/g) || [];
+            sourceMatches.forEach(s => {
+                if (!sources.includes(s)) sources.push(s);
+            });
 
             results.push({
                 stepId: step.id,
@@ -125,38 +141,74 @@ async function executeTask(prompt, plan, language, apiKey) {
         }
     }
 
-    // Generate summary
-    const summaryPrompt = `Create a brief executive summary in ${language === 'ar' ? 'Arabic' : 'English'}:
+    // Limit sources to 5-8
+    const limitedSources = sources.slice(0, 8);
+
+    // Generate Executive Summary
+    const summaryPrompt = `Write a brief executive summary (2-3 paragraphs) in ${language === 'ar' ? 'Arabic' : 'English'}.
 
 Topic: ${prompt}
 
-Research Results:
-${results.map(r => `- ${r.task}: ${r.result.substring(0, 300)}...`).join('\n')}
+Research Data:
+${results.map(r => `${r.task}: ${r.result.substring(0, 400)}`).join('\n\n')}
 
-Write a concise 1-paragraph summary of the key findings.`;
+Requirements:
+- Be specific with numbers and facts
+- Highlight the most important findings
+- Write complete text, no placeholders`;
 
     const summary = await callGeminiAPI(summaryPrompt, apiKey, MODELS.BRAIN);
 
-    // Generate full report
-    const reportPrompt = `Create a comprehensive report in ${language === 'ar' ? 'Arabic' : 'English'}:
+    // Generate Sections
+    const sectionsPrompt = `Create a structured report in ${language === 'ar' ? 'Arabic' : 'English'} with these EXACT sections:
 
 Topic: ${prompt}
 
-All Research:
-${context}
+Research Data:
+${context.substring(0, 8000)}
 
-Create a well-structured report with:
-1. Introduction
-2. Key Findings (organized by topic)
-3. Analysis
-4. Recommendations
-5. Conclusion
+Generate these sections (write COMPLETE content for each, no placeholders):
 
-Use proper headings and bullet points.`;
+SECTION 1 - INTRODUCTION:
+Write 2-3 paragraphs introducing the topic
 
-    const report = await callGeminiAPI(reportPrompt, apiKey, MODELS.BRAIN);
+SECTION 2 - KEY FINDINGS:
+List 5-8 main findings with bullet points and specific data
 
-    return { results, summary, report };
+SECTION 3 - DETAILED ANALYSIS:
+Provide in-depth analysis with subsections, numbers, and examples
+
+SECTION 4 - RECOMMENDATIONS:
+List 4-6 actionable recommendations
+
+SECTION 5 - CONCLUSION:
+Write 2 paragraphs summarizing the key takeaways
+
+Format with clear headers using ##`;
+
+    const sections = await callGeminiAPI(sectionsPrompt, apiKey, MODELS.BRAIN);
+
+    // Generate Key Statistics for potential charts
+    const statsPrompt = `Extract 4-6 key statistics/numbers from this research that could be shown in a chart.
+
+Research: ${context.substring(0, 3000)}
+
+Return JSON array ONLY:
+[
+    {"label": "Statistic name", "value": 75, "unit": "%"},
+    {"label": "Another stat", "value": 150000, "unit": "$"}
+]`;
+
+    let stats = [];
+    try {
+        const statsResult = await callGeminiAPI(statsPrompt, apiKey, MODELS.FALLBACK);
+        const match = statsResult.match(/\[[\s\S]*\]/);
+        if (match) stats = JSON.parse(match[0]);
+    } catch (e) {
+        console.log('[Autonomous] Could not extract stats');
+    }
+
+    return { results, summary, sections, sources: limitedSources, stats };
 }
 
 export default async function handler(req, res) {
@@ -182,7 +234,6 @@ export default async function handler(req, res) {
             return res.status(500).json({ success: false, error: 'No API keys available' });
         }
 
-        // For 'run' action: Create plan + Execute + Return results (all in one)
         if (action === 'run' && prompt) {
             const language = detectLanguage(prompt);
 
@@ -190,7 +241,7 @@ export default async function handler(req, res) {
             const plan = await createPlan(prompt, language, apiKey);
 
             console.log(`[Autonomous] Executing ${plan.steps.length} steps...`);
-            const { results, summary, report } = await executeTask(prompt, plan, language, apiKey);
+            const { results, summary, sections, sources, stats } = await executeTask(prompt, plan, language, apiKey);
 
             console.log('[Autonomous] Task completed!');
 
@@ -201,13 +252,14 @@ export default async function handler(req, res) {
                     steps: plan.steps,
                     stepsCompleted: results.length,
                     summary: summary,
-                    report: report,
+                    sections: sections,
+                    sources: sources,
+                    stats: stats,
                     rawResults: results
                 }
             });
         }
 
-        // For 'plan' action: Just create and return the plan (preview)
         if (action === 'plan' && prompt) {
             const language = detectLanguage(prompt);
             const plan = await createPlan(prompt, language, apiKey);

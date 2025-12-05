@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 interface AutonomousModeProps {
     isOpen: boolean;
@@ -11,7 +11,9 @@ interface TaskResult {
     steps: { id: number; task: string }[];
     stepsCompleted: number;
     summary: string;
-    report: string;
+    sections: string;
+    sources: string[];
+    stats: { label: string; value: number; unit: string }[];
 }
 
 const BACKEND_URL = '/api';
@@ -23,6 +25,8 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     const [statusMessage, setStatusMessage] = useState('');
     const [result, setResult] = useState<TaskResult | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'summary' | 'report' | 'sources' | 'stats'>('summary');
+    const reportRef = useRef<HTMLDivElement>(null);
 
     const isArabic = language === 'ar';
 
@@ -36,16 +40,20 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
         setError(null);
 
         try {
-            // Simulate progress updates
+            const messages = isArabic
+                ? ['🔍 جاري البحث...', '📊 جاري تحليل البيانات...', '📝 جاري كتابة التقرير...', '✨ اللمسات الأخيرة...']
+                : ['🔍 Researching...', '📊 Analyzing data...', '📝 Writing report...', '✨ Final touches...'];
+
+            let msgIndex = 0;
             const progressInterval = setInterval(() => {
                 setProgress(prev => {
                     if (prev >= 90) return prev;
-                    const increment = Math.random() * 10 + 5;
-                    return Math.min(prev + increment, 90);
+                    if (prev > msgIndex * 20 && msgIndex < messages.length - 1) {
+                        setStatusMessage(messages[++msgIndex]);
+                    }
+                    return Math.min(prev + Math.random() * 8 + 3, 90);
                 });
-            }, 2000);
-
-            setStatusMessage(isArabic ? '🔍 جاري البحث والتحليل...' : '🔍 Researching and analyzing...');
+            }, 1500);
 
             const response = await fetch(`${BACKEND_URL}/autonomous`, {
                 method: 'POST',
@@ -61,6 +69,7 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                 setProgress(100);
                 setStatusMessage(isArabic ? '✅ تم الانتهاء!' : '✅ Completed!');
                 setResult(data.data);
+                setActiveTab('summary');
             } else {
                 throw new Error(data.error || 'Unknown error');
             }
@@ -73,9 +82,73 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     };
 
     const handleCopyReport = () => {
-        if (result?.report) {
-            navigator.clipboard.writeText(result.report);
-            alert(isArabic ? 'تم نسخ التقرير!' : 'Report copied!');
+        const text = `${result?.title}\n\n${result?.summary}\n\n${result?.sections}\n\n${isArabic ? 'المصادر:' : 'Sources:'}\n${result?.sources?.join('\n')}`;
+        navigator.clipboard.writeText(text);
+        alert(isArabic ? 'تم نسخ التقرير!' : 'Report copied!');
+    };
+
+    const handleDownloadPDF = () => {
+        // Create printable content
+        const content = `
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>${result?.title}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 40px; direction: ${isArabic ? 'rtl' : 'ltr'}; line-height: 1.8; }
+                    h1 { color: #1a1a2e; border-bottom: 2px solid #6366f1; padding-bottom: 10px; }
+                    h2 { color: #374151; margin-top: 30px; }
+                    .summary { background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #22c55e; }
+                    .sources { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+                    .source { color: #6b7280; font-size: 14px; margin: 5px 0; }
+                    .stats { display: flex; gap: 20px; flex-wrap: wrap; margin: 20px 0; }
+                    .stat { background: #f3f4f6; padding: 15px 25px; border-radius: 8px; text-align: center; }
+                    .stat-value { font-size: 24px; font-weight: bold; color: #6366f1; }
+                    .stat-label { font-size: 12px; color: #6b7280; }
+                </style>
+            </head>
+            <body>
+                <h1>📊 ${result?.title}</h1>
+                
+                <div class="summary">
+                    <h2>${isArabic ? '📝 الملخص التنفيذي' : '📝 Executive Summary'}</h2>
+                    <p>${result?.summary}</p>
+                </div>
+
+                ${result?.stats && result.stats.length > 0 ? `
+                <div class="stats">
+                    ${result.stats.map(s => `
+                        <div class="stat">
+                            <div class="stat-value">${s.value}${s.unit}</div>
+                            <div class="stat-label">${s.label}</div>
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
+
+                <div class="sections">
+                    ${result?.sections?.replace(/##/g, '<h2>').replace(/\n/g, '<br>')}
+                </div>
+
+                <div class="sources">
+                    <h2>${isArabic ? '📚 المصادر' : '📚 Sources'}</h2>
+                    ${result?.sources?.map(s => `<div class="source">${s}</div>`).join('') || ''}
+                </div>
+
+                <footer style="margin-top: 40px; text-align: center; color: #9ca3af; font-size: 12px;">
+                    ${isArabic ? 'تم إنشاء هذا التقرير بواسطة لوكاس AI' : 'Report generated by Lukas AI'} - ${new Date().toLocaleDateString()}
+                </footer>
+            </body>
+            </html>
+        `;
+
+        const blob = new Blob([content], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const win = window.open(url, '_blank');
+        if (win) {
+            win.onload = () => {
+                win.print();
+            };
         }
     };
 
@@ -88,6 +161,17 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     };
 
     if (!isOpen) return null;
+
+    const tabStyle = (isActive: boolean) => ({
+        padding: '10px 20px',
+        borderRadius: '8px',
+        border: 'none',
+        background: isActive ? 'rgba(99, 102, 241, 0.3)' : 'transparent',
+        color: isActive ? '#fff' : '#a1a1aa',
+        cursor: 'pointer',
+        fontSize: '14px',
+        transition: 'all 0.2s'
+    });
 
     return (
         <div style={{
@@ -107,8 +191,8 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
             <div style={{
                 background: 'linear-gradient(145deg, #1a1a2e 0%, #16213e 100%)',
                 borderRadius: '24px',
-                width: '90%',
-                maxWidth: '800px',
+                width: '95%',
+                maxWidth: '900px',
                 maxHeight: '90vh',
                 overflow: 'hidden',
                 border: '1px solid rgba(255,255,255,0.1)',
@@ -130,7 +214,7 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                                 {isArabic ? 'وضع الاستقلالية' : 'Autonomous Mode'}
                             </h2>
                             <p style={{ margin: 0, color: '#a1a1aa', fontSize: '13px' }}>
-                                {isArabic ? 'مهمة معقدة → تقرير شامل' : 'Complex task → Comprehensive report'}
+                                {isArabic ? 'بحث شامل → تقرير احترافي' : 'Research → Professional Report'}
                             </p>
                         </div>
                     </div>
@@ -161,8 +245,8 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                         <>
                             <p style={{ color: '#d4d4d4', marginBottom: '16px', fontSize: '14px' }}>
                                 {isArabic
-                                    ? '📝 اكتب طلبك بالتفصيل. لوكاس هيبحث، يحلل، ويجهزلك تقرير شامل.'
-                                    : '📝 Describe your request in detail. Lukas will research, analyze, and prepare a comprehensive report.'
+                                    ? '📝 اكتب طلبك بالتفصيل. لوكاس هيبحث، يحلل، ويجهزلك تقرير شامل مع المصادر.'
+                                    : '📝 Describe your request. Lukas will research, analyze, and prepare a report with sources.'
                                 }
                             </p>
 
@@ -171,12 +255,12 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                                 onChange={(e) => setPrompt(e.target.value)}
                                 disabled={isRunning}
                                 placeholder={isArabic
-                                    ? 'مثال: عايز تحليل كامل لسوق العقارات في مصر 2024 مع مقارنة بالإمارات وتوقعات للأسعار...'
-                                    : 'Example: Complete analysis of Egypt real estate market 2024 with UAE comparison and price predictions...'
+                                    ? 'مثال: تحليل سوق العقارات في مصر 2024 مع مقارنة بالإمارات وتوقعات الأسعار'
+                                    : 'Example: Analysis of Egypt real estate market 2024 with UAE comparison'
                                 }
                                 style={{
                                     width: '100%',
-                                    minHeight: '120px',
+                                    minHeight: '100px',
                                     padding: '16px',
                                     borderRadius: '12px',
                                     border: '1px solid rgba(255,255,255,0.15)',
@@ -189,7 +273,6 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                                 }}
                             />
 
-                            {/* Progress Bar */}
                             {isRunning && (
                                 <div style={{ marginTop: '20px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -206,20 +289,15 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                                             height: '100%',
                                             width: `${progress}%`,
                                             background: 'linear-gradient(90deg, #f59e0b, #ea580c)',
-                                            transition: 'width 0.5s ease',
-                                            borderRadius: '4px'
+                                            transition: 'width 0.5s ease'
                                         }} />
                                     </div>
                                     <p style={{ color: '#71717a', fontSize: '12px', marginTop: '8px', textAlign: 'center' }}>
-                                        {isArabic
-                                            ? '⏳ قد يستغرق هذا 1-3 دقائق حسب تعقيد المهمة...'
-                                            : '⏳ This may take 1-3 minutes depending on task complexity...'
-                                        }
+                                        {isArabic ? '⏳ قد يستغرق 1-3 دقائق...' : '⏳ May take 1-3 minutes...'}
                                     </p>
                                 </div>
                             )}
 
-                            {/* Error */}
                             {error && (
                                 <div style={{
                                     marginTop: '16px',
@@ -232,7 +310,6 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                                 </div>
                             )}
 
-                            {/* Run Button */}
                             <button
                                 onClick={handleRunTask}
                                 disabled={isRunning || !prompt.trim()}
@@ -248,17 +325,13 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                                     color: '#fff',
                                     fontSize: '16px',
                                     fontWeight: '600',
-                                    cursor: isRunning || !prompt.trim() ? 'not-allowed' : 'pointer',
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                    gap: '8px'
+                                    cursor: isRunning || !prompt.trim() ? 'not-allowed' : 'pointer'
                                 }}
                             >
                                 {isRunning ? (
                                     <>🔄 {isArabic ? 'جاري التنفيذ...' : 'Running...'}</>
                                 ) : (
-                                    <>🚀 {isArabic ? 'ابدأ المهمة' : 'Start Task'}</>
+                                    <>🚀 {isArabic ? 'ابدأ البحث' : 'Start Research'}</>
                                 )}
                             </button>
                         </>
@@ -266,82 +339,145 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
 
                     {/* Results Section */}
                     {result && (
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                                <h3 style={{ color: '#22c55e', margin: 0 }}>
+                        <div ref={reportRef}>
+                            {/* Title & Actions */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+                                <h3 style={{ color: '#22c55e', margin: 0, fontSize: '18px' }}>
                                     ✅ {result.title}
                                 </h3>
-                                <button
-                                    onClick={handleReset}
-                                    style={{
-                                        padding: '8px 16px',
-                                        borderRadius: '8px',
-                                        border: '1px solid rgba(255,255,255,0.2)',
-                                        background: 'transparent',
-                                        color: '#fff',
-                                        cursor: 'pointer',
-                                        fontSize: '13px'
-                                    }}
-                                >
-                                    🔄 {isArabic ? 'مهمة جديدة' : 'New Task'}
-                                </button>
-                            </div>
-
-                            {/* Summary */}
-                            <div style={{
-                                background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(22, 163, 74, 0.1))',
-                                borderRadius: '16px',
-                                padding: '20px',
-                                marginBottom: '20px',
-                                border: '1px solid rgba(34, 197, 94, 0.2)'
-                            }}>
-                                <h4 style={{ color: '#22c55e', marginBottom: '12px', marginTop: 0 }}>
-                                    📝 {isArabic ? 'الملخص التنفيذي' : 'Executive Summary'}
-                                </h4>
-                                <p style={{ color: '#e5e5e5', lineHeight: '1.7', margin: 0, whiteSpace: 'pre-wrap' }}>
-                                    {result.summary}
-                                </p>
-                            </div>
-
-                            {/* Full Report */}
-                            <div style={{
-                                background: 'rgba(255,255,255,0.05)',
-                                borderRadius: '16px',
-                                padding: '20px',
-                                marginBottom: '20px'
-                            }}>
-                                <h4 style={{ color: '#fff', marginBottom: '12px', marginTop: 0 }}>
-                                    📄 {isArabic ? 'التقرير الكامل' : 'Full Report'}
-                                </h4>
-                                <div style={{
-                                    color: '#d4d4d4',
-                                    lineHeight: '1.8',
-                                    maxHeight: '400px',
-                                    overflowY: 'auto',
-                                    whiteSpace: 'pre-wrap',
-                                    fontSize: '14px'
-                                }}>
-                                    {result.report}
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={handleReset} style={{
+                                        padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)',
+                                        background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: '13px'
+                                    }}>
+                                        🔄 {isArabic ? 'جديد' : 'New'}
+                                    </button>
                                 </div>
                             </div>
 
-                            {/* Actions */}
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                <button
-                                    onClick={handleCopyReport}
-                                    style={{
-                                        flex: 1,
-                                        padding: '14px',
-                                        borderRadius: '10px',
-                                        border: 'none',
-                                        background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                                        color: '#fff',
-                                        cursor: 'pointer',
-                                        fontSize: '14px',
-                                        fontWeight: '500'
-                                    }}
-                                >
+                            {/* Tabs */}
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                                <button onClick={() => setActiveTab('summary')} style={tabStyle(activeTab === 'summary')}>
+                                    📝 {isArabic ? 'الملخص' : 'Summary'}
+                                </button>
+                                <button onClick={() => setActiveTab('report')} style={tabStyle(activeTab === 'report')}>
+                                    📄 {isArabic ? 'التقرير' : 'Report'}
+                                </button>
+                                <button onClick={() => setActiveTab('stats')} style={tabStyle(activeTab === 'stats')}>
+                                    📊 {isArabic ? 'الإحصائيات' : 'Stats'}
+                                </button>
+                                <button onClick={() => setActiveTab('sources')} style={tabStyle(activeTab === 'sources')}>
+                                    📚 {isArabic ? 'المصادر' : 'Sources'}
+                                </button>
+                            </div>
+
+                            {/* Tab Content */}
+                            {activeTab === 'summary' && (
+                                <div style={{
+                                    background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(22, 163, 74, 0.1))',
+                                    borderRadius: '16px',
+                                    padding: '20px',
+                                    border: '1px solid rgba(34, 197, 94, 0.2)'
+                                }}>
+                                    <h4 style={{ color: '#22c55e', marginTop: 0 }}>
+                                        📝 {isArabic ? 'الملخص التنفيذي' : 'Executive Summary'}
+                                    </h4>
+                                    <p style={{ color: '#e5e5e5', lineHeight: '1.8', whiteSpace: 'pre-wrap' }}>
+                                        {result.summary}
+                                    </p>
+                                </div>
+                            )}
+
+                            {activeTab === 'report' && (
+                                <div style={{
+                                    background: 'rgba(255,255,255,0.05)',
+                                    borderRadius: '16px',
+                                    padding: '20px',
+                                    maxHeight: '400px',
+                                    overflowY: 'auto'
+                                }}>
+                                    <div style={{ color: '#d4d4d4', lineHeight: '1.8', whiteSpace: 'pre-wrap', fontSize: '14px' }}>
+                                        {result.sections}
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'stats' && (
+                                <div style={{
+                                    background: 'rgba(255,255,255,0.05)',
+                                    borderRadius: '16px',
+                                    padding: '20px'
+                                }}>
+                                    <h4 style={{ color: '#fff', marginTop: 0 }}>
+                                        📊 {isArabic ? 'إحصائيات رئيسية' : 'Key Statistics'}
+                                    </h4>
+                                    {result.stats && result.stats.length > 0 ? (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+                                            {result.stats.map((stat, i) => (
+                                                <div key={i} style={{
+                                                    background: 'rgba(99, 102, 241, 0.1)',
+                                                    borderRadius: '12px',
+                                                    padding: '20px',
+                                                    textAlign: 'center',
+                                                    border: '1px solid rgba(99, 102, 241, 0.2)'
+                                                }}>
+                                                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#6366f1' }}>
+                                                        {stat.value}{stat.unit}
+                                                    </div>
+                                                    <div style={{ fontSize: '12px', color: '#a1a1aa', marginTop: '8px' }}>
+                                                        {stat.label}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p style={{ color: '#71717a', textAlign: 'center' }}>
+                                            {isArabic ? 'لا توجد إحصائيات متاحة' : 'No statistics available'}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {activeTab === 'sources' && (
+                                <div style={{
+                                    background: 'rgba(255,255,255,0.05)',
+                                    borderRadius: '16px',
+                                    padding: '20px'
+                                }}>
+                                    <h4 style={{ color: '#fff', marginTop: 0 }}>
+                                        📚 {isArabic ? 'المصادر والمراجع' : 'Sources & References'}
+                                    </h4>
+                                    {result.sources && result.sources.length > 0 ? (
+                                        <ul style={{ margin: 0, paddingLeft: isArabic ? 0 : '20px', paddingRight: isArabic ? '20px' : 0 }}>
+                                            {result.sources.map((source, i) => (
+                                                <li key={i} style={{ color: '#a1a1aa', marginBottom: '10px', fontSize: '14px' }}>
+                                                    {source.replace('[Source:', '').replace(']', '')}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p style={{ color: '#71717a' }}>
+                                            {isArabic ? 'لا توجد مصادر متاحة' : 'No sources available'}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
+                                <button onClick={handleCopyReport} style={{
+                                    flex: 1, minWidth: '150px', padding: '14px', borderRadius: '10px', border: 'none',
+                                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                                    color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500'
+                                }}>
                                     📋 {isArabic ? 'نسخ التقرير' : 'Copy Report'}
+                                </button>
+                                <button onClick={handleDownloadPDF} style={{
+                                    flex: 1, minWidth: '150px', padding: '14px', borderRadius: '10px', border: 'none',
+                                    background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                                    color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500'
+                                }}>
+                                    📄 {isArabic ? 'طباعة/PDF' : 'Print/PDF'}
                                 </button>
                             </div>
                         </div>
