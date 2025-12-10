@@ -1,7 +1,7 @@
 // AUTONOMOUS AGENT - Enhanced with Multiple Chart Types
 const MODELS = {
     BRAIN: 'gemini-2.5-flash',
-    FALLBACK: 'gemini-2.0-flash'
+    FALLBACK: 'gemini-2.5-flash-lite'
 };
 
 function getAPIKeys() {

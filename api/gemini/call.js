@@ -1,7 +1,7 @@
 // Gemini Call API - uses gemini-2.5-flash for presentations
 const MODELS = {
     PRIMARY: 'gemini-2.5-flash',
-    FALLBACK: 'gemini-2.0-flash'
+    FALLBACK: 'gemini-2.5-flash-lite'
 };
 
 const SYSTEM_PROMPT = `You are Lukas (لوكاس).

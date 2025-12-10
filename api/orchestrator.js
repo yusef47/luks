@@ -1,8 +1,8 @@
-// Main Orchestrator API - uses gemini-3-pro for smart responses
+// Main Orchestrator API - Updated Dec 2024
 const MODELS = {
-  PRIMARY: 'gemini-3-pro',
-  FALLBACK_1: 'gemini-2.5-pro',
-  FALLBACK_2: 'gemini-2.0-flash'
+  PRIMARY: 'gemini-2.5-flash',
+  FALLBACK_1: 'gemini-2.5-flash-lite',
+  FALLBACK_2: 'gemini-robotics-er-1.5-preview'
 };
 
 const SYSTEM_PROMPT = `You are Lukas (لوكاس), a highly intelligent AI assistant.

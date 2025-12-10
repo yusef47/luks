@@ -1,8 +1,8 @@
 // Synthesize API - THE BRAIN with dynamic re-thinking
 const MODELS = {
-    PRIMARY: 'gemini-3-pro',
-    FALLBACK_1: 'gemini-2.5-pro',
-    FALLBACK_2: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-2.5-flash',
+    FALLBACK_1: 'gemini-2.5-flash-lite',
+    FALLBACK_2: 'gemini-robotics-er-1.5-preview'
 };
 
 function getAPIKeys() {

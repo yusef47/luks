@@ -1,7 +1,7 @@
-// Intermediate API - uses gemini-2.5-flash
+// Intermediate API - uses gemini-2.5-flash-lite for fast processing
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash',
-    FALLBACK: 'gemini-2.0-flash'
+    PRIMARY: 'gemini-2.5-flash-lite',
+    FALLBACK: 'gemini-2.5-flash'
 };
 
 function getAPIKeys() {

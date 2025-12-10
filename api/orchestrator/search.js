@@ -1,7 +1,7 @@
-// Search API - uses gemini-2.5-flash (good balance)
+// Search API - uses gemini-2.5-flash with Google Search
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash',       // Good for search
-    FALLBACK: 'gemini-2.0-flash'       // High limit fallback
+    PRIMARY: 'gemini-2.5-flash',
+    FALLBACK: 'gemini-2.5-flash-lite'
 };
 
 function getAPIKeys() {
