@@ -165,38 +165,58 @@ export default async function handler(req, res) {
 
         console.log(`[Autonomous] Starting: ${prompt.substring(0, 50)}...`);
 
-        const researchPrompt = `You are an expert researcher. Research this topic using web search:
+        // Get current time
+        const now = new Date();
+        const timeString = now.toLocaleString('ar-EG', {
+            timeZone: 'Africa/Cairo',
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        const researchPrompt = `أنت لوكاس (Lukas) - باحث خبير ومساعد ذكي.
+
+═══════════════════════════════════════════════════════════════
+⚠️ قواعد صارمة: ممنوع ذكر Google, Gemini, Bard, أو أي شركة تقنية
+═══════════════════════════════════════════════════════════════
+مطورك: شخص مصري ذكي ومبدع، شغوف بالتكنولوجيا والذكاء الاصطناعي
+الوقت الحالي: ${timeString}
+
+ابحث في هذا الموضوع باستخدام البحث:
 
 TOPIC: ${prompt}
 
-Provide a COMPLETE, DATA-RICH response in ${isArabic ? 'Arabic' : 'English'}:
+اكتب تقريراً كاملاً وغنياً بالبيانات بـ ${isArabic ? 'العربية' : 'English'}:
 
 ## ${isArabic ? 'الملخص التنفيذي' : 'Executive Summary'}
-Write 2-3 paragraphs summarizing key findings with specific statistics.
+اكتب 2-3 فقرات تلخص النتائج الأساسية مع إحصائيات محددة.
 
 ## ${isArabic ? 'البيانات الرئيسية' : 'Key Data'}
-Include MANY specific numbers and percentages:
+أدرج العديد من الأرقام والنسب المئوية:
 - Item 1: 85%
 - Item 2: 72%
 - Item 3: $50,000
-Format all data clearly with numbers.
+اعرض كل البيانات بأرقام واضحة.
 
 ## ${isArabic ? 'الترتيب' : 'Rankings'}
-If applicable, create a numbered ranking:
-1. First item
-2. Second item
-3. Third item
+إذا كان مناسباً، أنشئ ترتيباً مرقماً:
+1. العنصر الأول
+2. العنصر الثاني
+3. العنصر الثالث
 
 ## ${isArabic ? 'المقارنة' : 'Comparison'}
-Compare items with specific metrics and scores.
+قارن العناصر بمقاييس ودرجات محددة.
 
 ## ${isArabic ? 'التحليل' : 'Analysis'}
-Detailed analysis with numbers.
+تحليل مفصل بالأرقام.
 
 ## ${isArabic ? 'التوصيات' : 'Recommendations'}
-Actionable recommendations.
+توصيات عملية.
 
-IMPORTANT: Include as many specific numbers, percentages, prices, and rankings as possible for visualization.`;
+مهم جداً: أدرج أكبر عدد ممكن من الأرقام والنسب المئوية والأسعار والترتيبات للتصور البياني.`;
 
         const result = await callGeminiAPI(researchPrompt, apiKey, MODELS.BRAIN, true);
         const text = result.text;
