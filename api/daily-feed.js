@@ -19,20 +19,29 @@ function getAPIKeys() {
     return keys.sort(() => Math.random() - 0.5);
 }
 
-// Smart API call with fallback
-async function callGeminiWithSearch(prompt, maxRetries = 9) {
+// Smart API call with fallback - tries ALL keys and ALL models
+async function callGeminiWithSearch(prompt, maxRetries = 30) {
     const keys = getAPIKeys();
-    if (keys.length === 0) throw new Error('No API keys');
+    console.log(`[DailyFeed] Found ${keys.length} API keys`);
+
+    if (keys.length === 0) throw new Error('No API keys configured');
 
     let lastError = null;
     let attempts = 0;
 
+    // Try each model
     for (const model of ALL_MODELS) {
+        // Try each key for this model
         for (const apiKey of keys) {
-            if (attempts >= maxRetries) break;
+            if (attempts >= maxRetries) {
+                console.log(`[DailyFeed] Reached max retries (${maxRetries})`);
+                break;
+            }
             attempts++;
 
             try {
+                console.log(`[DailyFeed] Attempt ${attempts}/${maxRetries}: ${model} with key ...${apiKey.slice(-6)}`);
+
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
                 const response = await fetch(url, {
@@ -44,20 +53,47 @@ async function callGeminiWithSearch(prompt, maxRetries = 9) {
                     })
                 });
 
-                if (response.status === 429) { lastError = new Error('Rate limit'); continue; }
-                if (response.status === 404) { lastError = new Error('Model not found'); break; }
-                if (!response.ok) { lastError = new Error(`Error ${response.status}`); continue; }
+                if (response.status === 429) {
+                    console.log(`[DailyFeed] Key rate limited, trying next...`);
+                    lastError = new Error('Rate limit');
+                    continue; // Try next key
+                }
+
+                if (response.status === 404) {
+                    console.log(`[DailyFeed] Model ${model} not found, trying next model...`);
+                    lastError = new Error('Model not found');
+                    break; // Skip to next model
+                }
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    console.log(`[DailyFeed] Error ${response.status}: ${errText.substring(0, 100)}`);
+                    lastError = new Error(`Error ${response.status}`);
+                    continue;
+                }
 
                 const data = await response.json();
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                if (!text) { lastError = new Error('Empty'); continue; }
 
+                if (!text) {
+                    console.log(`[DailyFeed] Empty response, trying next...`);
+                    lastError = new Error('Empty response');
+                    continue;
+                }
+
+                console.log(`[DailyFeed] SUCCESS on attempt ${attempts} with ${model}!`);
                 return text;
 
-            } catch (e) { lastError = e; continue; }
+            } catch (e) {
+                console.log(`[DailyFeed] Exception: ${e.message}`);
+                lastError = e;
+                continue;
+            }
         }
     }
-    throw lastError || new Error('All attempts failed');
+
+    console.log(`[DailyFeed] All ${attempts} attempts failed. Last error: ${lastError?.message}`);
+    throw lastError || new Error('All API attempts failed');
 }
 
 // Send email using Resend
