@@ -654,14 +654,15 @@ const App: React.FC = () => {
         // Update status to show we're processing the file
         updateExchange(convoId, newExchange.id, {
           status: 'executing',
-          results: [{ step: 1, agent: Agent.Orchestrator, task: 'Analyzing uploaded file...', result: '', status: 'running' }]
+          results: [{ step: 1, agent: Agent.Orchestrator, task: 'جاري تحليل الملف...', result: '', status: 'running' }]
         });
 
-        const fileAnalysis = await processFileWithAI(fileToProcess, originalPrompt);
+        try {
+          const fileAnalysis = await processFileWithAI(fileToProcess, originalPrompt);
 
-        if (fileAnalysis) {
-          // Combine file analysis with user's prompt
-          enhancedPrompt = `
+          if (fileAnalysis) {
+            // Combine file analysis with user's prompt
+            enhancedPrompt = `
 المستخدم رفع ملف: ${fileToProcess.name}
 
 محتوى الملف المستخرج:
@@ -669,9 +670,27 @@ ${fileAnalysis}
 
 طلب المستخدم: ${originalPrompt || 'حلل هذا الملف واشرح محتواه'}
 `;
-          console.log('[App] File analyzed successfully');
-        } else {
-          console.log('[App] File analysis returned empty');
+            console.log('[App] File analyzed successfully');
+          } else {
+            // File analysis returned empty - still try to proceed with the original prompt
+            console.log('[App] File analysis returned empty, using original prompt');
+            enhancedPrompt = originalPrompt || `تحليل الملف: ${fileToProcess.name}`;
+          }
+        } catch (fileError: any) {
+          console.error('[App] File processing failed:', fileError.message);
+          // If file processing fails, show error and stop
+          updateExchange(convoId, newExchange.id, {
+            status: 'completed',
+            results: [{
+              step: 1,
+              agent: Agent.Orchestrator,
+              task: 'File Analysis',
+              result: `⚠️ عذراً، لم أتمكن من قراءة الملف.\n\nالسبب: ${fileError.message}\n\n**نصائح:**\n- تأكد أن حجم الملف أقل من 3 ميجابايت\n- جرب رفع صورة للمستند (screenshot) بدلاً من PDF\n- تأكد أن الملف غير تالف`,
+              status: 'completed'
+            }]
+          });
+          setIsLoading(false);
+          return;
         }
       }
 
