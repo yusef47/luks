@@ -24,16 +24,16 @@ export interface GroundingSource {
 }
 
 export interface StoredFile {
-    id: string;
-    name: string;
-    data: Record<string, any>[]; // Array of objects for table data
-    createdAt: string;
+  id: string;
+  name: string;
+  data: Record<string, any>[]; // Array of objects for table data
+  createdAt: string;
 }
 
 export interface StepResult {
   step: number;
   agent: Agent;
-  task:string;
+  task: string;
   result: string;
   sources?: GroundingSource[];
   status: 'pending' | 'running' | 'completed' | 'error';
@@ -41,31 +41,32 @@ export interface StepResult {
 }
 
 export interface Geolocation {
-    latitude: number;
-    longitude: number;
+  latitude: number;
+  longitude: number;
 }
 
 export interface Clarification {
-    question: string;
-    options: { key: string; value: string; }[];
+  question: string;
+  options: { key: string; value: string; }[];
 }
 
 
 export interface Exchange {
-    id: string;
-    prompt: string;
-    imageFile: File | null;
-    videoFile: File | null;
-    plan: PlanStep[] | null;
-    results: StepResult[];
-    status: 'planning' | 'clarification_needed' | 'executing' | 'completed' | 'error';
-    generatedFile?: StoredFile | null;
-    clarification?: Clarification | null;
-    errorMessage?: string;
+  id: string;
+  prompt: string;
+  imageFile: File | null;
+  videoFile: File | null;
+  documentFile: File | null;  // PDF, Word, Excel, etc.
+  plan: PlanStep[] | null;
+  results: StepResult[];
+  status: 'planning' | 'clarification_needed' | 'executing' | 'completed' | 'error';
+  generatedFile?: StoredFile | null;
+  clarification?: Clarification | null;
+  errorMessage?: string;
 }
 
 export interface Conversation {
-    id: string;
-    title: string;
-    exchanges: Exchange[];
+  id: string;
+  title: string;
+  exchanges: Exchange[];
 }

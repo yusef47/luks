@@ -28,6 +28,8 @@ interface ChatPanelProps {
 
   // File handling
   previewUrl: string | null;
+  fileName?: string | null;
+  fileType?: string | null;
   onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onClearAttachment: () => void;
 
@@ -63,6 +65,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   setPrompt,
   onSubmit,
   previewUrl,
+  fileName,
+  fileType,
   onFileSelect,
   onClearAttachment,
   isListening,
@@ -305,6 +309,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           onSubmit={onSubmit}
           isLoading={isLoading}
           previewUrl={previewUrl}
+          fileName={fileName}
+          fileType={fileType}
           onFileSelect={onFileSelect}
           onClearAttachment={onClearAttachment}
           isListening={isListening}

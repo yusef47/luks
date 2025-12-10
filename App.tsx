@@ -213,6 +213,8 @@ const App: React.FC = () => {
   // ========== FILE ATTACHMENT ==========
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileType, setFileType] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ========== TUTOR MODE ==========
@@ -386,12 +388,21 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       setAttachedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
+      setFileName(file.name);
+      setFileType(file.type);
+      // Only create preview URL for images
+      if (file.type.startsWith('image/')) {
+        setPreviewUrl(URL.createObjectURL(file));
+      } else {
+        setPreviewUrl(null);
+      }
     }
   };
 
   const clearAttachment = () => {
     setAttachedFile(null);
+    setFileName(null);
+    setFileType(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -407,6 +418,7 @@ const App: React.FC = () => {
       prompt: text,
       imageFile: null,
       videoFile: null,
+      documentFile: null,
       plan: null,
       results: [],
       status: 'executing'
@@ -553,11 +565,17 @@ const App: React.FC = () => {
     if (!prompt.trim() && !attachedFile) return;
     if (isTutorMode) { handleTutorSubmit(prompt); return; }
 
+    // Determine file type
+    const isImage = attachedFile?.type.startsWith('image/');
+    const isVideo = attachedFile?.type.startsWith('video/');
+    const isDocument = attachedFile && !isImage && !isVideo;
+
     const newExchange: Exchange = {
       id: Date.now().toString(),
       prompt,
-      imageFile: attachedFile?.type.startsWith('image/') ? attachedFile : null,
-      videoFile: attachedFile?.type.startsWith('video/') ? attachedFile : null,
+      imageFile: isImage ? attachedFile : null,
+      videoFile: isVideo ? attachedFile : null,
+      documentFile: isDocument ? attachedFile : null,
       plan: null,
       results: [],
       status: 'planning'
@@ -774,6 +792,8 @@ const App: React.FC = () => {
               setPrompt={setPrompt}
               onSubmit={handleSubmit}
               previewUrl={previewUrl}
+              fileName={fileName}
+              fileType={fileType}
               onFileSelect={handleFileChange}
               onClearAttachment={clearAttachment}
               isListening={isListening}

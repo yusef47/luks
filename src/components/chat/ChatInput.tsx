@@ -16,6 +16,8 @@ interface ChatInputProps {
 
   // File attachment
   previewUrl: string | null;
+  fileName?: string | null;
+  fileType?: string | null;
   onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onClearAttachment: () => void;
 
@@ -40,6 +42,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onSubmit,
   isLoading,
   previewUrl,
+  fileName,
+  fileType,
   onFileSelect,
   onClearAttachment,
   isListening,
@@ -82,12 +86,47 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         />
 
         {/* File Preview */}
-        {previewUrl && (
-          <div className="relative w-24 h-24 mb-2 p-1 border border-[var(--border-color)] rounded-xl overflow-hidden bg-[var(--bg-tertiary-color)]">
-            <img src={previewUrl} className="w-full h-full object-cover rounded-lg" alt="Preview" />
+        {(previewUrl || fileName) && (
+          <div className="relative mb-2 p-2 border border-[var(--border-color)] rounded-xl bg-[var(--bg-tertiary-color)] flex items-center gap-2">
+            {/* Show image preview for images, icon for other files */}
+            {fileType?.startsWith('image/') ? (
+              <img src={previewUrl!} className="w-16 h-16 object-cover rounded-lg" alt="Preview" />
+            ) : (
+              <div className="w-16 h-16 flex items-center justify-center rounded-lg bg-[var(--hover-bg-color)]">
+                {fileType?.includes('pdf') && (
+                  <span className="text-2xl">📄</span>
+                )}
+                {(fileType?.includes('word') || fileType?.includes('document') || fileName?.endsWith('.docx') || fileName?.endsWith('.doc')) && (
+                  <span className="text-2xl">📝</span>
+                )}
+                {(fileType?.includes('sheet') || fileType?.includes('excel') || fileName?.endsWith('.xlsx') || fileName?.endsWith('.xls')) && (
+                  <span className="text-2xl">📊</span>
+                )}
+                {fileType?.includes('text') && (
+                  <span className="text-2xl">📃</span>
+                )}
+                {fileType?.startsWith('video/') && (
+                  <span className="text-2xl">🎬</span>
+                )}
+                {!fileType?.startsWith('image/') && !fileType?.includes('pdf') && !fileType?.includes('word') && !fileType?.includes('sheet') && !fileType?.includes('text') && !fileType?.startsWith('video/') && !fileName?.endsWith('.docx') && !fileName?.endsWith('.xlsx') && (
+                  <span className="text-2xl">📎</span>
+                )}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-[var(--text-color)] truncate">{fileName || 'Attached file'}</p>
+              <p className="text-xs text-[var(--text-secondary-color)]">
+                {fileType?.includes('pdf') && 'PDF Document'}
+                {(fileType?.includes('word') || fileName?.endsWith('.docx') || fileName?.endsWith('.doc')) && 'Word Document'}
+                {(fileType?.includes('sheet') || fileName?.endsWith('.xlsx') || fileName?.endsWith('.xls')) && 'Excel Sheet'}
+                {fileType?.includes('text') && 'Text File'}
+                {fileType?.startsWith('image/') && 'Image'}
+                {fileType?.startsWith('video/') && 'Video'}
+              </p>
+            </div>
             <button
               onClick={onClearAttachment}
-              className="absolute top-1 right-1 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
+              className="p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors"
             >
               <WindowCloseIcon className="w-3 h-3" />
             </button>
@@ -102,7 +141,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             ref={fileInputRef}
             onChange={onFileSelect}
             className="hidden"
-            accept="image/*,video/*"
+            accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
           />
 
           {/* Attachment Button */}
