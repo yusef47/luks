@@ -4,6 +4,9 @@ const MODELS = {
     FALLBACK: 'gemini-2.5-flash-lite'
 };
 
+// Vercel has a 4.5MB body limit
+const MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB to be safe
+
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
@@ -24,7 +27,7 @@ function getNextKey() {
 async function processWithGemini(fileContent, mimeType, prompt, apiKey, model = MODELS.PRIMARY) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-    console.log(`[FileProcess] Using ${model} with ${mimeType}...`);
+    console.log(`[FileProcess] Using ${model} with ${mimeType}, content size: ${fileContent.length} chars`);
 
     const requestBody = {
         contents: [{
@@ -40,30 +43,45 @@ async function processWithGemini(fileContent, mimeType, prompt, apiKey, model = 
                     text: prompt
                 }
             ]
-        }]
+        }],
+        // Add safety settings to avoid blocks
+        safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
     };
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify(requestBody)
-    });
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': apiKey
+            },
+            body: JSON.stringify(requestBody)
+        });
 
-    if ([429, 404, 503].includes(response.status) && model === MODELS.PRIMARY) {
-        console.log(`[FileProcess] Fallback to ${MODELS.FALLBACK}...`);
-        return processWithGemini(fileContent, mimeType, prompt, apiKey, MODELS.FALLBACK);
+        if ([429, 404, 503].includes(response.status) && model === MODELS.PRIMARY) {
+            console.log(`[FileProcess] Fallback to ${MODELS.FALLBACK}...`);
+            return processWithGemini(fileContent, mimeType, prompt, apiKey, MODELS.FALLBACK);
+        }
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[FileProcess] Gemini error ${response.status}:`, errorText.substring(0, 500));
+            throw new Error(`Gemini error ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        console.log(`[FileProcess] Got response, length: ${text.length}`);
+        return text;
+    } catch (error) {
+        console.error(`[FileProcess] API call failed:`, error.message);
+        throw error;
     }
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Gemini error ${response.status}: ${errorText.substring(0, 200)}`);
-    }
-
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 export default async function handler(req, res) {
@@ -77,8 +95,23 @@ export default async function handler(req, res) {
     try {
         const { fileContent, mimeType, fileName, prompt } = req.body || {};
 
+        console.log(`[FileProcess] Request received for: ${fileName} (${mimeType})`);
+
         if (!fileContent) {
+            console.log('[FileProcess] No file content in request');
             return res.status(400).json({ success: false, error: 'No file content provided' });
+        }
+
+        // Check file size
+        const fileSizeInBytes = (fileContent.length * 3) / 4; // Approximate original size from base64
+        console.log(`[FileProcess] File size approx: ${(fileSizeInBytes / 1024 / 1024).toFixed(2)} MB`);
+
+        if (fileSizeInBytes > MAX_FILE_SIZE) {
+            console.log('[FileProcess] File too large');
+            return res.status(400).json({
+                success: false,
+                error: `الملف كبير جداً (${(fileSizeInBytes / 1024 / 1024).toFixed(1)} MB). الحد الأقصى هو 3 MB.`
+            });
         }
 
         const apiKey = getNextKey();
@@ -86,22 +119,22 @@ export default async function handler(req, res) {
             return res.status(500).json({ success: false, error: 'No API keys available' });
         }
 
-        console.log(`[FileProcess] Processing ${fileName} (${mimeType})...`);
+        console.log(`[FileProcess] Processing ${fileName}...`);
 
         // Determine prompt based on file type
         let filePrompt = prompt || '';
 
         if (!filePrompt) {
-            if (mimeType.startsWith('image/')) {
-                filePrompt = 'Analyze this image in detail. Describe what you see, extract any text, and provide insights.';
-            } else if (mimeType.includes('pdf')) {
-                filePrompt = 'Read and extract all the text content from this PDF document. Summarize the main points.';
-            } else if (mimeType.includes('word') || mimeType.includes('document')) {
-                filePrompt = 'Read and extract all the text content from this Word document. Summarize the main points.';
-            } else if (mimeType.includes('sheet') || mimeType.includes('excel')) {
-                filePrompt = 'Analyze this spreadsheet. Describe the data, structure, and provide insights on the numbers.';
+            if (mimeType?.startsWith('image/')) {
+                filePrompt = 'حلل هذه الصورة بالتفصيل. اوصف ما تراه واستخرج أي نص واعط رؤى مفيدة.';
+            } else if (mimeType?.includes('pdf')) {
+                filePrompt = 'اقرأ واستخرج كل المحتوى النصي من هذا الملف PDF. إذا كان يحتوي على جداول، اعرضها بشكل منظم.';
+            } else if (mimeType?.includes('word') || mimeType?.includes('document')) {
+                filePrompt = 'اقرأ واستخرج كل المحتوى من هذا المستند Word. لخص النقاط الرئيسية.';
+            } else if (mimeType?.includes('sheet') || mimeType?.includes('excel')) {
+                filePrompt = 'حلل جدول البيانات هذا. اوصف الهيكل والبيانات وقدم رؤى.';
             } else {
-                filePrompt = 'Analyze this file and describe its contents in detail.';
+                filePrompt = 'حلل هذا الملف واوصف محتواه بالتفصيل.';
             }
         }
 
@@ -120,6 +153,10 @@ export default async function handler(req, res) {
 
     } catch (error) {
         console.error('[FileProcess] Error:', error.message);
-        return res.status(500).json({ success: false, error: error.message });
+        return res.status(500).json({
+            success: false,
+            error: error.message || 'Failed to process file'
+        });
     }
 }
+
