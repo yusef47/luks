@@ -24,6 +24,13 @@ function getNextKey() {
     return keys[Math.floor(Math.random() * keys.length)];
 }
 
+// Truncate text to avoid token limits
+function truncateText(text, maxLength = 8000) {
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '\n\n[... محتوى مختصر ...]';
+}
+
 async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -47,7 +54,8 @@ async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`${model} error ${response.status}: ${errorText.substring(0, 200)}`);
+        console.error(`[Intermediate] API Error: ${response.status} - ${errorText.substring(0, 300)}`);
+        throw new Error(`${model} error ${response.status}`);
     }
 
     const data = await response.json();
@@ -79,12 +87,19 @@ export default async function handler(req, res) {
             return;
         }
 
-        const intermediatePrompt = `You are Lukas. Process this step accurately.
-Task: ${task}
-User Request: ${prompt}
-Previous Results: ${JSON.stringify(results || [])}
+        // Truncate prompt and results to avoid token limits
+        const truncatedPrompt = truncateText(prompt, 6000);
+        const truncatedResults = results ? truncateText(JSON.stringify(results), 2000) : '[]';
 
-Provide relevant, accurate output. Never mention Google or Gemini.`;
+        const intermediatePrompt = `أنت لوكاس (Lukas). نفذ هذه الخطوة بدقة.
+
+المهمة: ${task}
+طلب المستخدم: ${truncatedPrompt}
+النتائج السابقة: ${truncatedResults}
+
+قدم إجابة دقيقة ومفيدة. لا تذكر Google أو Gemini أبداً.`;
+
+        console.log(`[Intermediate] Prompt length: ${intermediatePrompt.length} chars`);
 
         const responseText = await callGeminiAPI(intermediatePrompt, apiKey);
 
