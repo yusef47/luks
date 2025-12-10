@@ -70,7 +70,7 @@ export const DailyFeedSettings: React.FC<DailyFeedSettingsProps> = ({ onClose, t
         setMessage(null);
 
         try {
-            const response = await fetch('/api/daily-feed/generate', {
+            const response = await fetch('/api/daily-feed', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ topics, language, preview: true })
@@ -107,28 +107,14 @@ export const DailyFeedSettings: React.FC<DailyFeedSettingsProps> = ({ onClose, t
         setMessage(null);
 
         try {
-            // First subscribe
-            const subResponse = await fetch('/api/daily-feed/subscribe', {
+            // Send report to email directly
+            const response = await fetch('/api/daily-feed', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, topics, time, language })
+                body: JSON.stringify({ email, topics, language, preview: false })
             });
 
-            const subData = await subResponse.json();
-
-            if (!subData.success) {
-                setMessage({ type: 'error', text: subData.error });
-                return;
-            }
-
-            // Then send first report immediately
-            const genResponse = await fetch('/api/daily-feed/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, topics, language })
-            });
-
-            const genData = await genResponse.json();
+            const genData = await response.json();
 
             if (genData.success) {
                 setMessage({ type: 'success', text: '🎉 تم الاشتراك بنجاح! تفقد بريدك الإلكتروني الآن!' });
@@ -191,8 +177,8 @@ export const DailyFeedSettings: React.FC<DailyFeedSettingsProps> = ({ onClose, t
                                     key={topic.value}
                                     onClick={() => toggleTopic(topic.value)}
                                     className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${selectedTopics.includes(topic.value)
-                                            ? 'bg-indigo-600 text-white shadow-lg scale-105'
-                                            : 'bg-[var(--bg-tertiary-color)] text-[var(--text-color)] hover:bg-[var(--hover-bg-color)]'
+                                        ? 'bg-indigo-600 text-white shadow-lg scale-105'
+                                        : 'bg-[var(--bg-tertiary-color)] text-[var(--text-color)] hover:bg-[var(--hover-bg-color)]'
                                         }`}
                                 >
                                     {topic.emoji} {topic.label}
@@ -250,8 +236,8 @@ export const DailyFeedSettings: React.FC<DailyFeedSettingsProps> = ({ onClose, t
                     {/* Message */}
                     {message && (
                         <div className={`p-4 rounded-xl ${message.type === 'success'
-                                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                            : 'bg-red-500/20 text-red-400 border border-red-500/30'
                             }`}>
                             {message.text}
                         </div>
