@@ -1,28 +1,20 @@
-// Synthesize API - THE BRAIN with dynamic re-thinking
+// Synthesize API with Smart Fallback
 const MODELS = {
     PRIMARY: 'gemini-2.5-flash',
     FALLBACK_1: 'gemini-2.5-flash-lite',
     FALLBACK_2: 'gemini-robotics-er-1.5-preview'
 };
 
+const ALL_MODELS = [MODELS.PRIMARY, MODELS.FALLBACK_1, MODELS.FALLBACK_2];
+
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
         const key = process.env[`GEMINI_API_KEY_${i}`];
-        if (key && key.trim().length > 0) {
-            keys.push(key.trim());
-        }
+        if (key && key.trim().length > 0) keys.push(key.trim());
     }
-    if (process.env.GEMINI_API_KEY) {
-        keys.push(process.env.GEMINI_API_KEY.trim());
-    }
-    return keys;
-}
-
-function getNextKey() {
-    const keys = getAPIKeys();
-    if (keys.length === 0) return null;
-    return keys[Math.floor(Math.random() * keys.length)];
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
+    return keys.sort(() => Math.random() - 0.5);
 }
 
 function detectLanguage(text) {
@@ -30,40 +22,47 @@ function detectLanguage(text) {
     return arabicPattern.test(text) ? 'ar' : 'en';
 }
 
-async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY, attempt = 1) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+// Smart call that tries all keys and models
+async function callGeminiAPI(prompt, maxRetries = 9) {
+    const keys = getAPIKeys();
+    if (keys.length === 0) throw new Error('No API keys');
 
-    console.log(`[Synthesize] Attempt ${attempt}: Using ${model}...`);
+    let lastError = null;
+    let attempts = 0;
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }]
-        })
-    });
+    for (const model of ALL_MODELS) {
+        for (const apiKey of keys) {
+            if (attempts >= maxRetries) break;
+            attempts++;
 
-    if (response.status === 429 || response.status === 404 || response.status === 503) {
-        console.log(`[Synthesize] ${model} failed (${response.status}), trying fallback...`);
-        if (model === MODELS.PRIMARY && MODELS.FALLBACK_1) {
-            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1, 2);
-        } else if (model === MODELS.FALLBACK_1 && MODELS.FALLBACK_2) {
-            return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2, 3);
+            try {
+                console.log(`[Synthesize] Attempt ${attempts}: ${model}`);
+
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+                    })
+                });
+
+                if (response.status === 429) { lastError = new Error('Rate limit'); continue; }
+                if (response.status === 404) { lastError = new Error('Model not found'); break; }
+                if (!response.ok) { lastError = new Error(`Error ${response.status}`); continue; }
+
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                if (!text) { lastError = new Error('Empty'); continue; }
+
+                console.log(`[Synthesize] SUCCESS on attempt ${attempts}!`);
+                return { text, model };
+
+            } catch (e) { lastError = e; continue; }
         }
     }
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Synthesize] ${model} ERROR: ${response.status}`);
-        throw new Error(`${model} error ${response.status}: ${errorText.substring(0, 200)}`);
-    }
-
-    const data = await response.json();
-    console.log(`[Synthesize] SUCCESS with ${model}!`);
-    return { text: data.candidates?.[0]?.content?.parts?.[0]?.text || '', model };
+    throw lastError || new Error('All attempts failed');
 }
 
 export default async function handler(req, res) {
@@ -83,12 +82,6 @@ export default async function handler(req, res) {
 
     try {
         const { prompt, results, conversationHistory } = req.body || {};
-
-        const apiKey = getNextKey();
-        if (!apiKey) {
-            res.status(500).json({ success: false, error: 'No API keys available' });
-            return;
-        }
 
         const userLanguage = detectLanguage(prompt);
 
@@ -173,7 +166,7 @@ USER QUESTION: "${prompt}"
 
 Now provide a comprehensive, well-structured ${userLanguage === 'ar' ? 'Arabic' : 'English'} response that addresses ALL parts of the question:`;
 
-        const { text, model } = await callGeminiAPI(synthesizePrompt, apiKey);
+        const { text, model } = await callGeminiAPI(synthesizePrompt);
 
         res.status(200).json({
             success: true,

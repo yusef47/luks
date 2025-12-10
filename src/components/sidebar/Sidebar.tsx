@@ -34,6 +34,9 @@ interface SidebarProps {
   isAutonomousMode?: boolean;
   onToggleAutonomous?: () => void;
 
+  // Daily Feed
+  onOpenDailyFeed?: () => void;
+
   // Localization
   t: (key: string) => string;
 }
@@ -55,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTogglePresentation,
   isAutonomousMode,
   onToggleAutonomous,
+  onOpenDailyFeed,
   t
 }) => {
   return (
@@ -109,6 +113,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <span className="text-lg">🧠</span>
           <span className="text-sm font-medium">Autonomous Mode</span>
+        </button>
+
+        {/* Daily Feed Toggle */}
+        <button
+          onClick={onOpenDailyFeed}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border bg-[var(--bg-tertiary-color)] text-[var(--text-primary-color)] border-[var(--border-color)] hover:border-indigo-500/50 hover:bg-indigo-500/10"
+        >
+          <span className="text-lg">⭐</span>
+          <span className="text-sm font-medium">Daily Intelligence</span>
         </button>
       </div>
 

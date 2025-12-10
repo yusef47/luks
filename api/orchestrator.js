@@ -80,48 +80,94 @@ function getAPIKeys() {
   if (process.env.GEMINI_API_KEY) {
     keys.push(process.env.GEMINI_API_KEY.trim());
   }
-  return keys;
+  // Shuffle keys for random distribution
+  return keys.sort(() => Math.random() - 0.5);
 }
 
-function getNextKey() {
+const ALL_MODELS = [
+  MODELS.PRIMARY,
+  MODELS.FALLBACK_1,
+  MODELS.FALLBACK_2
+];
+
+// Smart call that tries ALL keys and ALL models before failing
+async function callGeminiAPI(prompt, maxRetries = 9) {
   const keys = getAPIKeys();
-  if (keys.length === 0) return null;
-  return keys[Math.floor(Math.random() * keys.length)];
-}
 
-async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  if (keys.length === 0) {
+    throw new Error('No API keys available');
+  }
 
-  console.log(`[Orchestrator] Using ${model}...`);
+  let lastError = null;
+  let attempts = 0;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey
-    },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }]
-    })
-  });
+  // Try each model
+  for (const model of ALL_MODELS) {
+    // Try each key for this model
+    for (const apiKey of keys) {
+      if (attempts >= maxRetries) break;
+      attempts++;
 
-  // Fallback chain
-  if (response.status === 429 || response.status === 404 || response.status === 503) {
-    console.log(`[Orchestrator] ${model} failed, trying fallback...`);
-    if (model === MODELS.PRIMARY) {
-      return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_1);
-    } else if (model === MODELS.FALLBACK_1) {
-      return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK_2);
+      try {
+        console.log(`[Orchestrator] Attempt ${attempts}: ${model} with key ...${apiKey.slice(-6)}`);
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey
+          },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          })
+        });
+
+        // Rate limit - try next key immediately
+        if (response.status === 429) {
+          console.log(`[Orchestrator] Key rate limited, trying next...`);
+          lastError = new Error('Rate limit');
+          continue;
+        }
+
+        // Model not found - try next model
+        if (response.status === 404) {
+          console.log(`[Orchestrator] Model not available, trying next...`);
+          lastError = new Error('Model not available');
+          break; // Move to next model
+        }
+
+        // Other error
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log(`[Orchestrator] Error ${response.status}, trying next...`);
+          lastError = new Error(`API error ${response.status}`);
+          continue;
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        if (!text) {
+          console.log(`[Orchestrator] Empty response, trying next...`);
+          lastError = new Error('Empty response');
+          continue;
+        }
+
+        console.log(`[Orchestrator] SUCCESS on attempt ${attempts} with ${model}!`);
+        return text;
+
+      } catch (error) {
+        console.log(`[Orchestrator] Attempt ${attempts} error: ${error.message}`);
+        lastError = error;
+        continue;
+      }
     }
   }
 
-  if (!response.ok) {
-    throw new Error(`API error ${response.status}`);
-  }
-
-  const data = await response.json();
-  console.log(`[Orchestrator] SUCCESS with ${model}!`);
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  // All attempts failed
+  throw lastError || new Error('All API attempts failed');
 }
 
 export default async function handler(req, res) {
@@ -145,12 +191,6 @@ export default async function handler(req, res) {
 
     if (!userPrompt) {
       res.status(400).json({ success: false, error: 'Missing prompt' });
-      return;
-    }
-
-    const apiKey = getNextKey();
-    if (!apiKey) {
-      res.status(500).json({ success: false, error: 'No API keys available' });
       return;
     }
 
@@ -180,7 +220,9 @@ export default async function handler(req, res) {
 ═══════════════════════════════════════════════════════════════
 الآن: ${timeString}
 ` + contextString + '\n\nUSER: ' + userPrompt;
-    const responseText = await callGeminiAPI(fullPrompt, apiKey);
+
+    // Call with smart fallback
+    const responseText = await callGeminiAPI(fullPrompt);
 
     res.status(200).json({
       success: true,

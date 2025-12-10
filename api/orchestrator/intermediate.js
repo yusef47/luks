@@ -1,66 +1,69 @@
-// Intermediate API - uses gemini-2.5-flash-lite for fast processing
+// Intermediate API with Smart Fallback
 const MODELS = {
     PRIMARY: 'gemini-2.5-flash-lite',
-    FALLBACK: 'gemini-2.5-flash'
+    FALLBACK_1: 'gemini-2.5-flash',
+    FALLBACK_2: 'gemini-robotics-er-1.5-preview'
 };
+
+const ALL_MODELS = [MODELS.PRIMARY, MODELS.FALLBACK_1, MODELS.FALLBACK_2];
 
 function getAPIKeys() {
     const keys = [];
     for (let i = 1; i <= 13; i++) {
         const key = process.env[`GEMINI_API_KEY_${i}`];
-        if (key && key.trim().length > 0) {
-            keys.push(key.trim());
-        }
+        if (key && key.trim().length > 0) keys.push(key.trim());
     }
-    if (process.env.GEMINI_API_KEY) {
-        keys.push(process.env.GEMINI_API_KEY.trim());
-    }
-    return keys;
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
+    return keys.sort(() => Math.random() - 0.5);
 }
 
-function getNextKey() {
-    const keys = getAPIKeys();
-    if (keys.length === 0) return null;
-    return keys[Math.floor(Math.random() * keys.length)];
-}
-
-// Truncate text to avoid token limits
-function truncateText(text, maxLength = 8000) {
+function truncateText(text, maxLength = 6000) {
     if (!text) return '';
     if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '\n\n[... محتوى مختصر ...]';
+    return text.substring(0, maxLength) + '\n[محتوى مختصر...]';
 }
 
-async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+// Smart call that tries all keys and models
+async function callGeminiAPI(prompt, maxRetries = 9) {
+    const keys = getAPIKeys();
+    if (keys.length === 0) throw new Error('No API keys');
 
-    console.log(`[Intermediate] Using ${model}...`);
+    let lastError = null;
+    let attempts = 0;
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }]
-        })
-    });
+    for (const model of ALL_MODELS) {
+        for (const apiKey of keys) {
+            if (attempts >= maxRetries) break;
+            attempts++;
 
-    if ((response.status === 429 || response.status === 404 || response.status === 503) && model === MODELS.PRIMARY) {
-        console.log(`[Intermediate] Fallback to ${MODELS.FALLBACK}...`);
-        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+            try {
+                console.log(`[Intermediate] Attempt ${attempts}: ${model}`);
+
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+                    })
+                });
+
+                if (response.status === 429) { lastError = new Error('Rate limit'); continue; }
+                if (response.status === 404) { lastError = new Error('Model not found'); break; }
+                if (!response.ok) { lastError = new Error(`Error ${response.status}`); continue; }
+
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                if (!text) { lastError = new Error('Empty'); continue; }
+
+                console.log(`[Intermediate] SUCCESS on attempt ${attempts}!`);
+                return text;
+
+            } catch (e) { lastError = e; continue; }
+        }
     }
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Intermediate] API Error: ${response.status} - ${errorText.substring(0, 300)}`);
-        throw new Error(`${model} error ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log(`[Intermediate] SUCCESS with ${model}!`);
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    throw lastError || new Error('All attempts failed');
 }
 
 export default async function handler(req, res) {
@@ -68,44 +71,28 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
-    }
-
-    if (req.method !== 'POST') {
-        res.status(405).json({ success: false, error: 'Method not allowed' });
-        return;
-    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
     try {
         const { task, prompt, results } = req.body || {};
 
-        const apiKey = getNextKey();
-        if (!apiKey) {
-            res.status(500).json({ success: false, error: 'No API keys available' });
-            return;
-        }
+        const truncatedPrompt = truncateText(prompt, 5000);
+        const truncatedResults = results ? truncateText(JSON.stringify(results), 1500) : '[]';
 
-        // Truncate prompt and results to avoid token limits
-        const truncatedPrompt = truncateText(prompt, 6000);
-        const truncatedResults = results ? truncateText(JSON.stringify(results), 2000) : '[]';
-
-        const intermediatePrompt = `أنت لوكاس (Lukas). نفذ هذه الخطوة بدقة.
+        const intermediatePrompt = `أنت لوكاس. نفذ هذه المهمة بدقة:
 
 المهمة: ${task}
-طلب المستخدم: ${truncatedPrompt}
-النتائج السابقة: ${truncatedResults}
+الطلب: ${truncatedPrompt}
+${truncatedResults !== '[]' ? `السياق: ${truncatedResults}` : ''}
 
-قدم إجابة دقيقة ومفيدة. لا تذكر Google أو Gemini أبداً.`;
+قدم إجابة مفيدة وموجزة.`;
 
-        console.log(`[Intermediate] Prompt length: ${intermediatePrompt.length} chars`);
-
-        const responseText = await callGeminiAPI(intermediatePrompt, apiKey);
-
+        const responseText = await callGeminiAPI(intermediatePrompt);
         res.status(200).json({ success: true, data: responseText });
     } catch (error) {
         console.error('[Intermediate] Error:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 }
+

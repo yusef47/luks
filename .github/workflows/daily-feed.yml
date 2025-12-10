@@ -1,0 +1,25 @@
+name: Daily Intelligence Feed
+
+on:
+  schedule:
+    # Run at 6 AM Cairo time (4 AM UTC)
+    - cron: '0 4 * * *'
+    # Run at 8 AM Cairo time (6 AM UTC)
+    - cron: '0 6 * * *'
+    # Run at 10 AM Cairo time (8 AM UTC)
+    - cron: '0 8 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  send-daily-feeds:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Daily Feed Generator
+        run: |
+          echo "Triggering daily feed generation..."
+          # This calls the deployed API to send feeds
+          # In production, you would iterate over subscribers
+          curl -X POST https://luks-pied.vercel.app/api/daily-feed/generate \
+            -H "Content-Type: application/json" \
+            -d '{"preview": false}' || true
+          echo "Daily feed trigger complete!"

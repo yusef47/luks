@@ -21,6 +21,7 @@ import { VirtualComputer } from './src/components/computer/VirtualComputer';
 import { TaskProgress } from './src/components/computer/TaskProgress';
 import PresentationGenerator from './src/components/presentation/PresentationGenerator';
 import AutonomousMode from './src/components/AutonomousMode';
+import DailyFeedSettings from './src/components/DailyFeedSettings';
 
 // Services
 import { speechService } from './src/services/speechService';
@@ -237,6 +238,7 @@ const App: React.FC = () => {
   // ========== PRESENTATION MODE ==========
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [isAutonomousMode, setIsAutonomousMode] = useState(false);
+  const [showDailyFeed, setShowDailyFeed] = useState(false);
 
   // ========== CONVERSATIONS ==========
   const [conversations, setConversations] = useState<Conversation[]>(() => {
@@ -870,6 +872,7 @@ ${fileAnalysis}
         onTogglePresentation={() => setIsPresentationMode(!isPresentationMode)}
         isAutonomousMode={isAutonomousMode}
         onToggleAutonomous={() => setIsAutonomousMode(!isAutonomousMode)}
+        onOpenDailyFeed={() => setShowDailyFeed(true)}
         t={t as any}
       />
 
@@ -938,6 +941,14 @@ ${fileAnalysis}
         onClose={() => setIsAutonomousMode(false)}
         language={lang}
       />
+
+      {/* Daily Feed Settings Modal */}
+      {showDailyFeed && (
+        <DailyFeedSettings
+          onClose={() => setShowDailyFeed(false)}
+          t={t as any}
+        />
+      )}
     </div>
   );
 };
