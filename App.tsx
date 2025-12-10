@@ -408,6 +408,49 @@ const App: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Helper: Convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove the data URL prefix (e.g., "data:image/png;base64,")
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  // Process file with AI and get extracted text
+  const processFileWithAI = async (file: File, userPrompt: string): Promise<string> => {
+    try {
+      const base64Content = await fileToBase64(file);
+
+      const response = await fetch('/api/file/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileContent: base64Content,
+          mimeType: file.type,
+          fileName: file.name,
+          prompt: userPrompt || `Analyze this file and describe its contents in detail.`
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process file');
+      }
+
+      const data = await response.json();
+      return data.data?.extractedText || '';
+    } catch (error) {
+      console.error('Error processing file:', error);
+      return '';
+    }
+  };
+
   // ========== TUTOR HANDLERS ==========
 
   const handleTutorSubmit = async (text: string) => {
@@ -570,6 +613,10 @@ const App: React.FC = () => {
     const isVideo = attachedFile?.type.startsWith('video/');
     const isDocument = attachedFile && !isImage && !isVideo;
 
+    // Store file reference before clearing
+    const fileToProcess = attachedFile;
+    const originalPrompt = prompt;
+
     const newExchange: Exchange = {
       id: Date.now().toString(),
       prompt,
@@ -590,7 +637,7 @@ const App: React.FC = () => {
       ));
     } else {
       convoId = Date.now().toString();
-      setConversations(prev => [...prev, { id: convoId, title: prompt, exchanges: [newExchange] }]);
+      setConversations(prev => [...prev, { id: convoId, title: prompt || 'File Analysis', exchanges: [newExchange] }]);
       setActiveConversationId(convoId);
     }
 
@@ -598,12 +645,48 @@ const App: React.FC = () => {
     setIsLoading(true);
 
     try {
+      // If there's a file, process it first
+      let enhancedPrompt = originalPrompt;
+
+      if (fileToProcess) {
+        console.log(`[App] Processing file: ${fileToProcess.name} (${fileToProcess.type})`);
+
+        // Update status to show we're processing the file
+        updateExchange(convoId, newExchange.id, {
+          status: 'executing',
+          results: [{ step: 1, agent: Agent.Orchestrator, task: 'Analyzing uploaded file...', result: '', status: 'running' }]
+        });
+
+        const fileAnalysis = await processFileWithAI(fileToProcess, originalPrompt);
+
+        if (fileAnalysis) {
+          // Combine file analysis with user's prompt
+          enhancedPrompt = `
+المستخدم رفع ملف: ${fileToProcess.name}
+
+محتوى الملف المستخرج:
+${fileAnalysis}
+
+طلب المستخدم: ${originalPrompt || 'حلل هذا الملف واشرح محتواه'}
+`;
+          console.log('[App] File analyzed successfully');
+        } else {
+          console.log('[App] File analysis returned empty');
+        }
+      }
+
+      // Update the exchange prompt with enhanced version
+      updateExchange(convoId, newExchange.id, {
+        prompt: enhancedPrompt,
+        status: 'planning'
+      });
+
       const history = conversations.find(c => c.id === convoId)?.exchanges
         .filter(e => e.status === 'completed')
         .map(e => ({ prompt: e.prompt, results: e.results })) || [];
 
       const planResponse = await generatePlan(
-        newExchange.prompt,
+        enhancedPrompt,
         !!newExchange.imageFile,
         !!newExchange.videoFile,
         history as any,
@@ -617,7 +700,7 @@ const App: React.FC = () => {
       });
 
       if (planResponse.plan) {
-        await handleExecute(convoId, newExchange.id, newExchange, planResponse.plan);
+        await handleExecute(convoId, newExchange.id, { ...newExchange, prompt: enhancedPrompt }, planResponse.plan);
       }
     } catch (err: any) {
       updateExchange(convoId, newExchange.id, { status: 'error', errorMessage: err.message });
