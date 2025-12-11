@@ -336,9 +336,15 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
             setProgress(100);
             setStatusMessage(isArabic ? '✅ اكتمل!' : '✅ Complete!');
             setResult({
-                title: prompt,
-                results: { summary: data.data.summary || '', report: data.data.report || '', stats: data.data.stats || [], charts: data.data.charts || [], sources: data.data.sources || [] },
-                execution: { executionTime: data.data.executionTime || '5s' }
+                title: data.data.title || prompt,
+                results: {
+                    summary: data.data.results?.summary || '',
+                    report: data.data.results?.report || '',
+                    stats: data.data.results?.stats || [],
+                    charts: data.data.results?.charts || [],
+                    sources: data.data.results?.sources || []
+                },
+                execution: data.data.execution || { executionTime: '5s' }
             });
         } catch (err: any) {
             clearInterval(progressInterval);
