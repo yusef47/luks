@@ -7,7 +7,7 @@ interface AutonomousModeProps {
 }
 
 interface ChartData {
-    type: 'donut' | 'bar' | 'ranking' | 'score' | 'versus';
+    type: 'donut' | 'bar' | 'ranking' | 'score' | 'versus' | 'ring';
     title: string;
     data: { label: string; value: number; rank?: number }[];
     unit: string;
@@ -31,27 +31,83 @@ interface TaskResult {
 const BACKEND_URL = '/api';
 
 // ============================================
-// 🌟 CHART COMPONENTS - All Types
+// 🌟 NEURAL NETWORK BACKGROUND
 // ============================================
+const NeuralNetworkBackground: React.FC = () => {
+    const nodes = Array.from({ length: 20 }, (_, i) => ({
+        id: i,
+        cx: 10 + Math.random() * 80,
+        cy: 10 + Math.random() * 80,
+        r: 2 + Math.random() * 3,
+    }));
 
-// Animated Donut/Ring Chart
-const DonutChart: React.FC<{ chart: ChartData; isArabic: boolean }> = ({ chart, isArabic }) => {
+    const connections: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    nodes.forEach((n1, i) => {
+        nodes.forEach((n2, j) => {
+            if (i < j && Math.random() > 0.7) {
+                connections.push({ x1: n1.cx, y1: n1.cy, x2: n2.cx, y2: n2.cy });
+            }
+        });
+    });
+
+    return (
+        <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.15, pointerEvents: 'none' }}>
+            <defs>
+                <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#6366f1" />
+                    <stop offset="100%" stopColor="#22d3ee" />
+                </linearGradient>
+                <filter id="glow">
+                    <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                    <feMerge>
+                        <feMergeNode in="coloredBlur" />
+                        <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                </filter>
+            </defs>
+            {connections.map((c, i) => (
+                <line key={i} x1={`${c.x1}%`} y1={`${c.y1}%`} x2={`${c.x2}%`} y2={`${c.y2}%`}
+                    stroke="url(#lineGrad)" strokeWidth="0.5" filter="url(#glow)" />
+            ))}
+            {nodes.map((n, i) => (
+                <circle key={i} cx={`${n.cx}%`} cy={`${n.cy}%`} r={n.r}
+                    fill="#6366f1" filter="url(#glow)">
+                    <animate attributeName="opacity" values="0.5;1;0.5" dur={`${2 + Math.random() * 2}s`} repeatCount="indefinite" />
+                </circle>
+            ))}
+        </svg>
+    );
+};
+
+// ============================================
+// 🔵 LARGE DONUT CHART (Main Chart)
+// ============================================
+const LargeDonutChart: React.FC<{ chart: ChartData }> = ({ chart }) => {
     const [animated, setAnimated] = useState(false);
-    const colors = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    const colors = ['#6366f1', '#22d3ee', '#22c55e', '#f59e0b', '#ef4444', '#ec4899'];
 
-    useEffect(() => { setTimeout(() => setAnimated(true), 100); }, []);
+    useEffect(() => { setTimeout(() => setAnimated(true), 200); }, []);
 
     const total = chart.data.reduce((a, b) => a + b.value, 0);
     let currentAngle = 0;
 
     return (
-        <div style={{ marginBottom: '28px', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', padding: '20px' }}>
-            <h4 style={{ color: '#fff', marginBottom: '20px', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', padding: '6px 10px', borderRadius: '8px' }}>📊</span>
+        <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '20px', padding: '24px', border: '1px solid rgba(99,102,241,0.2)' }}>
+            <h4 style={{ color: '#fff', marginBottom: '20px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ background: 'linear-gradient(135deg, #6366f1, #22d3ee)', padding: '6px 10px', borderRadius: '8px', fontSize: '12px' }}>📊</span>
                 {chart.title}
             </h4>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '30px', flexWrap: 'wrap' }}>
-                <svg width="180" height="180" viewBox="0 0 100 100">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '30px' }}>
+                <svg width="200" height="200" viewBox="0 0 100 100">
+                    <defs>
+                        <filter id="chartGlow">
+                            <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                            <feMerge>
+                                <feMergeNode in="coloredBlur" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
+                    </defs>
                     {chart.data.map((item, i) => {
                         const angle = (item.value / total) * 360;
                         const startAngle = currentAngle;
@@ -61,36 +117,36 @@ const DonutChart: React.FC<{ chart: ChartData; isArabic: boolean }> = ({ chart, 
                         const endRad = (startAngle + angle - 90) * Math.PI / 180;
                         const largeArc = angle > 180 ? 1 : 0;
 
-                        const x1 = 50 + 35 * Math.cos(startRad);
-                        const y1 = 50 + 35 * Math.sin(startRad);
-                        const x2 = 50 + 35 * Math.cos(endRad);
-                        const y2 = 50 + 35 * Math.sin(endRad);
+                        const x1 = 50 + 38 * Math.cos(startRad);
+                        const y1 = 50 + 38 * Math.sin(startRad);
+                        const x2 = 50 + 38 * Math.cos(endRad);
+                        const y2 = 50 + 38 * Math.sin(endRad);
 
-                        const path = `M 50 50 L ${x1} ${y1} A 35 35 0 ${largeArc} 1 ${x2} ${y2} Z`;
+                        const path = `M 50 50 L ${x1} ${y1} A 38 38 0 ${largeArc} 1 ${x2} ${y2} Z`;
 
                         return (
-                            <path
-                                key={i}
-                                d={path}
-                                fill={colors[i % colors.length]}
+                            <path key={i} d={path} fill={colors[i % colors.length]}
                                 style={{
                                     opacity: animated ? 1 : 0,
                                     transform: animated ? 'scale(1)' : 'scale(0)',
                                     transformOrigin: '50px 50px',
-                                    transition: `all 0.5s ease ${i * 0.1}s`,
-                                    filter: `drop-shadow(0 0 8px ${colors[i % colors.length]}66)`
+                                    transition: `all 0.6s ease ${i * 0.1}s`,
                                 }}
+                                filter="url(#chartGlow)"
                             />
                         );
                     })}
-                    <circle cx="50" cy="50" r="22" fill="#0a0a12" />
+                    <circle cx="50" cy="50" r="25" fill="#0a0a12" />
+                    <text x="50" y="50" textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize="12" fontWeight="bold">
+                        {Math.round((chart.data[0]?.value / total) * 100)}%
+                    </text>
                 </svg>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {chart.data.map((item, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: colors[i % colors.length], boxShadow: `0 0 10px ${colors[i % colors.length]}` }} />
-                            <span style={{ color: '#a1a1aa', fontSize: '12px' }}>{item.label}</span>
-                            <span style={{ color: '#fff', fontSize: '12px', fontWeight: '600' }}>{item.value}{chart.unit}</span>
+                            <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: colors[i % colors.length], boxShadow: `0 0 12px ${colors[i % colors.length]}` }} />
+                            <span style={{ color: '#a1a1aa', fontSize: '11px' }}>{item.label}</span>
+                            <span style={{ color: '#fff', fontSize: '11px', fontWeight: '600' }}>{item.value}{chart.unit}</span>
                         </div>
                     ))}
                 </div>
@@ -99,117 +155,75 @@ const DonutChart: React.FC<{ chart: ChartData; isArabic: boolean }> = ({ chart, 
     );
 };
 
-// Neon Bar Chart
-const NeonBarChart: React.FC<{ chart: ChartData; isArabic: boolean }> = ({ chart, isArabic }) => {
+// ============================================
+// 🔷 PROGRESS RING (Performance Meters)
+// ============================================
+const ProgressRing: React.FC<{ value: number; max: number; label: string; color: string }> = ({ value, max, label, color }) => {
     const [animated, setAnimated] = useState(false);
-    const maxValue = Math.max(...chart.data.map(d => d.value));
-    const colors = ['#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6'];
+    const percent = (value / max) * 100;
+    const circumference = 2 * Math.PI * 35;
+    const offset = circumference - (percent / 100) * circumference;
 
-    useEffect(() => { setTimeout(() => setAnimated(true), 100); }, []);
+    useEffect(() => { setTimeout(() => setAnimated(true), 300); }, []);
 
     return (
-        <div style={{ marginBottom: '28px', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', padding: '20px' }}>
-            <h4 style={{ color: '#fff', marginBottom: '20px', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ background: 'linear-gradient(135deg, #22c55e, #10b981)', padding: '6px 10px', borderRadius: '8px' }}>📈</span>
+        <div style={{ textAlign: 'center' }}>
+            <svg width="90" height="90" viewBox="0 0 80 80">
+                <defs>
+                    <filter id={`ringGlow${label}`}>
+                        <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                        <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                    </filter>
+                </defs>
+                <circle cx="40" cy="40" r="35" stroke="rgba(255,255,255,0.1)" strokeWidth="6" fill="none" />
+                <circle cx="40" cy="40" r="35" stroke={color} strokeWidth="6" fill="none"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={animated ? offset : circumference}
+                    strokeLinecap="round"
+                    transform="rotate(-90 40 40)"
+                    style={{ transition: 'stroke-dashoffset 1s ease' }}
+                    filter={`url(#ringGlow${label})`}
+                />
+                <text x="40" y="40" textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize="14" fontWeight="bold">
+                    {Math.round(percent)}%
+                </text>
+            </svg>
+            <div style={{ color: '#a1a1aa', fontSize: '10px', marginTop: '4px' }}>{label}</div>
+        </div>
+    );
+};
+
+// ============================================
+// 📊 HORIZONTAL BAR CHART
+// ============================================
+const HorizontalBarChart: React.FC<{ chart: ChartData }> = ({ chart }) => {
+    const [animated, setAnimated] = useState(false);
+    const maxValue = Math.max(...chart.data.map(d => d.value));
+    const colors = ['#6366f1', '#22d3ee', '#22c55e', '#f59e0b', '#ec4899'];
+
+    useEffect(() => { setTimeout(() => setAnimated(true), 400); }, []);
+
+    return (
+        <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(99,102,241,0.2)' }}>
+            <h4 style={{ color: '#fff', marginBottom: '16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ background: 'linear-gradient(135deg, #22c55e, #22d3ee)', padding: '5px 8px', borderRadius: '6px', fontSize: '11px' }}>📈</span>
                 {chart.title}
             </h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {chart.data.map((item, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <div style={{ width: '80px', fontSize: '11px', color: colors[i % colors.length], textAlign: isArabic ? 'right' : 'left', fontWeight: '500', textShadow: `0 0 10px ${colors[i % colors.length]}44` }}>
-                            {item.label}
+                    <div key={i}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ color: '#9ca3af', fontSize: '11px' }}>{item.label}</span>
+                            <span style={{ color: colors[i % colors.length], fontSize: '11px', fontWeight: '600' }}>{item.value}{chart.unit}</span>
                         </div>
-                        <div style={{ flex: 1, height: '28px', background: 'rgba(0,0,0,0.4)', borderRadius: '6px', overflow: 'hidden', position: 'relative' }}>
+                        <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
                             <div style={{
                                 width: animated ? `${(item.value / maxValue) * 100}%` : '0%',
                                 height: '100%',
-                                background: `linear-gradient(90deg, ${colors[i % colors.length]}, ${colors[i % colors.length]}aa)`,
-                                borderRadius: '6px',
-                                transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
-                                transitionDelay: `${i * 80}ms`,
-                                boxShadow: `0 0 15px ${colors[i % colors.length]}55`
-                            }}>
-                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.2), transparent)', borderRadius: '6px 6px 0 0' }} />
-                            </div>
-                            <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', fontWeight: 'bold', color: '#fff' }}>
-                                {chart.unit === '$' ? '$' : ''}{item.value.toLocaleString()}{chart.unit !== '$' ? chart.unit : ''}
-                            </span>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-// Futuristic Ranking
-const RankingChart: React.FC<{ chart: ChartData; isArabic: boolean }> = ({ chart, isArabic }) => {
-    const [visible, setVisible] = useState(false);
-    const trophies = ['👑', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣'];
-    const colors = ['#fbbf24', '#94a3b8', '#cd7c2a', '#6366f1', '#22c55e', '#f43f5e', '#8b5cf6', '#06b6d4'];
-
-    useEffect(() => { setTimeout(() => setVisible(true), 150); }, []);
-
-    return (
-        <div style={{ marginBottom: '28px', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', padding: '20px' }}>
-            <h4 style={{ color: '#fff', marginBottom: '20px', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', padding: '6px 10px', borderRadius: '8px' }}>🏆</span>
-                {chart.title}
-            </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
-                {chart.data.map((item, i) => (
-                    <div key={i} style={{
-                        display: 'flex', alignItems: 'center', gap: '10px',
-                        padding: '12px 14px',
-                        background: visible ? `linear-gradient(135deg, ${colors[i]}15, ${colors[i]}05)` : 'transparent',
-                        borderRadius: '10px',
-                        border: `1px solid ${colors[i]}33`,
-                        transform: visible ? 'translateY(0)' : 'translateY(20px)',
-                        opacity: visible ? 1 : 0,
-                        transition: `all 0.4s ease ${i * 80}ms`,
-                        boxShadow: i < 3 ? `0 0 20px ${colors[i]}22` : 'none'
-                    }}>
-                        <div style={{
-                            width: '32px', height: '32px', borderRadius: '50%',
-                            background: i < 3 ? `linear-gradient(135deg, ${colors[i]}, ${colors[i]}aa)` : 'rgba(255,255,255,0.1)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '14px', boxShadow: i < 3 ? `0 0 15px ${colors[i]}66` : 'none'
-                        }}>{trophies[i]}</div>
-                        <span style={{ flex: 1, color: '#fff', fontSize: '12px', fontWeight: i < 3 ? '600' : '400' }}>{item.label}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-// Score/Rating Chart - Horizontal Bars with Stars
-const ScoreChart: React.FC<{ chart: ChartData; isArabic: boolean }> = ({ chart, isArabic }) => {
-    const [animated, setAnimated] = useState(false);
-    useEffect(() => { setTimeout(() => setAnimated(true), 100); }, []);
-
-    return (
-        <div style={{ marginBottom: '28px', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', padding: '20px' }}>
-            <h4 style={{ color: '#fff', marginBottom: '20px', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)', padding: '6px 10px', borderRadius: '8px' }}>⭐</span>
-                {chart.title}
-            </h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {chart.data.map((item, i) => (
-                    <div key={i}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                            <span style={{ color: '#fff', fontSize: '13px' }}>{item.label}</span>
-                            <span style={{ color: '#ec4899', fontSize: '13px', fontWeight: '600' }}>{item.value}/100</span>
-                        </div>
-                        <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div style={{
-                                width: animated ? `${item.value}%` : '0%',
-                                height: '100%',
-                                background: 'linear-gradient(90deg, #ec4899, #f43f5e, #fb7185)',
+                                background: `linear-gradient(90deg, ${colors[i % colors.length]}, ${colors[i % colors.length]}88)`,
                                 borderRadius: '4px',
-                                transition: 'width 1s ease',
-                                transitionDelay: `${i * 100}ms`,
-                                boxShadow: '0 0 15px rgba(236, 72, 153, 0.5)'
+                                transition: `width 0.8s ease ${i * 0.1}s`,
+                                boxShadow: `0 0 12px ${colors[i % colors.length]}66`
                             }} />
                         </div>
                     </div>
@@ -219,68 +233,53 @@ const ScoreChart: React.FC<{ chart: ChartData; isArabic: boolean }> = ({ chart, 
     );
 };
 
-// Versus/Comparison Chart
-const VersusChart: React.FC<{ chart: ChartData; isArabic: boolean }> = ({ chart, isArabic }) => {
-    const [animated, setAnimated] = useState(false);
-    const colors = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444'];
-
-    useEffect(() => { setTimeout(() => setAnimated(true), 100); }, []);
-
-    return (
-        <div style={{ marginBottom: '28px', background: 'rgba(0,0,0,0.2)', borderRadius: '16px', padding: '20px' }}>
-            <h4 style={{ color: '#fff', marginBottom: '20px', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ background: 'linear-gradient(135deg, #8b5cf6, #a855f7)', padding: '6px 10px', borderRadius: '8px' }}>⚔️</span>
-                {chart.title}
-            </h4>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: '20px', height: '180px', padding: '0 20px' }}>
-                {chart.data.map((item, i) => (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                        <span style={{ color: colors[i % colors.length], fontSize: '18px', fontWeight: '700', marginBottom: '8px', textShadow: `0 0 20px ${colors[i % colors.length]}` }}>
-                            {Math.round(item.value)}
-                        </span>
-                        <div style={{
-                            width: '100%',
-                            maxWidth: '60px',
-                            height: animated ? `${item.value * 1.5}px` : '0px',
-                            background: `linear-gradient(180deg, ${colors[i % colors.length]}, ${colors[i % colors.length]}88)`,
-                            borderRadius: '8px 8px 0 0',
-                            transition: 'height 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
-                            transitionDelay: `${i * 100}ms`,
-                            boxShadow: `0 0 25px ${colors[i % colors.length]}44`
-                        }} />
-                        <span style={{ color: '#a1a1aa', fontSize: '11px', marginTop: '8px', textAlign: 'center' }}>{item.label}</span>
-                    </div>
-                ))}
-            </div>
+// ============================================
+// 💎 STATS CARD (Single)
+// ============================================
+const StatCard: React.FC<{ label: string; value: number | string; unit?: string; icon: string; color: string }> = ({ label, value, unit, icon, color }) => (
+    <div style={{
+        background: `linear-gradient(145deg, ${color}15, ${color}05)`,
+        border: `1px solid ${color}30`,
+        borderRadius: '12px',
+        padding: '14px',
+        textAlign: 'center',
+        position: 'relative',
+        overflow: 'hidden'
+    }}>
+        <div style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', width: '40px', height: '40px', background: `radial-gradient(circle, ${color}40, transparent)`, filter: 'blur(12px)' }} />
+        <div style={{ fontSize: '10px', marginBottom: '4px' }}>{icon}</div>
+        <div style={{ fontSize: '20px', fontWeight: 'bold', color, textShadow: `0 0 20px ${color}`, marginBottom: '2px' }}>
+            {typeof value === 'number' ? value.toLocaleString() : value}{unit}
         </div>
-    );
-};
-
-// Stats Cards
-const StatsCards: React.FC<{ stats: { label: string; value: number; unit: string }[] }> = ({ stats }) => {
-    const colors = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-
-    return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-            {stats.map((stat, i) => (
-                <div key={i} style={{
-                    background: `linear-gradient(145deg, ${colors[i % colors.length]}15, ${colors[i % colors.length]}05)`,
-                    border: `1px solid ${colors[i % colors.length]}33`,
-                    borderRadius: '14px', padding: '16px', textAlign: 'center', position: 'relative', overflow: 'hidden'
-                }}>
-                    <div style={{ position: 'absolute', top: '-15px', left: '50%', transform: 'translateX(-50%)', width: '50px', height: '50px', background: `radial-gradient(circle, ${colors[i % colors.length]}33, transparent)`, filter: 'blur(15px)' }} />
-                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: colors[i % colors.length], textShadow: `0 0 25px ${colors[i % colors.length]}`, position: 'relative' }}>
-                        {stat.unit === '$' ? '$' : ''}{stat.value.toLocaleString()}{stat.unit !== '$' ? stat.unit : ''}
-                    </div>
-                    <div style={{ fontSize: '10px', color: '#71717a', marginTop: '4px' }}>{stat.label}</div>
-                </div>
-            ))}
-        </div>
-    );
-};
+        <div style={{ fontSize: '9px', color: '#71717a' }}>{label}</div>
+    </div>
+);
 
 // ============================================
-// MAIN COMPONENT
+// 🔗 SOURCE CARD
+// ============================================
+const SourceCard: React.FC<{ source: Source; index: number }> = ({ source, index }) => (
+    <div style={{
+        background: 'linear-gradient(135deg, rgba(99,102,241,0.1), transparent)',
+        borderRadius: '10px',
+        padding: '10px 12px',
+        borderLeft: '3px solid #6366f1',
+        transition: 'all 0.3s'
+    }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ background: '#6366f1', color: '#fff', width: '20px', height: '20px', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>{index + 1}</span>
+            <span style={{ color: '#e5e5e5', fontSize: '11px', flex: 1 }}>{source.title.substring(0, 40)}...</span>
+        </div>
+        {source.url && (
+            <a href={source.url} target="_blank" rel="noopener noreferrer" style={{ color: '#818cf8', fontSize: '9px', textDecoration: 'none', marginTop: '4px', display: 'block' }}>
+                🔗 {source.url.substring(0, 35)}...
+            </a>
+        )}
+    </div>
+);
+
+// ============================================
+// 🧠 MAIN COMPONENT
 // ============================================
 const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, language }) => {
     const [prompt, setPrompt] = useState('');
@@ -289,10 +288,16 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     const [statusMessage, setStatusMessage] = useState('');
     const [result, setResult] = useState<TaskResult | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'charts' | 'summary' | 'report' | 'sources'>('charts');
+    const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
     const reportRef = useRef<HTMLDivElement>(null);
 
     const isArabic = language === 'ar';
+
+    // Update time every second
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date().toLocaleTimeString()), 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     const handleStart = async () => {
         if (!prompt.trim()) return;
@@ -300,280 +305,144 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
         setProgress(0);
         setError(null);
         setResult(null);
-        setStatusMessage(isArabic ? '🔍 جاري البحث...' : '🔍 Researching...');
 
+        const statusMessages = isArabic
+            ? ['🔍 البحث في الإنترنت...', '📊 تحليل البيانات...', '🧠 إنشاء الرسوم البيانية...', '📝 كتابة التقرير...', '✨ اللمسات النهائية...']
+            : ['🔍 Searching the web...', '📊 Analyzing data...', '🧠 Generating charts...', '📝 Writing report...', '✨ Final touches...'];
+
+        let idx = 0;
         const progressInterval = setInterval(() => {
-            setProgress(prev => Math.min(prev + Math.random() * 10 + 5, 92));
-        }, 400);
+            setProgress(prev => {
+                if (prev >= 95) { clearInterval(progressInterval); return 95; }
+                if (prev >= idx * 20 && idx < statusMessages.length) { setStatusMessage(statusMessages[idx++]); }
+                return prev + 1;
+            });
+        }, 150);
 
         try {
             const response = await fetch(`${BACKEND_URL}/autonomous`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'run', prompt })
+                body: JSON.stringify({ query: prompt })
             });
 
             clearInterval(progressInterval);
+
+            if (!response.ok) throw new Error(`Error ${response.status}`);
+
             const data = await response.json();
-            if (!data.success) throw new Error(data.error);
+            if (!data.success) throw new Error(data.error || 'Failed');
 
             setProgress(100);
-            setResult(data.data);
-            setStatusMessage(isArabic ? '✅ تم!' : '✅ Done!');
-            setActiveTab('charts');
+            setStatusMessage(isArabic ? '✅ اكتمل!' : '✅ Complete!');
+            setResult({
+                title: prompt,
+                results: { summary: data.data.summary || '', report: data.data.report || '', stats: data.data.stats || [], charts: data.data.charts || [], sources: data.data.sources || [] },
+                execution: { executionTime: data.data.executionTime || '5s' }
+            });
         } catch (err: any) {
+            clearInterval(progressInterval);
             setError(err.message);
         } finally {
-            clearInterval(progressInterval);
             setIsRunning(false);
         }
     };
 
-    const handleReset = () => {
-        setPrompt('');
-        setResult(null);
-        setProgress(0);
-        setStatusMessage('');
-        setError(null);
-    };
+    const handleReset = () => { setResult(null); setPrompt(''); setProgress(0); setError(null); };
 
-    const handleCopy = () => {
-        if (result) {
-            navigator.clipboard.writeText(result.results.report);
-            alert(isArabic ? 'تم النسخ!' : 'Copied!');
-        }
-    };
-
-    // PDF Export with all charts
     const handleExportPDF = () => {
         if (!result) return;
-
-        const chartColors = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-
-        // Generate chart HTML for PDF
-        const chartsHTML = result.results.charts.map((chart, ci) => {
-            const maxVal = Math.max(...chart.data.map(d => d.value));
-            return `
-                <div style="margin: 20px 0; padding: 20px; background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 12px; border-left: 4px solid ${chartColors[ci % chartColors.length]};">
-                    <h3 style="margin: 0 0 15px 0; color: #1f2937; font-size: 16px;">📊 ${chart.title}</h3>
-                    ${chart.data.map((item, i) => `
-                        <div style="margin: 10px 0;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                                <span style="color: #4b5563; font-size: 12px;">${item.label}</span>
-                                <span style="color: ${chartColors[i % chartColors.length]}; font-weight: 600; font-size: 12px;">${chart.unit === '$' ? '$' : ''}${item.value.toLocaleString()}${chart.unit !== '$' ? chart.unit : ''}</span>
-                            </div>
-                            <div style="height: 12px; background: #e5e7eb; border-radius: 6px; overflow: hidden;">
-                                <div style="height: 100%; width: ${(item.value / maxVal) * 100}%; background: linear-gradient(90deg, ${chartColors[i % chartColors.length]}, ${chartColors[i % chartColors.length]}aa); border-radius: 6px;"></div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        }).join('');
-
-        // Stats HTML
-        const statsHTML = result.results.stats.length > 0 ? `
-            <div style="display: flex; gap: 15px; flex-wrap: wrap; margin: 20px 0;">
-                ${result.results.stats.map((stat, i) => `
-                    <div style="flex: 1; min-width: 100px; padding: 15px 20px; background: linear-gradient(135deg, ${chartColors[i % chartColors.length]}15, ${chartColors[i % chartColors.length]}05); border: 1px solid ${chartColors[i % chartColors.length]}33; border-radius: 10px; text-align: center;">
-                        <div style="font-size: 22px; font-weight: bold; color: ${chartColors[i % chartColors.length]};">${stat.unit === '$' ? '$' : ''}${stat.value.toLocaleString()}${stat.unit !== '$' ? stat.unit : ''}</div>
-                        <div style="font-size: 10px; color: #6b7280; margin-top: 4px;">${stat.label}</div>
-                    </div>
-                `).join('')}
-            </div>
-        ` : '';
-
-        const content = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <title>${result.title} - Lukas AI Report</title>
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-                    * { box-sizing: border-box; }
-                    body { 
-                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
-                        padding: 40px 50px; 
-                        direction: ${isArabic ? 'rtl' : 'ltr'}; 
-                        line-height: 1.8; 
-                        max-width: 900px; 
-                        margin: 0 auto; 
-                        color: #1f2937;
-                        background: #fff;
-                    }
-                    h1 { 
-                        color: #111827; 
-                        font-size: 28px; 
-                        margin-bottom: 10px;
-                        padding-bottom: 15px;
-                        border-bottom: 3px solid #6366f1;
-                    }
-                    h2 { 
-                        color: #374151; 
-                        font-size: 18px; 
-                        margin-top: 30px;
-                        padding-left: 15px;
-                        border-left: 4px solid #6366f1;
-                    }
-                    .meta { color: #6b7280; font-size: 12px; margin-bottom: 25px; }
-                    .summary { 
-                        background: linear-gradient(135deg, #f0fdf4, #dcfce7); 
-                        padding: 20px 25px; 
-                        border-radius: 12px; 
-                        margin: 25px 0;
-                        border-left: 4px solid #22c55e;
-                    }
-                    .report-content { 
-                        line-height: 2; 
-                        font-size: 14px;
-                    }
-                    .sources { 
-                        margin-top: 40px; 
-                        padding: 20px; 
-                        background: #f9fafb; 
-                        border-radius: 10px; 
-                    }
-                    .source { 
-                        margin: 10px 0; 
-                        padding: 10px 15px;
-                        background: #fff;
-                        border-radius: 8px;
-                        border-left: 3px solid #6366f1;
-                    }
-                    .source a { color: #6366f1; text-decoration: none; font-size: 12px; }
-                    footer { 
-                        margin-top: 50px; 
-                        text-align: center; 
-                        color: #9ca3af; 
-                        font-size: 11px; 
-                        border-top: 1px solid #e5e7eb; 
-                        padding-top: 20px; 
-                    }
-                    @media print {
-                        body { padding: 20px; }
-                        .no-print { display: none; }
-                    }
-                </style>
-            </head>
-            <body>
-                <h1>📊 ${result.title}</h1>
-                <div class="meta">
-                    ⏱️ ${isArabic ? 'وقت التنفيذ:' : 'Execution time:'} ${result.execution.executionTime} | 
-                    📊 ${result.results.charts.length} ${isArabic ? 'رسم بياني' : 'charts'} | 
-                    📚 ${result.results.sources.length} ${isArabic ? 'مصادر' : 'sources'} |
-                    📅 ${new Date().toLocaleDateString(isArabic ? 'ar-EG' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                </div>
-
-                ${statsHTML}
-
-                <div class="summary">
-                    <h2 style="margin-top: 0; border: none; padding: 0;">📝 ${isArabic ? 'الملخص التنفيذي' : 'Executive Summary'}</h2>
-                    <p>${result.results.summary}</p>
-                </div>
-
-                <h2>📊 ${isArabic ? 'الرسوم البيانية والبيانات' : 'Charts & Data'}</h2>
-                ${chartsHTML}
-
-                <h2>📄 ${isArabic ? 'التقرير الكامل' : 'Full Report'}</h2>
-                <div class="report-content">
-                    ${result.results.report.replace(/##\s*/g, '<h3>').replace(/\n/g, '<br>')}
-                </div>
-
-                <div class="sources">
-                    <h2 style="margin-top: 0;">📚 ${isArabic ? 'المصادر' : 'Sources'}</h2>
-                    ${result.results.sources.map((s, i) => `
-                        <div class="source">
-                            <strong>${i + 1}.</strong> ${s.title}<br>
-                            <a href="${s.url}" target="_blank">🔗 ${s.url}</a>
-                        </div>
-                    `).join('')}
-                </div>
-
-                <footer>
-                    <img src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><text y='20' font-size='20'>🧠</text></svg>" style="width: 24px; vertical-align: middle;">
-                    ${isArabic ? 'تقرير مُعد بواسطة لوكاس AI - وضع الاستقلالية' : 'Report generated by Lukas AI - Autonomous Mode'}<br>
-                    ${new Date().toLocaleString(isArabic ? 'ar-EG' : 'en-US')}
-                </footer>
-
-                <script>
-                    window.onload = function() { 
-                        setTimeout(function() { window.print(); }, 500);
-                    };
-                </script>
-            </body>
-            </html>
-        `;
-
-        const win = window.open('', '_blank');
-        if (win) {
-            win.document.write(content);
-            win.document.close();
-        }
+        const html = `<!DOCTYPE html><html><head><style>body{font-family:sans-serif;padding:40px;max-width:900px;margin:0 auto}h1{color:#6366f1}</style></head><body><h1>${result.title}</h1><p>${result.results.summary}</p><h2>Report</h2><p>${result.results.report}</p></body></html>`;
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `lukas-report-${Date.now()}.html`;
+        a.click();
     };
 
     if (!isOpen) return null;
 
-    const tabStyle = (active: boolean) => ({
-        padding: '10px 18px',
-        borderRadius: '10px',
-        border: 'none',
-        background: active ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(139, 92, 246, 0.4))' : 'rgba(255,255,255,0.03)',
-        color: active ? '#fff' : '#6b7280',
-        cursor: 'pointer',
-        fontSize: '13px',
-        fontWeight: active ? '600' : '400',
-        transition: 'all 0.3s',
-        boxShadow: active ? '0 4px 20px rgba(99, 102, 241, 0.25)' : 'none'
-    });
-
     return (
         <div style={{
             position: 'fixed', inset: 0,
-            background: 'radial-gradient(ellipse at top, #0f0a1a 0%, #000 100%)',
+            background: 'linear-gradient(135deg, #0a0a12 0%, #0f0f1a 50%, #0a0a12 100%)',
             zIndex: 9999,
             display: 'flex', justifyContent: 'center', alignItems: 'center',
             direction: isArabic ? 'rtl' : 'ltr'
         }}>
-            {/* Background orbs */}
+            {/* Neural Network Background */}
+            <NeuralNetworkBackground />
+
+            {/* Floating Orbs */}
             <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-                <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(99, 102, 241, 0.15), transparent)', top: '-100px', right: '-100px', filter: 'blur(60px)', animation: 'float 8s ease-in-out infinite' }} />
-                <div style={{ position: 'absolute', width: '300px', height: '300px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(139, 92, 246, 0.15), transparent)', bottom: '-50px', left: '-50px', filter: 'blur(60px)', animation: 'float 10s ease-in-out infinite reverse' }} />
+                <div style={{ position: 'absolute', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.12), transparent)', top: '-150px', right: '-150px', filter: 'blur(80px)' }} />
+                <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,211,238,0.1), transparent)', bottom: '-100px', left: '-100px', filter: 'blur(80px)' }} />
             </div>
 
+            {/* Main Container */}
             <div style={{
-                background: 'linear-gradient(145deg, rgba(15, 15, 25, 0.95), rgba(20, 20, 35, 0.95))',
+                background: 'rgba(15,15,25,0.9)',
                 backdropFilter: 'blur(20px)',
                 borderRadius: '24px',
-                width: '95%', maxWidth: '950px', maxHeight: '94vh',
+                width: '95%', maxWidth: '1200px', maxHeight: '90vh',
                 overflow: 'hidden',
-                border: '1px solid rgba(99, 102, 241, 0.2)',
-                boxShadow: '0 0 80px rgba(99, 102, 241, 0.1), 0 30px 60px rgba(0, 0, 0, 0.5)'
+                border: '1px solid rgba(99,102,241,0.2)',
+                boxShadow: '0 0 100px rgba(99,102,241,0.15), 0 40px 80px rgba(0,0,0,0.5)'
             }}>
                 {/* Header */}
                 <div style={{
                     padding: '16px 24px',
                     borderBottom: '1px solid rgba(255,255,255,0.06)',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    background: 'linear-gradient(90deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05))'
+                    background: 'linear-gradient(90deg, rgba(99,102,241,0.08), rgba(34,211,238,0.05))'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '44px', height: '44px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', boxShadow: '0 0 25px rgba(99, 102, 241, 0.4)' }}>🧠</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{
+                            width: '48px', height: '48px',
+                            background: 'linear-gradient(135deg, #6366f1, #22d3ee)',
+                            borderRadius: '14px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '24px',
+                            boxShadow: '0 0 30px rgba(99,102,241,0.5)'
+                        }}>🧠</div>
                         <div>
-                            <h2 style={{ margin: 0, color: '#fff', fontSize: '17px', fontWeight: '600' }}>{isArabic ? 'الوكيل المستقل' : 'Autonomous Agent'}</h2>
-                            <p style={{ margin: 0, color: '#6366f1', fontSize: '11px' }}>✨ {isArabic ? 'بحث + تحليل + رسوم بيانية + PDF' : 'Research + Analysis + Charts + PDF'}</p>
+                            <h2 style={{ margin: 0, color: '#fff', fontSize: '18px', fontWeight: '700' }}>
+                                AI RESEARCH REPORT
+                            </h2>
+                            <p style={{ margin: 0, color: '#6366f1', fontSize: '11px' }}>
+                                ⚡ {isArabic ? 'بحث + تحليل + رسوم بيانية + PDF' : 'Research + Analysis + Charts + PDF'}
+                            </p>
                         </div>
                     </div>
-                    <button onClick={onClose} disabled={isRunning} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', width: '34px', height: '34px', borderRadius: '8px', color: '#fff', cursor: isRunning ? 'not-allowed' : 'pointer', opacity: isRunning ? 0.5 : 1 }}>✕</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{ color: '#22d3ee', fontSize: '14px', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                            ⏱️ {currentTime}
+                        </div>
+                        <button onClick={onClose} disabled={isRunning} style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            width: '36px', height: '36px',
+                            borderRadius: '10px',
+                            color: '#fff',
+                            cursor: isRunning ? 'not-allowed' : 'pointer',
+                            opacity: isRunning ? 0.5 : 1
+                        }}>✕</button>
+                    </div>
                 </div>
 
-                <div ref={reportRef} style={{ padding: '20px 24px', overflowY: 'auto', maxHeight: 'calc(94vh - 85px)' }}>
-                    {/* Input */}
+                {/* Content */}
+                <div ref={reportRef} style={{ padding: '24px', overflowY: 'auto', maxHeight: 'calc(90vh - 90px)' }}>
+                    {/* Input Section */}
                     {!result && (
                         <>
-                            <div style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.04))', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px', border: '1px solid rgba(99, 102, 241, 0.15)' }}>
+                            <div style={{
+                                background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(34,211,238,0.05))',
+                                borderRadius: '14px', padding: '16px', marginBottom: '20px',
+                                border: '1px solid rgba(99,102,241,0.2)'
+                            }}>
                                 <p style={{ color: '#a5b4fc', margin: 0, fontSize: '13px' }}>
-                                    🚀 {isArabic ? 'اكتب سؤالك وشاهد السحر! رسوم بيانية متعددة + تصدير PDF' : 'Ask anything! Multiple chart types + PDF export'}
+                                    🚀 {isArabic ? 'اكتب سؤالك وشاهد السحر!' : 'Ask anything and watch the magic!'}
                                 </p>
                             </div>
 
@@ -581,106 +450,156 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                                 value={prompt}
                                 onChange={(e) => setPrompt(e.target.value)}
                                 disabled={isRunning}
-                                placeholder={isArabic ? 'مثال: قارن بين أفضل 5 لغات برمجة في 2025 من حيث الرواتب والطلب' : 'Example: Compare top 5 programming languages in 2025'}
-                                style={{ width: '100%', minHeight: '90px', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '14px', resize: 'vertical', direction: isArabic ? 'rtl' : 'ltr', opacity: isRunning ? 0.6 : 1 }}
+                                placeholder={isArabic ? 'مثال: قارن بين أفضل 5 لغات برمجة في 2025' : 'Example: Compare top 5 programming languages in 2025'}
+                                style={{
+                                    width: '100%', minHeight: '100px', padding: '16px',
+                                    borderRadius: '14px',
+                                    border: '1px solid rgba(99,102,241,0.2)',
+                                    background: 'rgba(0,0,0,0.4)',
+                                    color: '#fff', fontSize: '14px',
+                                    resize: 'vertical',
+                                    direction: isArabic ? 'rtl' : 'ltr'
+                                }}
                             />
 
                             {isRunning && (
-                                <div style={{ marginTop: '18px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                        <span style={{ color: '#818cf8', fontSize: '13px' }}>{statusMessage}</span>
-                                        <span style={{ color: '#fff', fontSize: '13px', fontWeight: '600' }}>{Math.round(progress)}%</span>
+                                <div style={{ marginTop: '20px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                        <span style={{ color: '#22d3ee', fontSize: '13px' }}>{statusMessage}</span>
+                                        <span style={{ color: '#fff', fontSize: '13px', fontWeight: '700' }}>{Math.round(progress)}%</span>
                                     </div>
-                                    <div style={{ height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden' }}>
-                                        <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #6366f1, #8b5cf6, #a855f7)', transition: 'width 0.3s', boxShadow: '0 0 20px rgba(99, 102, 241, 0.5)' }} />
+                                    <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+                                        <div style={{
+                                            height: '100%', width: `${progress}%`,
+                                            background: 'linear-gradient(90deg, #6366f1, #22d3ee)',
+                                            transition: 'width 0.3s',
+                                            boxShadow: '0 0 20px rgba(99,102,241,0.5)'
+                                        }} />
                                     </div>
                                 </div>
                             )}
 
                             {error && (
-                                <div style={{ marginTop: '14px', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                <div style={{ marginTop: '16px', padding: '14px', background: 'rgba(239,68,68,0.1)', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.2)' }}>
                                     <p style={{ color: '#ef4444', margin: 0, fontSize: '13px' }}>❌ {error}</p>
                                 </div>
                             )}
 
-                            <button onClick={handleStart} disabled={isRunning || !prompt.trim()} style={{ marginTop: '16px', width: '100%', padding: '14px', borderRadius: '12px', border: 'none', background: isRunning || !prompt.trim() ? '#27272a' : 'linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)', color: '#fff', fontSize: '15px', fontWeight: '600', cursor: isRunning || !prompt.trim() ? 'not-allowed' : 'pointer', boxShadow: isRunning || !prompt.trim() ? 'none' : '0 8px 30px rgba(99, 102, 241, 0.35)' }}>
-                                {isRunning ? '⚡' : '🚀'} {isRunning ? (isArabic ? 'السحر يحدث...' : 'Magic happening...') : (isArabic ? 'أطلق القوة!' : 'Unleash the Power!')}
+                            <button
+                                onClick={handleStart}
+                                disabled={isRunning || !prompt.trim()}
+                                style={{
+                                    marginTop: '20px', width: '100%', padding: '16px',
+                                    borderRadius: '14px', border: 'none',
+                                    background: isRunning || !prompt.trim() ? '#27272a' : 'linear-gradient(135deg, #6366f1, #22d3ee)',
+                                    color: '#fff', fontSize: '16px', fontWeight: '700',
+                                    cursor: isRunning || !prompt.trim() ? 'not-allowed' : 'pointer',
+                                    boxShadow: isRunning || !prompt.trim() ? 'none' : '0 10px 40px rgba(99,102,241,0.4)'
+                                }}
+                            >
+                                {isRunning ? '⚡ جاري العمل...' : '🚀 أطلق القوة!'}
                             </button>
                         </>
                     )}
 
-                    {/* Results */}
+                    {/* RESULTS DASHBOARD */}
                     {result && (
                         <>
-                            {/* Header */}
-                            <div style={{ background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05))', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px', border: '1px solid rgba(34, 197, 94, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                            {/* Result Header */}
+                            <div style={{
+                                background: 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,211,238,0.08))',
+                                borderRadius: '14px', padding: '16px', marginBottom: '24px',
+                                border: '1px solid rgba(34,197,94,0.3)',
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px'
+                            }}>
                                 <div>
-                                    <h3 style={{ color: '#22c55e', margin: 0, fontSize: '15px', fontWeight: '600' }}>✨ {result.title}</h3>
-                                    <p style={{ color: '#86efac', margin: '3px 0 0', fontSize: '11px' }}>⏱️ {result.execution.executionTime} | 📊 {result.results.charts?.length || 0} {isArabic ? 'رسم' : 'charts'} | 📚 {result.results.sources.length} {isArabic ? 'مصادر' : 'sources'}</p>
+                                    <h3 style={{ color: '#22c55e', margin: 0, fontSize: '16px', fontWeight: '700' }}>✨ {result.title}</h3>
+                                    <p style={{ color: '#86efac', margin: '4px 0 0', fontSize: '11px' }}>
+                                        ⏱️ {result.execution.executionTime} | 📊 {result.results.charts?.length || 0} charts | 📚 {result.results.sources.length} sources
+                                    </p>
                                 </div>
-                                <button onClick={handleReset} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', cursor: 'pointer', fontSize: '11px' }}>🔄 {isArabic ? 'جديد' : 'New'}</button>
-                            </div>
-
-                            {/* Tabs */}
-                            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                                <button onClick={() => setActiveTab('charts')} style={tabStyle(activeTab === 'charts')}>📊 {isArabic ? 'الرسوم' : 'Charts'}</button>
-                                <button onClick={() => setActiveTab('summary')} style={tabStyle(activeTab === 'summary')}>📝 {isArabic ? 'الملخص' : 'Summary'}</button>
-                                <button onClick={() => setActiveTab('report')} style={tabStyle(activeTab === 'report')}>📄 {isArabic ? 'التقرير' : 'Report'}</button>
-                                <button onClick={() => setActiveTab('sources')} style={tabStyle(activeTab === 'sources')}>🔗 {isArabic ? 'المصادر' : 'Sources'}</button>
-                            </div>
-
-                            {/* Content */}
-                            <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '16px', padding: '20px', maxHeight: '380px', overflowY: 'auto', border: '1px solid rgba(255,255,255,0.04)' }}>
-                                {activeTab === 'charts' && (
-                                    <>
-                                        {result.results.stats?.length > 0 && <StatsCards stats={result.results.stats} />}
-
-                                        {result.results.charts?.length > 0 ? (
-                                            result.results.charts.map((chart, i) => {
-                                                switch (chart.type) {
-                                                    case 'donut': return <DonutChart key={i} chart={chart} isArabic={isArabic} />;
-                                                    case 'bar': return <NeonBarChart key={i} chart={chart} isArabic={isArabic} />;
-                                                    case 'ranking': return <RankingChart key={i} chart={chart} isArabic={isArabic} />;
-                                                    case 'score': return <ScoreChart key={i} chart={chart} isArabic={isArabic} />;
-                                                    case 'versus': return <VersusChart key={i} chart={chart} isArabic={isArabic} />;
-                                                    default: return <NeonBarChart key={i} chart={chart} isArabic={isArabic} />;
-                                                }
-                                            })
-                                        ) : (
-                                            <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
-                                                <span style={{ fontSize: '50px', display: 'block', marginBottom: '16px' }}>📊</span>
-                                                {isArabic ? 'لا توجد بيانات رسومية' : 'No chart data available'}
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-
-                                {activeTab === 'summary' && (
-                                    <p style={{ color: '#e5e5e5', lineHeight: '2', margin: 0, whiteSpace: 'pre-wrap', fontSize: '14px' }}>{result.results.summary}</p>
-                                )}
-
-                                {activeTab === 'report' && (
-                                    <div style={{ color: '#d4d4d4', lineHeight: '1.9', whiteSpace: 'pre-wrap', fontSize: '13px' }}>{result.results.report}</div>
-                                )}
-
-                                {activeTab === 'sources' && (
-                                    <>
-                                        {result.results.sources.length > 0 ? result.results.sources.map((s, i) => (
-                                            <div key={i} style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), transparent)', borderRadius: '10px', padding: '12px 14px', marginBottom: '8px', borderLeft: '3px solid #6366f1' }}>
-                                                <div style={{ color: '#fff', fontSize: '13px', marginBottom: '4px' }}>{s.title}</div>
-                                                {s.url && <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: '#818cf8', fontSize: '11px', textDecoration: 'none' }}>🔗 {s.url.substring(0, 50)}...</a>}
-                                            </div>
-                                        )) : <p style={{ color: '#6b7280', textAlign: 'center' }}>{isArabic ? 'لا توجد مصادر' : 'No sources'}</p>}
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Actions */}
-                            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                                <button onClick={handleCopy} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.3)' }}>
-                                    📋 {isArabic ? 'نسخ' : 'Copy'}
+                                <button onClick={handleReset} style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', cursor: 'pointer', fontSize: '12px' }}>
+                                    🔄 {isArabic ? 'بحث جديد' : 'New Search'}
                                 </button>
-                                <button onClick={handleExportPDF} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500', boxShadow: '0 4px 15px rgba(34, 197, 94, 0.3)' }}>
+                            </div>
+
+                            {/* DASHBOARD GRID */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '20px' }}>
+
+                                {/* Left Column - Main Charts */}
+                                <div style={{ gridColumn: 'span 8' }}>
+                                    {/* Main Donut Chart */}
+                                    {result.results.charts?.[0] && (
+                                        <LargeDonutChart chart={result.results.charts[0]} />
+                                    )}
+
+                                    {/* Bar Chart */}
+                                    {result.results.charts?.[1] && (
+                                        <div style={{ marginTop: '20px' }}>
+                                            <HorizontalBarChart chart={result.results.charts[1]} />
+                                        </div>
+                                    )}
+
+                                    {/* Summary */}
+                                    <div style={{ marginTop: '20px', background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(99,102,241,0.2)' }}>
+                                        <h4 style={{ color: '#fff', marginBottom: '12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', padding: '5px 8px', borderRadius: '6px', fontSize: '11px' }}>💡</span>
+                                            {isArabic ? 'الملخص التنفيذي' : 'Executive Summary'}
+                                        </h4>
+                                        <p style={{ color: '#d4d4d8', lineHeight: '1.8', margin: 0, fontSize: '12px' }}>{result.results.summary}</p>
+                                    </div>
+                                </div>
+
+                                {/* Right Column - Stats & Sources */}
+                                <div style={{ gridColumn: 'span 4' }}>
+                                    {/* Performance Rings */}
+                                    <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '16px', border: '1px solid rgba(99,102,241,0.2)', marginBottom: '20px' }}>
+                                        <h4 style={{ color: '#fff', marginBottom: '16px', fontSize: '12px' }}>📊 MODEL PERFORMANCE</h4>
+                                        <div style={{ display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: '10px' }}>
+                                            <ProgressRing value={87} max={100} label="Accuracy" color="#22c55e" />
+                                            <ProgressRing value={92} max={100} label="Speed" color="#22d3ee" />
+                                        </div>
+                                    </div>
+
+                                    {/* Stats Grid */}
+                                    {result.results.stats && result.results.stats.length > 0 && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '20px' }}>
+                                            {result.results.stats.slice(0, 4).map((stat, i) => (
+                                                <StatCard
+                                                    key={i}
+                                                    label={stat.label}
+                                                    value={stat.value}
+                                                    unit={stat.unit}
+                                                    icon={['📊', '💰', '📈', '⚡'][i] || '📊'}
+                                                    color={['#6366f1', '#22c55e', '#f59e0b', '#22d3ee'][i % 4]}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Sources */}
+                                    <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '16px', border: '1px solid rgba(99,102,241,0.2)' }}>
+                                        <h4 style={{ color: '#fff', marginBottom: '12px', fontSize: '12px' }}>🔗 {isArabic ? 'المصادر' : 'SOURCES'}</h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                                            {result.results.sources.slice(0, 5).map((s, i) => (
+                                                <SourceCard key={i} source={s} index={i} />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Export Button */}
+                            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }}>
+                                <button onClick={handleExportPDF} style={{
+                                    padding: '14px 40px',
+                                    borderRadius: '12px', border: 'none',
+                                    background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                                    color: '#fff', fontSize: '14px', fontWeight: '600',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 8px 30px rgba(34,197,94,0.4)',
+                                    display: 'flex', alignItems: 'center', gap: '8px'
+                                }}>
                                     📄 {isArabic ? 'تصدير PDF' : 'Export PDF'}
                                 </button>
                             </div>
@@ -688,10 +607,6 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                     )}
                 </div>
             </div>
-
-            <style>{`
-                @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
-            `}</style>
         </div>
     );
 };
