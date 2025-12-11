@@ -154,11 +154,12 @@ export default async function handler(req, res) {
     const startTime = Date.now();
 
     try {
-        const { prompt } = req.body || {};
         const apiKey = getNextKey();
-
         if (!apiKey) return res.status(500).json({ success: false, error: 'No API keys' });
-        if (!prompt) return res.status(400).json({ success: false, error: 'No prompt' });
+
+        // Accept both 'query' and 'prompt' for compatibility
+        const prompt = req.body.query || req.body.prompt;
+        if (!prompt) return res.status(400).json({ success: false, error: 'No query or prompt provided' });
 
         const language = detectLanguage(prompt);
         const isArabic = language === 'ar';
