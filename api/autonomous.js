@@ -23,34 +23,65 @@ function detectLanguage(text) {
     return /[\u0600-\u06FF]/.test(text) ? 'ar' : 'en';
 }
 
-async function callGeminiAPI(prompt, apiKey, model = MODELS.BRAIN, useSearch = true) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-    const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }] };
-    if (useSearch) body.tools = [{ googleSearch: {} }];
+async function callGeminiAPI(prompt, apiKey = null, model = MODELS.BRAIN, useSearch = true) {
+    const allKeys = getAPIKeys();
+    const models = [MODELS.BRAIN, MODELS.FALLBACK];
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        body: JSON.stringify(body)
-    });
-
-    if ([429, 404, 503].includes(response.status) && model !== MODELS.FALLBACK) {
-        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK, useSearch);
+    // Shuffle keys for load balancing
+    for (let i = allKeys.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allKeys[i], allKeys[j]] = [allKeys[j], allKeys[i]];
     }
 
-    if (!response.ok) throw new Error(`API error ${response.status}`);
+    let lastError = null;
 
-    const data = await response.json();
-    const groundingMeta = data.candidates?.[0]?.groundingMetadata;
-    const sources = groundingMeta?.groundingChunks?.map(c => ({
-        title: c.web?.title || 'Source',
-        url: c.web?.uri || ''
-    })).filter(s => s.url) || [];
+    for (const key of allKeys) {
+        for (const m of models) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
+                const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }] };
+                if (useSearch) body.tools = [{ googleSearch: {} }];
 
-    return {
-        text: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
-        sources: sources.slice(0, 10)
-    };
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+                    body: JSON.stringify(body)
+                });
+
+                if ([429, 503, 500].includes(response.status)) {
+                    console.log(`[Autonomous] Key/Model failed (${response.status}), trying next...`);
+                    lastError = `API error ${response.status}`;
+                    continue;
+                }
+
+                if (!response.ok) {
+                    lastError = `API error ${response.status}`;
+                    continue;
+                }
+
+                const data = await response.json();
+                const groundingMeta = data.candidates?.[0]?.groundingMetadata;
+                const sources = groundingMeta?.groundingChunks?.map(c => ({
+                    title: c.web?.title || 'Source',
+                    url: c.web?.uri || ''
+                })).filter(s => s.url) || [];
+
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                if (!text) {
+                    lastError = 'Empty response';
+                    continue;
+                }
+
+                console.log(`[Autonomous] Success with model ${m}`);
+                return { text, sources: sources.slice(0, 10) };
+            } catch (err) {
+                console.log(`[Autonomous] Error: ${err.message}`);
+                lastError = err.message;
+            }
+        }
+    }
+
+    throw new Error(lastError || 'All API keys exhausted');
 }
 
 // Enhanced data extraction for multiple chart types
