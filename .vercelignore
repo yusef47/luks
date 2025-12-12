@@ -25,3 +25,4 @@ start-server.sh
 *.backup.tsx
 *.refactored.tsx
 *.final.tsx
+api/lib/*
