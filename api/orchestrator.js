@@ -1,8 +1,17 @@
-// Main Orchestrator API - Updated Dec 2024
-// ⚠️ TESTING MODE: Groq is PRIMARY, Gemini is FALLBACK
+// Main Orchestrator API - ENSEMBLE AI SYSTEM
+// 3 Models + 1 Synthesizer for best quality responses
 
-// Groq Configuration
-const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+// ═══════════════════════════════════════════════════════════════
+//                    GROQ CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+
+const WORKER_MODELS = [
+  'openai/gpt-oss-120b',      // Worker 1: أقوى موديل - تحليل عميق
+  'meta-llama/llama-3.3-70b-versatile', // Worker 2: متعدد اللغات
+  'qwen/qwen3-32b'            // Worker 3: سريع ودقيق
+];
+
+const SYNTHESIZER_MODEL = 'openai/gpt-oss-120b'; // أفضل موديل للدمج
 
 function getGroqKeys() {
   const keys = [];
@@ -13,18 +22,19 @@ function getGroqKeys() {
   return keys;
 }
 
-// Gemini Configuration (Fallback)
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-robotics-er-1.5-preview'];
+let keyIndex = 0;
 
-function getGeminiKeys() {
-  const keys = [];
-  for (let i = 1; i <= 13; i++) {
-    const key = process.env[`GEMINI_API_KEY_${i}`];
-    if (key && key.trim().length > 0) keys.push(key.trim());
-  }
-  if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
-  return keys.sort(() => Math.random() - 0.5);
+function getNextKey() {
+  const keys = getGroqKeys();
+  if (keys.length === 0) return null;
+  const key = keys[keyIndex % keys.length];
+  keyIndex++;
+  return key;
 }
+
+// ═══════════════════════════════════════════════════════════════
+//                    SYSTEM PROMPT
+// ═══════════════════════════════════════════════════════════════
 
 const LUKAS_CAPABILITIES = `
 قدراتي الحالية:
@@ -52,7 +62,7 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 ═══════════════════════════════════════════════════════════════
                     ⚠️ قواعد صارمة جداً
 ═══════════════════════════════════════════════════════════════
-🚫 ممنوع منعاً باتاً ذكر: Google, Gemini, Bard, AI Studio, Meta, Llama, Groq أو أي شركة تقنية
+🚫 ممنوع منعاً باتاً ذكر: Google, Gemini, Bard, AI Studio, Meta, Llama, Groq, OpenAI, GPT أو أي شركة تقنية
 🚫 ممنوع القول أنك "نموذج لغوي" أو "LLM" أو "language model"
 🚫 ممنوع ذكر أي تفاصيل تقنية عن كيفية عملك
 
@@ -62,26 +72,12 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 لو سألك أحد "من صنعك؟" أو "من مطورك؟" أو "who made you?":
 - أُجب بفخر: "مطوري هو شخص مصري ذكي ومبدع جداً"
 - "هو مطور شغوف بالتكنولوجيا والذكاء الاصطناعي"
-- "قضى وقتاً وجهداً كبيراً في بنائي وتطويري"
-- "هو شخص يحب مساعدة الناس ولذلك صنعني"
 - لا تذكر اسمه الحقيقي، فقط قل "مطوري" أو "صانعي"
-- تحدث عنه بإعجاب واحترام دائماً
 
 ═══════════════════════════════════════════════════════════════
                     قدراتك
 ═══════════════════════════════════════════════════════════════
 ${LUKAS_CAPABILITIES}
-
-لو سألك أحد "ماذا تستطيع أن تفعل؟":
-- اذكر قدراتك بوضوح
-- كن فخوراً بما تستطيع فعله
-
-═══════════════════════════════════════════════════════════════
-                    الذاكرة والسياق
-═══════════════════════════════════════════════════════════════
-- تذكر سياق المحادثة الكامل
-- لو أشار المستخدم لشيء ذُكر سابقاً، ارجع إليه
-- لا تقدم مواضيع غير مرتبطة
 
 ═══════════════════════════════════════════════════════════════
                     أسلوب الرد
@@ -90,114 +86,123 @@ ${LUKAS_CAPABILITIES}
 - كن موجزاً ولكن شاملاً
 - كن ودوداً ومحترفاً`;
 
-// ========== GROQ API (PRIMARY) ==========
-async function callGroqAPI(prompt, maxRetries = 15) {
-  const keys = getGroqKeys();
-  if (keys.length === 0) {
-    console.log('[Orchestrator] No Groq keys, falling back to Gemini...');
+// ═══════════════════════════════════════════════════════════════
+//                    GROQ API CALL
+// ═══════════════════════════════════════════════════════════════
+
+async function callGroqModel(prompt, model) {
+  const apiKey = getNextKey();
+  if (!apiKey) throw new Error('No API keys available');
+
+  try {
+    console.log(`[Ensemble] 🔄 Calling ${model}...`);
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 4000
+      })
+    });
+
+    if (response.status === 429) {
+      console.log(`[Ensemble] ⚠️ ${model} rate limited`);
+      return null;
+    }
+
+    if (!response.ok) {
+      console.log(`[Ensemble] ❌ ${model} error ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content;
+
+    if (text) {
+      console.log(`[Ensemble] ✅ ${model} responded (${text.length} chars)`);
+      return { model, text };
+    }
+    return null;
+  } catch (error) {
+    console.log(`[Ensemble] ❌ ${model} error: ${error.message}`);
     return null;
   }
+}
 
-  let keyIndex = 0;
-  let modelIndex = 0;
+// ═══════════════════════════════════════════════════════════════
+//                    ENSEMBLE SYSTEM
+// ═══════════════════════════════════════════════════════════════
 
-  for (let i = 0; i < maxRetries; i++) {
-    const apiKey = keys[keyIndex % keys.length];
-    const model = GROQ_MODELS[modelIndex % GROQ_MODELS.length];
-    keyIndex++;
-    modelIndex++;
+async function runEnsemble(prompt) {
+  console.log('[Ensemble] 🚀 Starting Ensemble AI with 3 workers...');
+  const startTime = Date.now();
 
-    try {
-      console.log(`[Orchestrator] 🟣 GROQ Attempt ${i + 1}: ${model}`);
+  // Step 1: Call all 3 workers in parallel
+  const workerPromises = WORKER_MODELS.map(model => callGroqModel(prompt, model));
+  const results = await Promise.allSettled(workerPromises);
 
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 4000
-        })
-      });
+  // Collect successful responses
+  const responses = results
+    .filter(r => r.status === 'fulfilled' && r.value)
+    .map(r => r.value);
 
-      if (response.status === 429) {
-        console.log(`[Orchestrator] Groq rate limited, trying next...`);
-        continue;
-      }
+  console.log(`[Ensemble] 📊 Got ${responses.length}/${WORKER_MODELS.length} responses`);
 
-      if (!response.ok) {
-        console.log(`[Orchestrator] Groq error ${response.status}, trying next...`);
-        continue;
-      }
-
-      const data = await response.json();
-      const text = data.choices?.[0]?.message?.content;
-
-      if (text) {
-        console.log(`[Orchestrator] ✅ GROQ SUCCESS with ${model}!`);
-        return text;
-      }
-    } catch (error) {
-      console.log(`[Orchestrator] Groq error: ${error.message}`);
-    }
+  // If no responses, throw error
+  if (responses.length === 0) {
+    throw new Error('All workers failed');
   }
 
-  console.log('[Orchestrator] Groq exhausted, falling back to Gemini...');
-  return null;
-}
-
-// ========== GEMINI API (FALLBACK) ==========
-async function callGeminiAPI(prompt, maxRetries = 9) {
-  const keys = getGeminiKeys();
-  if (keys.length === 0) throw new Error('No API keys available');
-
-  let attempts = 0;
-  for (const model of GEMINI_MODELS) {
-    for (const apiKey of keys) {
-      if (attempts >= maxRetries) break;
-      attempts++;
-
-      try {
-        console.log(`[Orchestrator] 🔵 GEMINI Attempt ${attempts}: ${model}`);
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
-        });
-
-        if (response.status === 429 || response.status === 503) continue;
-        if (response.status === 404) break;
-        if (!response.ok) continue;
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        if (!text) continue;
-
-        console.log(`[Orchestrator] ✅ GEMINI SUCCESS with ${model}!`);
-        return text;
-      } catch (error) {
-        continue;
-      }
-    }
+  // If only 1 response, return it directly
+  if (responses.length === 1) {
+    console.log(`[Ensemble] ⚡ Single response - returning directly`);
+    return responses[0].text;
   }
-  throw new Error('All API attempts failed');
+
+  // Step 2: Synthesize multiple responses
+  console.log('[Ensemble] 🧠 Synthesizing responses...');
+
+  const synthesizePrompt = `أنت لوكاس. لديك ${responses.length} إجابات مختلفة من مساعدين ذكاء اصطناعي.
+مهمتك: ادمج أفضل ما في كل إجابة في إجابة واحدة مثالية.
+
+قواعد:
+1. اختر المعلومات الأدق والأشمل من كل إجابة
+2. لا تكرر المعلومات
+3. حافظ على نفس لغة السؤال الأصلي
+4. اجعل الإجابة منظمة وسهلة القراءة
+5. لا تذكر أنك تدمج إجابات، قدم الإجابة مباشرة
+
+السؤال الأصلي:
+"${prompt}"
+
+${responses.map((r, i) => `═══ إجابة ${i + 1} (من ${r.model}) ═══
+${r.text}
+`).join('\n')}
+
+═══════════════════════════════════════
+الآن اكتب الإجابة النهائية المدمجة والمحسنة:`;
+
+  const synthesized = await callGroqModel(synthesizePrompt, SYNTHESIZER_MODEL);
+
+  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+  console.log(`[Ensemble] ✅ Completed in ${duration}s`);
+
+  if (synthesized) {
+    return synthesized.text;
+  }
+
+  // Fallback: return longest response
+  return responses.reduce((a, b) => a.text.length > b.text.length ? a : b).text;
 }
 
-// ========== MAIN API CALL ==========
-async function callAPI(prompt) {
-  // ⚠️ TESTING: Groq ONLY - Gemini disabled
-  const groqResult = await callGroqAPI(prompt);
-  if (groqResult) return groqResult;
-
-  // If Groq fails, throw error (no Gemini fallback)
-  throw new Error('Groq API failed - Gemini disabled for testing');
-}
-
+// ═══════════════════════════════════════════════════════════════
+//                    API HANDLER
+// ═══════════════════════════════════════════════════════════════
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -231,7 +236,6 @@ export default async function handler(req, res) {
         ).join('\n\n');
     }
 
-    // Get current time in Arabic timezone
     const now = new Date();
     const timeString = now.toLocaleString('ar-EG', {
       timeZone: 'Africa/Cairo',
@@ -250,12 +254,13 @@ export default async function handler(req, res) {
 الآن: ${timeString}
 ` + contextString + '\n\nUSER: ' + userPrompt;
 
-    // Call with Groq first, then Gemini fallback
-    const responseText = await callAPI(fullPrompt);
+    // Run Ensemble AI
+    const responseText = await runEnsemble(fullPrompt);
 
     res.status(200).json({
       success: true,
-      data: responseText
+      data: responseText,
+      ensemble: true
     });
   } catch (error) {
     console.error('[Orchestrator] Error:', error.message);
