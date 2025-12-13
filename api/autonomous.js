@@ -1,87 +1,71 @@
-// AUTONOMOUS AGENT - Enhanced with Multiple Chart Types
-const MODELS = {
-    BRAIN: 'gemini-2.5-flash',
-    FALLBACK: 'gemini-2.5-flash-lite'
-};
+// AUTONOMOUS AGENT - GROQ ONLY (Testing Mode)
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 
-function getAPIKeys() {
+function getGroqKeys() {
     const keys = [];
-    for (let i = 1; i <= 13; i++) {
-        const key = process.env[`GEMINI_API_KEY_${i}`];
+    for (let i = 1; i <= 10; i++) {
+        const key = process.env[`GROQ_API_KEY_${i}`];
         if (key && key.trim().length > 0) keys.push(key.trim());
     }
-    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
     return keys;
-}
-
-function getNextKey() {
-    const keys = getAPIKeys();
-    return keys.length ? keys[Math.floor(Math.random() * keys.length)] : null;
 }
 
 function detectLanguage(text) {
     return /[\u0600-\u06FF]/.test(text) ? 'ar' : 'en';
 }
 
-async function callGeminiAPI(prompt, apiKey = null, model = MODELS.BRAIN, useSearch = true) {
-    const allKeys = getAPIKeys();
-    const models = [MODELS.BRAIN, MODELS.FALLBACK];
+async function callGroqAPI(prompt) {
+    const keys = getGroqKeys();
+    if (keys.length === 0) throw new Error('No Groq keys available');
 
-    // Shuffle keys for load balancing
-    for (let i = allKeys.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [allKeys[i], allKeys[j]] = [allKeys[j], allKeys[i]];
-    }
+    let keyIndex = 0;
+    let modelIndex = 0;
 
-    let lastError = null;
+    for (let i = 0; i < 15; i++) {
+        const apiKey = keys[keyIndex % keys.length];
+        const model = GROQ_MODELS[modelIndex % GROQ_MODELS.length];
+        keyIndex++;
+        modelIndex++;
 
-    for (const key of allKeys) {
-        for (const m of models) {
-            try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
-                const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }] };
-                if (useSearch) body.tools = [{ googleSearch: {} }];
+        try {
+            console.log(`[Autonomous] GROQ Attempt ${i + 1}: ${model}`);
 
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-                    body: JSON.stringify(body)
-                });
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 4000
+                })
+            });
 
-                if ([429, 503, 500].includes(response.status)) {
-                    console.log(`[Autonomous] Key/Model failed (${response.status}), trying next...`);
-                    lastError = `API error ${response.status}`;
-                    continue;
-                }
-
-                if (!response.ok) {
-                    lastError = `API error ${response.status}`;
-                    continue;
-                }
-
-                const data = await response.json();
-                const groundingMeta = data.candidates?.[0]?.groundingMetadata;
-                const sources = groundingMeta?.groundingChunks?.map(c => ({
-                    title: c.web?.title || 'Source',
-                    url: c.web?.uri || ''
-                })).filter(s => s.url) || [];
-
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                if (!text) {
-                    lastError = 'Empty response';
-                    continue;
-                }
-
-                console.log(`[Autonomous] Success with model ${m}`);
-                return { text, sources: sources.slice(0, 10) };
-            } catch (err) {
-                console.log(`[Autonomous] Error: ${err.message}`);
-                lastError = err.message;
+            if (response.status === 429) {
+                console.log(`[Autonomous] Groq rate limited, trying next...`);
+                continue;
             }
+
+            if (!response.ok) {
+                console.log(`[Autonomous] Groq error ${response.status}, trying next...`);
+                continue;
+            }
+
+            const data = await response.json();
+            const text = data.choices?.[0]?.message?.content;
+
+            if (text) {
+                console.log(`[Autonomous] ✅ GROQ SUCCESS with ${model}!`);
+                return { text, sources: [] };
+            }
+        } catch (err) {
+            console.log(`[Autonomous] Error: ${err.message}`);
         }
     }
 
-    throw new Error(lastError || 'All API keys exhausted');
+    throw new Error('All Groq API attempts failed');
 }
 
 // Enhanced data extraction for multiple chart types
@@ -250,7 +234,7 @@ TOPIC: ${prompt}
 
 مهم جداً: أدرج أكبر عدد ممكن من الأرقام والنسب المئوية والأسعار والترتيبات للتصور البياني.`;
 
-        const result = await callGeminiAPI(researchPrompt, apiKey, MODELS.BRAIN, true);
+        const result = await callGroqAPI(researchPrompt);
         const text = result.text;
 
         // Extract summary
