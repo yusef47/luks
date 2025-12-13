@@ -1,5 +1,6 @@
-// Main Orchestrator API - HYBRID SYSTEM (Groq Speed + Gemini Quality)
-// النظام الهجين: Groq للسرعة → Gemini للجودة → Fallback كامل
+// Main Orchestrator API - SMART ROUTING SYSTEM
+// الأسئلة البسيطة → Groq (سريع)
+// الأسئلة المعقدة → Gemini (جودة عالية)
 
 // ═══════════════════════════════════════════════════════════════
 //                    CONFIGURATION
@@ -12,7 +13,7 @@ function getGroqKeys() {
   const keys = [];
   for (let i = 1; i <= 10; i++) {
     const key = process.env[`GROQ_API_KEY_${i}`];
-    if (key && key.trim().length > 0) keys.push(key.trim());
+    if (key && key.trim()) keys.push(key.trim());
   }
   return keys;
 }
@@ -21,10 +22,63 @@ function getGeminiKeys() {
   const keys = [];
   for (let i = 1; i <= 15; i++) {
     const key = process.env[`GEMINI_API_KEY_${i}`];
-    if (key && key.trim().length > 0) keys.push(key.trim());
+    if (key && key.trim()) keys.push(key.trim());
   }
   if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
   return keys.sort(() => Math.random() - 0.5);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    COMPLEXITY DETECTOR
+// ═══════════════════════════════════════════════════════════════
+
+function isComplexQuestion(prompt) {
+  const lowerPrompt = prompt.toLowerCase();
+
+  // Complexity indicators
+  const complexKeywords = [
+    // Arabic complexity words
+    'تحليل', 'اشرح بالتفصيل', 'نموذج رياضي', 'خطة', 'استراتيجية',
+    'قارن بين', 'ما الفرق', 'كيف يعمل', 'لماذا', 'اقترح',
+    'صمم', 'ابتكر', 'ابحث', 'تقرير', 'دراسة', 'مشروع',
+    'تخيل', 'سيناريو', 'افترض', 'معادلة', 'حسابات',
+    // English complexity words
+    'analyze', 'explain in detail', 'compare', 'design', 'create',
+    'mathematical model', 'plan', 'strategy', 'research', 'report',
+    'imagine', 'scenario', 'assume', 'calculate', 'equation'
+  ];
+
+  // Check for complexity indicators
+  let complexityScore = 0;
+
+  // 1. Long question = likely complex
+  if (prompt.length > 300) complexityScore += 2;
+  if (prompt.length > 500) complexityScore += 2;
+  if (prompt.length > 1000) complexityScore += 3;
+
+  // 2. Multiple question marks = multiple sub-questions
+  const questionMarks = (prompt.match(/\?|؟/g) || []).length;
+  if (questionMarks >= 2) complexityScore += 2;
+  if (questionMarks >= 4) complexityScore += 2;
+
+  // 3. Numbered list = structured complex request
+  if (/[1-9]\.|[١-٩]\./g.test(prompt)) complexityScore += 2;
+
+  // 4. Complex keywords
+  for (const keyword of complexKeywords) {
+    if (lowerPrompt.includes(keyword) || prompt.includes(keyword)) {
+      complexityScore += 1;
+    }
+  }
+
+  // 5. Multiple lines = detailed request
+  const lineCount = prompt.split('\n').filter(l => l.trim()).length;
+  if (lineCount >= 5) complexityScore += 2;
+  if (lineCount >= 10) complexityScore += 2;
+
+  console.log(`[Router] Complexity score: ${complexityScore} (threshold: 4)`);
+
+  return complexityScore >= 4;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -38,13 +92,12 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 ═══════════════════════════════════════════════════════════════
 اسمك: لوكاس (Lukas)
 طبيعتك: مساعد ذكي، ودود، ومتعاون
-شخصيتك: ذكي، مثقف، لطيف، ومحترف
 
 ═══════════════════════════════════════════════════════════════
                     ⚠️ قواعد صارمة جداً
 ═══════════════════════════════════════════════════════════════
-🚫 ممنوع منعاً باتاً ذكر: Google, Gemini, Bard, AI Studio, Meta, Llama, Groq, OpenAI, GPT أو أي شركة تقنية
-🚫 ممنوع القول أنك "نموذج لغوي" أو "LLM" أو "language model"
+🚫 ممنوع منعاً باتاً ذكر: Google, Gemini, Bard, AI Studio, Meta, Llama, Groq, OpenAI, GPT
+🚫 ممنوع القول أنك "نموذج لغوي" أو "LLM"
 🚫 لو سُئلت عن مطورك: قل "مطوري هو شخص مصري ذكي ومبدع جداً"
 
 ═══════════════════════════════════════════════════════════════
@@ -53,15 +106,13 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 - رد بنفس لغة المستخدم (عربي/إنجليزي)
 - كن مفصلاً وشاملاً في إجاباتك
 - استخدم العناوين والتنسيق
-- قدم أمثلة ومعادلات عند الحاجة
 - كن ودوداً ومحترفاً`;
 
 // ═══════════════════════════════════════════════════════════════
-//                    GROQ API (سريع)
+//                    GROQ API (للأسئلة البسيطة)
 // ═══════════════════════════════════════════════════════════════
 
 let groqKeyIndex = 0;
-let groqModelIndex = 0;
 
 async function callGroq(prompt, maxRetries = 10) {
   const keys = getGroqKeys();
@@ -69,12 +120,11 @@ async function callGroq(prompt, maxRetries = 10) {
 
   for (let i = 0; i < maxRetries; i++) {
     const apiKey = keys[groqKeyIndex % keys.length];
-    const model = GROQ_MODELS[groqModelIndex % GROQ_MODELS.length];
+    const model = GROQ_MODELS[i % GROQ_MODELS.length];
     groqKeyIndex++;
-    groqModelIndex++;
 
     try {
-      console.log(`[Hybrid] ⚡ Groq attempt ${i + 1}: ${model}`);
+      console.log(`[Groq] ⚡ Attempt ${i + 1}: ${model}`);
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -96,18 +146,18 @@ async function callGroq(prompt, maxRetries = 10) {
       const text = data.choices?.[0]?.message?.content;
 
       if (text) {
-        console.log(`[Hybrid] ✅ Groq SUCCESS (${text.length} chars)`);
+        console.log(`[Groq] ✅ SUCCESS (${text.length} chars)`);
         return text;
       }
     } catch (error) {
-      console.log(`[Hybrid] ⚠️ Groq error: ${error.message}`);
+      console.log(`[Groq] ⚠️ Error: ${error.message}`);
     }
   }
   return null;
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    GEMINI API (جودة عالية)
+//                    GEMINI API (للأسئلة المعقدة)
 // ═══════════════════════════════════════════════════════════════
 
 let geminiKeyIndex = 0;
@@ -122,7 +172,7 @@ async function callGemini(prompt, maxRetries = 15) {
       geminiKeyIndex++;
 
       try {
-        console.log(`[Hybrid] 🧠 Gemini attempt: ${model}`);
+        console.log(`[Gemini] 🧠 Attempt: ${model}`);
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
         const response = await fetch(url, {
@@ -145,11 +195,11 @@ async function callGemini(prompt, maxRetries = 15) {
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
         if (text) {
-          console.log(`[Hybrid] ✅ Gemini SUCCESS (${text.length} chars)`);
+          console.log(`[Gemini] ✅ SUCCESS (${text.length} chars)`);
           return text;
         }
       } catch (error) {
-        console.log(`[Hybrid] ⚠️ Gemini error: ${error.message}`);
+        console.log(`[Gemini] ⚠️ Error: ${error.message}`);
       }
     }
   }
@@ -157,66 +207,38 @@ async function callGemini(prompt, maxRetries = 15) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    HYBRID SYSTEM
+//                    SMART ROUTER
 // ═══════════════════════════════════════════════════════════════
 
-async function runHybrid(prompt) {
-  console.log('[Hybrid] 🚀 Starting Hybrid System...');
-  const startTime = Date.now();
+async function smartRoute(prompt) {
+  const isComplex = isComplexQuestion(prompt);
 
-  // Step 1: Try Groq first (fast draft)
-  console.log('[Hybrid] Step 1: Getting fast response from Groq...');
-  const groqResponse = await callGroq(prompt);
+  if (isComplex) {
+    console.log('[Router] 🧠 Complex question → Using GEMINI');
 
-  // Step 2: If Groq succeeded, enhance with Gemini
-  if (groqResponse) {
-    console.log('[Hybrid] Step 2: Enhancing with Gemini...');
+    // Try Gemini first for complex questions
+    const geminiResponse = await callGemini(prompt);
+    if (geminiResponse) return geminiResponse;
 
-    const enhancePrompt = `أنت لوكاس. لديك إجابة أولية، مهمتك تحسينها وتفصيلها لتكون إجابة ممتازة.
+    // Fallback to Groq if Gemini fails
+    console.log('[Router] Gemini failed, falling back to Groq...');
+    const groqResponse = await callGroq(prompt);
+    if (groqResponse) return groqResponse;
 
-قواعد التحسين:
-1. أضف تفاصيل ومعلومات إضافية مهمة
-2. حسّن التنظيم باستخدام عناوين وأقسام واضحة
-3. أضف أمثلة عملية ومعادلات رياضية إن لزم
-4. اجعل الإجابة أطول وأشمل (ضعف الطول على الأقل)
-5. حافظ على نفس اللغة (عربي أو إنجليزي)
-6. لا تذكر أنك تحسن إجابة، قدم الإجابة المحسنة مباشرة
+  } else {
+    console.log('[Router] ⚡ Simple question → Using GROQ');
 
-السؤال الأصلي:
-"${prompt}"
+    // Try Groq first for simple questions
+    const groqResponse = await callGroq(prompt);
+    if (groqResponse) return groqResponse;
 
-الإجابة الأولية التي تحتاج تحسين:
-"""
-${groqResponse}
-"""
-
-الآن اكتب الإجابة المحسنة والمفصلة:`;
-
-    const enhancedResponse = await callGemini(enhancePrompt);
-
-    if (enhancedResponse) {
-      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.log(`[Hybrid] ✅ SUCCESS: Groq+Gemini in ${duration}s`);
-      return enhancedResponse;
-    } else {
-      // Gemini failed, return Groq's response
-      console.log('[Hybrid] ⚠️ Gemini failed, returning Groq response');
-      return groqResponse;
-    }
+    // Fallback to Gemini if Groq fails
+    console.log('[Router] Groq failed, falling back to Gemini...');
+    const geminiResponse = await callGemini(prompt);
+    if (geminiResponse) return geminiResponse;
   }
 
-  // Step 3: If Groq failed, try Gemini directly
-  console.log('[Hybrid] ⚠️ Groq failed, trying Gemini directly...');
-  const geminiResponse = await callGemini(prompt);
-
-  if (geminiResponse) {
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`[Hybrid] ✅ SUCCESS: Gemini only in ${duration}s`);
-    return geminiResponse;
-  }
-
-  // Everything failed
-  throw new Error('Both Groq and Gemini failed');
+  throw new Error('All APIs failed');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -256,13 +278,12 @@ export default async function handler(req, res) {
       `\n\nالوقت الحالي: ${timeString}` +
       contextString + '\n\nUSER: ' + userPrompt;
 
-    // Run Hybrid System
-    const responseText = await runHybrid(fullPrompt);
+    // Smart Route based on complexity
+    const responseText = await smartRoute(fullPrompt);
 
     res.status(200).json({
       success: true,
-      data: responseText,
-      hybrid: true
+      data: responseText
     });
   } catch (error) {
     console.error('[Orchestrator] Error:', error.message);
