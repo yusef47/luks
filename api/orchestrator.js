@@ -29,56 +29,45 @@ function getGeminiKeys() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    COMPLEXITY DETECTOR
+//                    GEMINI CLASSIFIER
 // ═══════════════════════════════════════════════════════════════
 
-function isComplexQuestion(prompt) {
-  const lowerPrompt = prompt.toLowerCase();
+async function classifyWithGemini(prompt) {
+  const keys = getGeminiKeys();
+  if (keys.length === 0) return 'complex'; // Default to complex if no keys
 
-  // Complexity indicators
-  const complexKeywords = [
-    // Arabic complexity words
-    'تحليل', 'اشرح بالتفصيل', 'نموذج رياضي', 'خطة', 'استراتيجية',
-    'قارن بين', 'ما الفرق', 'كيف يعمل', 'لماذا', 'اقترح',
-    'صمم', 'ابتكر', 'ابحث', 'تقرير', 'دراسة', 'مشروع',
-    'تخيل', 'سيناريو', 'افترض', 'معادلة', 'حسابات',
-    // English complexity words
-    'analyze', 'explain in detail', 'compare', 'design', 'create',
-    'mathematical model', 'plan', 'strategy', 'research', 'report',
-    'imagine', 'scenario', 'assume', 'calculate', 'equation'
-  ];
+  const classifyPrompt = `أنت مصنف أسئلة. حلل السؤال التالي وحدد هل هو:
+- "simple": سؤال بسيط، تحية، سؤال مباشر، ترجمة قصيرة، سؤال عام
+- "complex": سؤال معقد، يحتاج تحليل، بحث، خطة، مقارنة، نموذج رياضي، شرح مفصل
 
-  // Check for complexity indicators
-  let complexityScore = 0;
+السؤال:
+"${prompt.substring(0, 500)}"
 
-  // 1. Long question = likely complex
-  if (prompt.length > 300) complexityScore += 2;
-  if (prompt.length > 500) complexityScore += 2;
-  if (prompt.length > 1000) complexityScore += 3;
+أجب بكلمة واحدة فقط: simple أو complex`;
 
-  // 2. Multiple question marks = multiple sub-questions
-  const questionMarks = (prompt.match(/\?|؟/g) || []).length;
-  if (questionMarks >= 2) complexityScore += 2;
-  if (questionMarks >= 4) complexityScore += 2;
+  try {
+    const apiKey = keys[0];
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: classifyPrompt }] }],
+        generationConfig: { maxOutputTokens: 10 }
+      })
+    });
 
-  // 3. Numbered list = structured complex request
-  if (/[1-9]\.|[١-٩]\./g.test(prompt)) complexityScore += 2;
-
-  // 4. Complex keywords
-  for (const keyword of complexKeywords) {
-    if (lowerPrompt.includes(keyword) || prompt.includes(keyword)) {
-      complexityScore += 1;
+    if (response.ok) {
+      const data = await response.json();
+      const result = data.candidates?.[0]?.content?.parts?.[0]?.text?.toLowerCase().trim();
+      console.log(`[Classifier] Gemini says: ${result}`);
+      return result?.includes('simple') ? 'simple' : 'complex';
     }
+  } catch (error) {
+    console.log(`[Classifier] Error: ${error.message}`);
   }
 
-  // 5. Multiple lines = detailed request
-  const lineCount = prompt.split('\n').filter(l => l.trim()).length;
-  if (lineCount >= 5) complexityScore += 2;
-  if (lineCount >= 10) complexityScore += 2;
-
-  console.log(`[Router] Complexity score: ${complexityScore} (threshold: 4)`);
-
-  return complexityScore >= 4;
+  // Fallback to local check if Gemini fails
+  return prompt.length > 300 ? 'complex' : 'simple';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -211,10 +200,12 @@ async function callGemini(prompt, maxRetries = 15) {
 // ═══════════════════════════════════════════════════════════════
 
 async function smartRoute(prompt) {
-  const isComplex = isComplexQuestion(prompt);
+  // Gemini يحدد نوع السؤال أولاً
+  const classification = await classifyWithGemini(prompt);
+  const isComplex = classification === 'complex';
 
   if (isComplex) {
-    console.log('[Router] 🧠 Complex question → Using GEMINI');
+    console.log('[Router] 🧠 Gemini says: Complex → Using GEMINI');
 
     // Try Gemini first for complex questions
     const geminiResponse = await callGemini(prompt);
