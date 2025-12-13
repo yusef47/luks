@@ -190,12 +190,12 @@ async function callGeminiAPI(prompt, maxRetries = 9) {
 
 // ========== MAIN API CALL ==========
 async function callAPI(prompt) {
-  // Try Groq first (PRIMARY)
+  // ⚠️ TESTING: Groq ONLY - Gemini disabled
   const groqResult = await callGroqAPI(prompt);
   if (groqResult) return groqResult;
 
-  // Fallback to Gemini
-  return await callGeminiAPI(prompt);
+  // If Groq fails, throw error (no Gemini fallback)
+  throw new Error('Groq API failed - Gemini disabled for testing');
 }
 
 
