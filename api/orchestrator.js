@@ -1,9 +1,30 @@
 // Main Orchestrator API - Updated Dec 2024
-const MODELS = {
-  PRIMARY: 'gemini-2.5-flash',
-  FALLBACK_1: 'gemini-2.5-flash-lite',
-  FALLBACK_2: 'gemini-robotics-er-1.5-preview'
-};
+// ⚠️ TESTING MODE: Groq is PRIMARY, Gemini is FALLBACK
+
+// Groq Configuration
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+
+function getGroqKeys() {
+  const keys = [];
+  for (let i = 1; i <= 10; i++) {
+    const key = process.env[`GROQ_API_KEY_${i}`];
+    if (key && key.trim().length > 0) keys.push(key.trim());
+  }
+  return keys;
+}
+
+// Gemini Configuration (Fallback)
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-robotics-er-1.5-preview'];
+
+function getGeminiKeys() {
+  const keys = [];
+  for (let i = 1; i <= 13; i++) {
+    const key = process.env[`GEMINI_API_KEY_${i}`];
+    if (key && key.trim().length > 0) keys.push(key.trim());
+  }
+  if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
+  return keys.sort(() => Math.random() - 0.5);
+}
 
 const LUKAS_CAPABILITIES = `
 قدراتي الحالية:
@@ -31,7 +52,7 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 ═══════════════════════════════════════════════════════════════
                     ⚠️ قواعد صارمة جداً
 ═══════════════════════════════════════════════════════════════
-🚫 ممنوع منعاً باتاً ذكر: Google, Gemini, Bard, AI Studio, أو أي شركة تقنية
+🚫 ممنوع منعاً باتاً ذكر: Google, Gemini, Bard, AI Studio, Meta, Llama, Groq أو أي شركة تقنية
 🚫 ممنوع القول أنك "نموذج لغوي" أو "LLM" أو "language model"
 🚫 ممنوع ذكر أي تفاصيل تقنية عن كيفية عملك
 
@@ -69,106 +90,114 @@ ${LUKAS_CAPABILITIES}
 - كن موجزاً ولكن شاملاً
 - كن ودوداً ومحترفاً`;
 
-function getAPIKeys() {
-  const keys = [];
-  for (let i = 1; i <= 13; i++) {
-    const key = process.env[`GEMINI_API_KEY_${i}`];
-    if (key && key.trim().length > 0) {
-      keys.push(key.trim());
+// ========== GROQ API (PRIMARY) ==========
+async function callGroqAPI(prompt, maxRetries = 15) {
+  const keys = getGroqKeys();
+  if (keys.length === 0) {
+    console.log('[Orchestrator] No Groq keys, falling back to Gemini...');
+    return null;
+  }
+
+  let keyIndex = 0;
+  let modelIndex = 0;
+
+  for (let i = 0; i < maxRetries; i++) {
+    const apiKey = keys[keyIndex % keys.length];
+    const model = GROQ_MODELS[modelIndex % GROQ_MODELS.length];
+    keyIndex++;
+    modelIndex++;
+
+    try {
+      console.log(`[Orchestrator] 🟣 GROQ Attempt ${i + 1}: ${model}`);
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 4000
+        })
+      });
+
+      if (response.status === 429) {
+        console.log(`[Orchestrator] Groq rate limited, trying next...`);
+        continue;
+      }
+
+      if (!response.ok) {
+        console.log(`[Orchestrator] Groq error ${response.status}, trying next...`);
+        continue;
+      }
+
+      const data = await response.json();
+      const text = data.choices?.[0]?.message?.content;
+
+      if (text) {
+        console.log(`[Orchestrator] ✅ GROQ SUCCESS with ${model}!`);
+        return text;
+      }
+    } catch (error) {
+      console.log(`[Orchestrator] Groq error: ${error.message}`);
     }
   }
-  if (process.env.GEMINI_API_KEY) {
-    keys.push(process.env.GEMINI_API_KEY.trim());
-  }
-  // Shuffle keys for random distribution
-  return keys.sort(() => Math.random() - 0.5);
+
+  console.log('[Orchestrator] Groq exhausted, falling back to Gemini...');
+  return null;
 }
 
-const ALL_MODELS = [
-  MODELS.PRIMARY,
-  MODELS.FALLBACK_1,
-  MODELS.FALLBACK_2
-];
-
-// Smart call that tries ALL keys and ALL models before failing
+// ========== GEMINI API (FALLBACK) ==========
 async function callGeminiAPI(prompt, maxRetries = 9) {
-  const keys = getAPIKeys();
+  const keys = getGeminiKeys();
+  if (keys.length === 0) throw new Error('No API keys available');
 
-  if (keys.length === 0) {
-    throw new Error('No API keys available');
-  }
-
-  let lastError = null;
   let attempts = 0;
-
-  // Try each model
-  for (const model of ALL_MODELS) {
-    // Try each key for this model
+  for (const model of GEMINI_MODELS) {
     for (const apiKey of keys) {
       if (attempts >= maxRetries) break;
       attempts++;
 
       try {
-        console.log(`[Orchestrator] Attempt ${attempts}: ${model} with key ...${apiKey.slice(-6)}`);
-
+        console.log(`[Orchestrator] 🔵 GEMINI Attempt ${attempts}: ${model}`);
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
         const response = await fetch(url, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey
-          },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }]
-          })
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
         });
 
-        // Rate limit - try next key immediately
-        if (response.status === 429) {
-          console.log(`[Orchestrator] Key rate limited, trying next...`);
-          lastError = new Error('Rate limit');
-          continue;
-        }
-
-        // Model not found - try next model
-        if (response.status === 404) {
-          console.log(`[Orchestrator] Model not available, trying next...`);
-          lastError = new Error('Model not available');
-          break; // Move to next model
-        }
-
-        // Other error
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.log(`[Orchestrator] Error ${response.status}, trying next...`);
-          lastError = new Error(`API error ${response.status}`);
-          continue;
-        }
+        if (response.status === 429 || response.status === 503) continue;
+        if (response.status === 404) break;
+        if (!response.ok) continue;
 
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!text) continue;
 
-        if (!text) {
-          console.log(`[Orchestrator] Empty response, trying next...`);
-          lastError = new Error('Empty response');
-          continue;
-        }
-
-        console.log(`[Orchestrator] SUCCESS on attempt ${attempts} with ${model}!`);
+        console.log(`[Orchestrator] ✅ GEMINI SUCCESS with ${model}!`);
         return text;
-
       } catch (error) {
-        console.log(`[Orchestrator] Attempt ${attempts} error: ${error.message}`);
-        lastError = error;
         continue;
       }
     }
   }
-
-  // All attempts failed
-  throw lastError || new Error('All API attempts failed');
+  throw new Error('All API attempts failed');
 }
+
+// ========== MAIN API CALL ==========
+async function callAPI(prompt) {
+  // Try Groq first (PRIMARY)
+  const groqResult = await callGroqAPI(prompt);
+  if (groqResult) return groqResult;
+
+  // Fallback to Gemini
+  return await callGeminiAPI(prompt);
+}
+
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -221,8 +250,8 @@ export default async function handler(req, res) {
 الآن: ${timeString}
 ` + contextString + '\n\nUSER: ' + userPrompt;
 
-    // Call with smart fallback
-    const responseText = await callGeminiAPI(fullPrompt);
+    // Call with Groq first, then Gemini fallback
+    const responseText = await callAPI(fullPrompt);
 
     res.status(200).json({
       success: true,
