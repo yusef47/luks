@@ -1,67 +1,68 @@
-// Synthesize API - GROQ ONLY (Testing Mode)
-// No external imports - inline Groq code
+// Synthesize API - HYBRID SYSTEM (Groq + Gemini)
 
-const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+const GROQ_MODELS = ['meta-llama/llama-3.3-70b-versatile', 'openai/gpt-oss-120b'];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
 
 function getGroqKeys() {
     const keys = [];
     for (let i = 1; i <= 10; i++) {
         const key = process.env[`GROQ_API_KEY_${i}`];
-        if (key && key.trim().length > 0) keys.push(key.trim());
+        if (key && key.trim()) keys.push(key.trim());
     }
     return keys;
 }
 
-let keyIndex = 0;
-let modelIndex = 0;
+function getGeminiKeys() {
+    const keys = [];
+    for (let i = 1; i <= 15; i++) {
+        const key = process.env[`GEMINI_API_KEY_${i}`];
+        if (key && key.trim()) keys.push(key.trim());
+    }
+    return keys.sort(() => Math.random() - 0.5);
+}
 
-async function callGroqAPI(prompt, maxRetries = 15) {
+let groqIdx = 0, geminiIdx = 0;
+
+async function callGroq(prompt) {
     const keys = getGroqKeys();
-    if (keys.length === 0) throw new Error('No Groq keys available');
-
-    for (let i = 0; i < maxRetries; i++) {
-        const apiKey = keys[keyIndex % keys.length];
-        const model = GROQ_MODELS[modelIndex % GROQ_MODELS.length];
-        keyIndex++;
-        modelIndex++;
-
+    for (let i = 0; i < 8; i++) {
         try {
-            console.log(`[Synthesize] GROQ Attempt ${i + 1}: ${model}`);
-
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [{ role: 'user', content: prompt }],
-                    max_tokens: 4000
-                })
+                headers: { 'Authorization': `Bearer ${keys[groqIdx++ % keys.length]}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: GROQ_MODELS[i % 2], messages: [{ role: 'user', content: prompt }], max_tokens: 4000 })
             });
-
-            if (response.status === 429) continue;
-            if (!response.ok) continue;
-
-            const data = await response.json();
-            const text = data.choices?.[0]?.message?.content;
-
-            if (text) {
-                console.log(`[Synthesize] ✅ GROQ SUCCESS with ${model}!`);
-                return text;
+            if (res.ok) {
+                const d = await res.json();
+                if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
             }
-        } catch (error) {
-            console.log(`[Synthesize] Error: ${error.message}`);
+        } catch (e) { }
+    }
+    return null;
+}
+
+async function callGemini(prompt) {
+    const keys = getGeminiKeys();
+    for (const model of GEMINI_MODELS) {
+        for (let i = 0; i < 5; i++) {
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[geminiIdx++ % keys.length] },
+                    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
+                });
+                if (res.ok) {
+                    const d = await res.json();
+                    if (d.candidates?.[0]?.content?.parts?.[0]?.text) return d.candidates[0].content.parts[0].text;
+                }
+            } catch (e) { }
         }
     }
-
-    throw new Error('All Groq API attempts failed');
+    return null;
 }
 
 function detectLanguage(text) {
-    const arabicPattern = /[\u0600-\u06FF]/;
-    return arabicPattern.test(text) ? 'ar' : 'en';
+    return /[\u0600-\u06FF]/.test(text) ? 'ar' : 'en';
 }
 
 export default async function handler(req, res) {
@@ -74,61 +75,43 @@ export default async function handler(req, res) {
 
     try {
         const { prompt, results, conversationHistory } = req.body || {};
-        const userLanguage = detectLanguage(prompt);
+        const lang = detectLanguage(prompt);
 
-        let contextString = '';
-        if (conversationHistory && conversationHistory.length > 0) {
-            contextString = '\n\n=== CONVERSATION HISTORY ===\n' +
-                conversationHistory.map((h, i) =>
-                    `[${i + 1}] User: ${h.prompt}\nLukas: ${h.results?.[h.results.length - 1]?.result || ''}`
-                ).join('\n\n') + '\n=== END ===';
+        let ctx = '';
+        if (conversationHistory?.length) {
+            ctx = '\n\nسجل المحادثة:\n' + conversationHistory.slice(-3).map((h, i) =>
+                `[${i + 1}] المستخدم: ${h.prompt}`).join('\n');
         }
 
-        let resultsText = '';
-        if (results && results.length > 0) {
-            resultsText = '\n\n=== RESEARCH RESULTS ===\n';
-            results.forEach((r, i) => {
-                if (r.result) {
-                    resultsText += `\n--- Source ${i + 1}: ${r.task || 'Unknown'} ---\n${r.result}\n`;
-                }
-            });
-            resultsText += '\n=== END ===';
+        let resText = '';
+        if (results?.length) {
+            resText = '\n\nنتائج البحث:\n' + results.map((r, i) =>
+                r.result ? `--- مصدر ${i + 1} ---\n${r.result}\n` : '').join('');
         }
 
-        const synthesizePrompt = `أنت لوكاس (Lukas)، مساعد ذكاء اصطناعي ذكي ومتطور.
+        const fullPrompt = `أنت لوكاس (Lukas)، مساعد ذكي.
+لو سُئلت عن مطورك: "مطوري شخص مصري ذكي ومبدع"
+ممنوع ذكر Google, Gemini, OpenAI, Meta, Llama أو أي شركة.
 
-═══════════════════════════════════════════════════════════════
-                    ⚠️ قواعد صارمة جداً
-═══════════════════════════════════════════════════════════════
-🚫 ممنوع منعاً باتاً ذكر: Google, Gemini, Bard, AI Studio, Meta, Llama, Groq أو أي شركة تقنية
-🚫 ممنوع القول أنك "نموذج لغوي" أو "LLM"
-🚫 لو سُئلت عن مطورك: قل "مطوري شخص مصري ذكي ومبدع، شغوف بالتكنولوجيا"
+${ctx}${resText}
 
-═══════════════════════════════════════════════════════════════
-                    هويتك
-═══════════════════════════════════════════════════════════════
-اسمك: لوكاس (Lukas)
-صنعك: مطور مصري ذكي ومبدع
+السؤال: "${prompt}"
 
-RESPONSE LANGUAGE: ${userLanguage === 'ar' ? 'Arabic (العربية) - أجب بالعربية فقط' : 'English'}
+قدم إجابة ${lang === 'ar' ? 'عربية' : 'English'} شاملة ومفصلة:`;
 
-${contextString}
-${resultsText}
+        // Hybrid: Groq first, then Gemini enhance
+        let response = await callGroq(fullPrompt);
+        if (response) {
+            const enhanced = await callGemini(`حسّن هذه الإجابة واجعلها أطول وأفضل:\n\n${response}`);
+            if (enhanced) response = enhanced;
+        } else {
+            response = await callGemini(fullPrompt);
+        }
 
-USER QUESTION: "${prompt}"
+        if (!response) throw new Error('All APIs failed');
 
-Provide a comprehensive, well-structured ${userLanguage === 'ar' ? 'Arabic' : 'English'} response:`;
-
-        console.log('[Synthesize] Using GROQ');
-        const text = await callGroqAPI(synthesizePrompt);
-
-        res.status(200).json({
-            success: true,
-            data: text,
-            model: 'groq-llama'
-        });
+        res.status(200).json({ success: true, data: response, model: 'hybrid' });
     } catch (error) {
-        console.error('[Synthesize] Error:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 }
