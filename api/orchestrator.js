@@ -1,25 +1,24 @@
-// Main Orchestrator API - FIXED ROUTING
-// Complex questions → Gemini FIRST
-// Simple questions → Groq (سريع)
+// Main Orchestrator API - COMPLETE SYSTEM
+// Gemini Primary → Groq Fallback → Gemini Reviewer
 
 // ═══════════════════════════════════════════════════════════════
-//                    MODELS (Correct Names)
+//                    ALL MODELS
 // ═══════════════════════════════════════════════════════════════
 
-// Groq models - verified correct names
-const GROQ_MODELS = [
-  'llama-3.3-70b-versatile',
-  'llama-3.1-70b-versatile',
-  'llama-3.1-8b-instant',
-  'gemma2-9b-it'
-];
-
-// Gemini models
+// Gemini models (Primary - Best for Arabic)
 const GEMINI_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-1.5-flash',
   'gemini-1.5-flash-latest'
+];
+
+// Groq models (Fallback - ordered by Arabic quality)
+const GROQ_MODELS = [
+  'qwen-2.5-32b',           // Best for Arabic on Groq
+  'gpt-oss-120b',           // Good multilingual
+  'gemma2-9b-it',           // Google's open model
+  'llama-3.3-70b-versatile' // Fast fallback
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -46,7 +45,7 @@ function getGeminiKeys() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    SYSTEM PROMPT (Arabic Only)
+//                    SYSTEM PROMPT
 // ═══════════════════════════════════════════════════════════════
 
 const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطناعي متطور جداً.
@@ -59,23 +58,77 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 مطورك: شخص مصري ذكي ومبدع جداً
 
 ═══════════════════════════════════════════════════════════════
-                    ⚠️ قواعد صارمة جداً - اتبعها دائماً
+                    ⚠️ قواعد صارمة
 ═══════════════════════════════════════════════════════════════
-🚫 ممنوع منعاً باتاً ذكر: Google, Gemini, Bard, AI Studio, Meta, Llama, Groq, OpenAI, GPT, Claude
+🚫 ممنوع ذكر: Google, Gemini, Bard, Meta, Llama, Groq, OpenAI, GPT, Claude
 🚫 ممنوع القول أنك "نموذج لغوي" أو "LLM"
-🚫 ممنوع استخدام أي كلمات غير عربية أو إنجليزية (لا روسي، لا صيني، لا إسباني)
+🚫 ممنوع استخدام أي كلمات غير عربية/إنجليزية
 ✅ استخدم فقط العربية أو الإنجليزية حسب لغة السؤال
-✅ لو سُئلت عن مطورك: قل "مطوري هو شخص مصري ذكي ومبدع جداً"
+✅ لو سُئلت عن مطورك: "مطوري هو شخص مصري ذكي ومبدع"
 
 ═══════════════════════════════════════════════════════════════
-                    أسلوب الرد المطلوب
+                    أسلوب التفكير
 ═══════════════════════════════════════════════════════════════
-- رد بنفس لغة المستخدم (عربي/إنجليزي)
-- كن مفصلاً وشاملاً ومتعمقاً في إجاباتك
-- استخدم العناوين والتنسيق والقوائم
-- قدم تحليل عميق للأسئلة المعقدة
-- استخدم أمثلة ونماذج رياضية عند الحاجة
-- كن ودوداً ومحترفاً`;
+- فكر بعمق قبل الإجابة
+- حلل السؤال من جميع الجوانب
+- قدم إجابات شاملة ومفصلة
+- استخدم أمثلة ونماذج عند الحاجة
+- راجع إجابتك قبل تقديمها`;
+
+// ═══════════════════════════════════════════════════════════════
+//                    GEMINI API
+// ═══════════════════════════════════════════════════════════════
+
+let geminiKeyIndex = 0;
+
+async function callGemini(prompt, maxTokens = 8000) {
+  const keys = getGeminiKeys();
+  if (keys.length === 0) {
+    console.log('[Gemini] ⚠️ No keys available');
+    return null;
+  }
+
+  for (const model of GEMINI_MODELS) {
+    for (let i = 0; i < Math.min(5, keys.length); i++) {
+      try {
+        console.log(`[Gemini] 🧠 Trying: ${model}`);
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': keys[geminiKeyIndex++ % keys.length]
+          },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: maxTokens }
+          })
+        });
+
+        if (response.status === 429 || response.status === 503) {
+          console.log(`[Gemini] Rate limited, trying next key...`);
+          continue;
+        }
+        if (response.status === 404) {
+          console.log(`[Gemini] Model ${model} not found, trying next...`);
+          break;
+        }
+        if (!response.ok) continue;
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (text) {
+          console.log(`[Gemini] ✅ SUCCESS (${text.length} chars)`);
+          return text;
+        }
+      } catch (error) {
+        console.log(`[Gemini] ⚠️ Error: ${error.message}`);
+      }
+    }
+  }
+  return null;
+}
 
 // ═══════════════════════════════════════════════════════════════
 //                    GROQ API
@@ -83,10 +136,10 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 
 let groqKeyIndex = 0;
 
-async function callGroq(prompt, maxRetries = 12) {
+async function callGroq(prompt) {
   const keys = getGroqKeys();
   if (keys.length === 0) {
-    console.log('[Groq] ⚠️ No Groq keys');
+    console.log('[Groq] ⚠️ No keys available');
     return null;
   }
 
@@ -133,134 +186,79 @@ async function callGroq(prompt, maxRetries = 12) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    GEMINI API (Primary for Complex)
+//                    GEMINI REVIEWER (Quality Control)
 // ═══════════════════════════════════════════════════════════════
 
-let geminiKeyIndex = 0;
+async function geminiReviewer(originalResponse, originalQuestion) {
+  console.log('[Reviewer] 🔍 Reviewing and improving response...');
 
-async function callGemini(prompt, maxRetries = 15) {
-  const keys = getGeminiKeys();
-  if (keys.length === 0) {
-    console.log('[Gemini] ⚠️ No Gemini keys');
-    return null;
+  const reviewPrompt = `أنت مراجع جودة متخصص. راجع هذه الإجابة وحسّنها.
+
+═══════════════════════════════════════════════════════════════
+                    المطلوب
+═══════════════════════════════════════════════════════════════
+1. احذف أي كلمات غير عربية (صينية 提出/روسية были/فيتنامية cập/ألمانية Zustand)
+2. صحح الأخطاء الإملائية والنحوية
+3. حسّن جودة الصياغة والأسلوب
+4. تأكد من التنسيق الصحيح (عناوين، قوائم)
+5. أضف تفاصيل إضافية إذا كانت الإجابة ناقصة
+6. تأكد أن الإجابة تجيب على السؤال بشكل كامل
+
+═══════════════════════════════════════════════════════════════
+                    السؤال الأصلي
+═══════════════════════════════════════════════════════════════
+${originalQuestion}
+
+═══════════════════════════════════════════════════════════════
+                    الإجابة المطلوب مراجعتها
+═══════════════════════════════════════════════════════════════
+${originalResponse}
+
+═══════════════════════════════════════════════════════════════
+                    التعليمات
+═══════════════════════════════════════════════════════════════
+قدم الإجابة المُحسّنة فقط، بدون أي تعليقات إضافية.
+اكتب باللغة العربية الفصحى السليمة.`;
+
+  const reviewed = await callGemini(reviewPrompt, 8000);
+
+  if (reviewed) {
+    console.log('[Reviewer] ✅ Review complete');
+    return reviewed;
   }
 
-  for (const model of GEMINI_MODELS) {
-    for (let i = 0; i < Math.min(5, keys.length); i++) {
-      try {
-        console.log(`[Gemini] 🧠 Trying: ${model}`);
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': keys[geminiKeyIndex++ % keys.length]
-          },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 8000 }
-          })
-        });
-
-        if (response.status === 429 || response.status === 503) {
-          console.log(`[Gemini] Rate limited, trying next key...`);
-          continue;
-        }
-        if (response.status === 404) {
-          console.log(`[Gemini] Model ${model} not found, trying next...`);
-          break;
-        }
-        if (!response.ok) continue;
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (text) {
-          console.log(`[Gemini] ✅ SUCCESS (${text.length} chars)`);
-          return text;
-        }
-      } catch (error) {
-        console.log(`[Gemini] ⚠️ Error: ${error.message}`);
-      }
-    }
-  }
-  return null;
-}
-
-// ═══════════════════════════════════════════════════════════════
-//                    SMART COMPLEXITY CHECK
-// ═══════════════════════════════════════════════════════════════
-
-function isComplexQuestion(prompt) {
-  // Complex keywords
-  const complexKeywords = [
-    'تخيل', 'افترض', 'سيناريو', 'حلل', 'اشرح بالتفصيل',
-    'نموذج رياضي', 'خطة', 'استراتيجية', 'قارن', 'كيف يمكن',
-    'ما الفرق', 'لماذا', 'اقترح', 'صمم', 'ابتكر',
-    'imagine', 'scenario', 'analyze', 'explain in detail',
-    'mathematical model', 'plan', 'strategy', 'compare'
-  ];
-
-  let complexityScore = 0;
-
-  // Long question = likely complex
-  if (prompt.length > 200) complexityScore += 2;
-  if (prompt.length > 500) complexityScore += 2;
-  if (prompt.length > 1000) complexityScore += 3;
-
-  // Multiple question marks
-  const questionMarks = (prompt.match(/\?|؟/g) || []).length;
-  if (questionMarks >= 3) complexityScore += 3;
-
-  // Numbered lists
-  if (/[1-9]\.|[١-٩]\./.test(prompt)) complexityScore += 2;
-
-  // Complex keywords
-  for (const keyword of complexKeywords) {
-    if (prompt.includes(keyword)) complexityScore += 2;
-  }
-
-  // Multiple lines
-  const lines = prompt.split('\n').filter(l => l.trim()).length;
-  if (lines >= 5) complexityScore += 2;
-
-  console.log(`[Router] Complexity score: ${complexityScore} (threshold: 5)`);
-  return complexityScore >= 5;
+  // If review failed, return original
+  console.log('[Reviewer] ⚠️ Review failed, returning original');
+  return originalResponse;
 }
 
 // ═══════════════════════════════════════════════════════════════
 //                    SMART ROUTER
 // ═══════════════════════════════════════════════════════════════
 
-async function smartRoute(prompt) {
-  const isComplex = isComplexQuestion(prompt);
+async function smartRoute(prompt, fullPrompt) {
+  // Step 1: Try Gemini first (Best quality)
+  console.log('[Router] 🧠 Step 1: Trying Gemini...');
+  const geminiResponse = await callGemini(fullPrompt);
 
-  if (isComplex) {
-    console.log('[Router] 🧠 Complex question → GEMINI FIRST');
-
-    // Try Gemini first for complex
-    const geminiResponse = await callGemini(prompt);
-    if (geminiResponse) return geminiResponse;
-
-    // Fallback to Groq
-    console.log('[Router] Gemini failed, trying Groq...');
-    const groqResponse = await callGroq(prompt);
-    if (groqResponse) return groqResponse;
-
-  } else {
-    console.log('[Router] ⚡ Simple question → GROQ FIRST');
-
-    // Try Groq first for simple
-    const groqResponse = await callGroq(prompt);
-    if (groqResponse) return groqResponse;
-
-    // Fallback to Gemini
-    console.log('[Router] Groq failed, trying Gemini...');
-    const geminiResponse = await callGemini(prompt);
-    if (geminiResponse) return geminiResponse;
+  if (geminiResponse) {
+    console.log('[Router] ✅ Gemini answered directly');
+    return geminiResponse;
   }
 
-  throw new Error('All APIs failed');
+  // Step 2: Fallback to Groq
+  console.log('[Router] ⚡ Step 2: Gemini failed, trying Groq...');
+  const groqResponse = await callGroq(fullPrompt);
+
+  if (groqResponse) {
+    // Step 3: Review Groq's response with Gemini
+    console.log('[Router] 🔍 Step 3: Reviewing Groq response with Gemini...');
+    const reviewedResponse = await geminiReviewer(groqResponse, prompt);
+    return reviewedResponse;
+  }
+
+  // All failed
+  throw new Error('All AI models failed to respond');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -281,11 +279,16 @@ export default async function handler(req, res) {
 
     if (!userPrompt) return res.status(400).json({ success: false, error: 'Missing prompt' });
 
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log(`[Orchestrator] 🚀 New request: "${userPrompt.substring(0, 50)}..."`);
+    console.log('═══════════════════════════════════════════════════════════════');
+
+    // Build context
     let contextString = '';
     if (conversationHistory && conversationHistory.length > 0) {
-      contextString = '\n\nCONVERSATION HISTORY:\n' +
+      contextString = '\n\n📝 المحادثة السابقة:\n' +
         conversationHistory.slice(-5).map(h =>
-          `User: ${h.prompt}\nLukas: ${h.results?.[0]?.result || ''}`
+          `المستخدم: ${h.prompt}\nلوكاس: ${h.results?.[0]?.result || ''}`
         ).join('\n\n');
     }
 
@@ -297,18 +300,24 @@ export default async function handler(req, res) {
     });
 
     const fullPrompt = SYSTEM_PROMPT +
-      `\n\nالوقت الحالي: ${timeString}` +
-      contextString + '\n\nUSER: ' + userPrompt;
+      `\n\n⏰ الوقت الحالي: ${timeString}` +
+      contextString +
+      '\n\n👤 سؤال المستخدم:\n' + userPrompt;
 
     // Smart Route
-    const responseText = await smartRoute(fullPrompt);
+    const responseText = await smartRoute(userPrompt, fullPrompt);
+
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log(`[Orchestrator] ✅ Response ready (${responseText.length} chars)`);
+    console.log('═══════════════════════════════════════════════════════════════');
 
     res.status(200).json({
       success: true,
       data: responseText
     });
+
   } catch (error) {
-    console.error('[Orchestrator] Error:', error.message);
+    console.error('[Orchestrator] ❌ Error:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 }

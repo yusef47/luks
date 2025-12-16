@@ -1,18 +1,17 @@
-// Intermediate API - FIXED MODELS
+// Intermediate API - With Gemini Reviewer
 
-const GROQ_MODELS = [
-    'llama-3.3-70b-versatile',
-    'llama-3.1-70b-versatile',
-    'llama-3.1-8b-instant',
-    'gemma2-9b-it'
-];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+const GROQ_MODELS = ['qwen-2.5-32b', 'gpt-oss-120b', 'gemma2-9b-it', 'llama-3.3-70b-versatile'];
 
-const GEMINI_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest'
-];
+function getGeminiKeys() {
+    const keys = [];
+    for (let i = 1; i <= 15; i++) {
+        const key = process.env[`GEMINI_API_KEY_${i}`];
+        if (key && key.trim()) keys.push(key.trim());
+    }
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
+    return keys.sort(() => Math.random() - 0.5);
+}
 
 function getGroqKeys() {
     const keys = [];
@@ -23,48 +22,27 @@ function getGroqKeys() {
     return keys;
 }
 
-function getGeminiKeys() {
-    const keys = [];
-    for (let i = 1; i <= 15; i++) {
-        const key = process.env[`GEMINI_API_KEY_${i}`];
-        if (key && key.trim()) keys.push(key.trim());
-    }
-    return keys.sort(() => Math.random() - 0.5);
-}
-
-let groqIdx = 0, geminiIdx = 0;
-
-async function callGroq(prompt) {
-    const keys = getGroqKeys();
-    for (let i = 0; i < 8; i++) {
-        try {
-            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${keys[groqIdx++ % keys.length]}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: GROQ_MODELS[0], messages: [{ role: 'user', content: prompt }], max_tokens: 3000 })
-            });
-            if (res.ok) {
-                const d = await res.json();
-                if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
-            }
-        } catch (e) { }
-    }
-    return null;
-}
+let geminiIdx = 0, groqIdx = 0;
 
 async function callGemini(prompt) {
     const keys = getGeminiKeys();
+    if (keys.length === 0) return null;
+
     for (const model of GEMINI_MODELS) {
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 3; i++) {
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[geminiIdx++ % keys.length] },
-                    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                        generationConfig: { maxOutputTokens: 4000 }
+                    })
                 });
                 if (res.ok) {
                     const d = await res.json();
-                    if (d.candidates?.[0]?.content?.parts?.[0]?.text) return d.candidates[0].content.parts[0].text;
+                    const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (text) return text;
                 }
             } catch (e) { }
         }
@@ -72,8 +50,35 @@ async function callGemini(prompt) {
     return null;
 }
 
-function truncate(text, max = 5000) {
-    return text?.length > max ? text.slice(0, max) + '...' : text || '';
+async function callGroq(prompt) {
+    const keys = getGroqKeys();
+    if (keys.length === 0) return null;
+
+    for (const model of GROQ_MODELS) {
+        for (let i = 0; i < 2; i++) {
+            try {
+                const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${keys[groqIdx++ % keys.length]}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 2000 })
+                });
+                if (res.ok) {
+                    const d = await res.json();
+                    if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
+                }
+            } catch (e) { }
+        }
+    }
+    return null;
+}
+
+async function geminiReviewer(response, task) {
+    const reviewPrompt = `راجع وصحح هذه الإجابة:
+${response}
+
+قدم الإجابة المصححة فقط:`;
+    const reviewed = await callGemini(reviewPrompt);
+    return reviewed || response;
 }
 
 export default async function handler(req, res) {
@@ -85,22 +90,29 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
     try {
-        const { task, prompt, results } = req.body || {};
+        const { task, previousResults } = req.body || {};
+        if (!task) return res.status(400).json({ success: false, error: 'Missing task' });
 
-        const fullPrompt = `أنت لوكاس. نفذ هذه المهمة بدقة:
-المهمة: ${task || 'عام'}
-الطلب: ${truncate(prompt)}
-${results ? `السياق: ${truncate(JSON.stringify(results), 1500)}` : ''}
+        const fullPrompt = previousResults ?
+            `Previous: ${JSON.stringify(previousResults)}\n\nTask: ${task}` : task;
 
-قدم إجابة مفيدة ومفصلة.`;
+        console.log('[Intermediate] 🧠 Trying Gemini...');
+        let result = await callGemini(fullPrompt);
 
-        // Groq first, Gemini fallback
-        let response = await callGroq(fullPrompt);
-        if (!response) response = await callGemini(fullPrompt);
-        if (!response) throw new Error('All APIs failed');
+        if (!result) {
+            console.log('[Intermediate] ⚡ Trying Groq...');
+            result = await callGroq(fullPrompt);
+            if (result) {
+                console.log('[Intermediate] 🔍 Reviewing...');
+                result = await geminiReviewer(result, task);
+            }
+        }
 
-        res.status(200).json({ success: true, data: response });
+        if (!result) result = 'Processing error';
+
+        res.status(200).json({ success: true, result });
     } catch (error) {
+        console.error('[Intermediate] Error:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 }

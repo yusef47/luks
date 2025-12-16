@@ -1,18 +1,8 @@
-// Synthesize API - FIXED MODELS
+// Synthesize API - With Gemini Reviewer
+// Groq draft → Gemini review
 
-const GROQ_MODELS = [
-    'llama-3.3-70b-versatile',
-    'llama-3.1-70b-versatile',
-    'llama-3.1-8b-instant',
-    'gemma2-9b-it'
-];
-
-const GEMINI_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest'
-];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+const GROQ_MODELS = ['qwen-2.5-32b', 'gpt-oss-120b', 'gemma2-9b-it', 'llama-3.3-70b-versatile'];
 
 function getGroqKeys() {
     const keys = [];
@@ -29,42 +19,31 @@ function getGeminiKeys() {
         const key = process.env[`GEMINI_API_KEY_${i}`];
         if (key && key.trim()) keys.push(key.trim());
     }
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
     return keys.sort(() => Math.random() - 0.5);
 }
 
-let groqIdx = 0, geminiIdx = 0;
-
-async function callGroq(prompt) {
-    const keys = getGroqKeys();
-    for (let i = 0; i < 8; i++) {
-        try {
-            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${keys[groqIdx++ % keys.length]}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: GROQ_MODELS[i % 2], messages: [{ role: 'user', content: prompt }], max_tokens: 4000 })
-            });
-            if (res.ok) {
-                const d = await res.json();
-                if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
-            }
-        } catch (e) { }
-    }
-    return null;
-}
+let geminiIdx = 0, groqIdx = 0;
 
 async function callGemini(prompt) {
     const keys = getGeminiKeys();
+    if (keys.length === 0) return null;
+
     for (const model of GEMINI_MODELS) {
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 3; i++) {
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[geminiIdx++ % keys.length] },
-                    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                        generationConfig: { maxOutputTokens: 8000 }
+                    })
                 });
                 if (res.ok) {
                     const d = await res.json();
-                    if (d.candidates?.[0]?.content?.parts?.[0]?.text) return d.candidates[0].content.parts[0].text;
+                    const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (text) return text;
                 }
             } catch (e) { }
         }
@@ -72,8 +51,41 @@ async function callGemini(prompt) {
     return null;
 }
 
-function detectLanguage(text) {
-    return /[\u0600-\u06FF]/.test(text) ? 'ar' : 'en';
+async function callGroq(prompt) {
+    const keys = getGroqKeys();
+    if (keys.length === 0) return null;
+
+    for (const model of GROQ_MODELS) {
+        for (let i = 0; i < 2; i++) {
+            try {
+                const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${keys[groqIdx++ % keys.length]}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 4000 })
+                });
+                if (res.ok) {
+                    const d = await res.json();
+                    if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
+                }
+            } catch (e) { }
+        }
+    }
+    return null;
+}
+
+async function geminiReviewer(response, question) {
+    const reviewPrompt = `راجع وحسّن هذه الإجابة:
+- احذف الكلمات الغريبة
+- صحح الأخطاء
+- حسّن الصياغة
+
+السؤال: ${question.substring(0, 200)}
+الإجابة: ${response}
+
+قدم الإجابة المحسّنة فقط:`;
+
+    const reviewed = await callGemini(reviewPrompt);
+    return reviewed || response;
 }
 
 export default async function handler(req, res) {
@@ -85,44 +97,47 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
     try {
-        const { prompt, results, conversationHistory } = req.body || {};
-        const lang = detectLanguage(prompt);
+        const { results, originalPrompt } = req.body || {};
+        if (!results || !originalPrompt) return res.status(400).json({ success: false, error: 'Missing data' });
 
-        let ctx = '';
-        if (conversationHistory?.length) {
-            ctx = '\n\nسجل المحادثة:\n' + conversationHistory.slice(-3).map((h, i) =>
-                `[${i + 1}] المستخدم: ${h.prompt}`).join('\n');
+        const lang = /[\u0600-\u06FF]/.test(originalPrompt) ? 'ar' : 'en';
+        const resultsText = results.map((r, i) => `[${i + 1}] ${r.result || ''}`).join('\n\n');
+
+        const synthesizePrompt = lang === 'ar' ?
+            `أنت خبير في دمج المعلومات. اجمع هذه النتائج في إجابة شاملة ومتكاملة.
+
+السؤال: ${originalPrompt}
+
+النتائج:
+${resultsText}
+
+قدم إجابة نهائية شاملة ومنظمة:` :
+            `Combine these results into a comprehensive answer.
+
+Question: ${originalPrompt}
+Results: ${resultsText}
+
+Provide a final comprehensive answer:`;
+
+        console.log('[Synthesize] 🧠 Trying Gemini...');
+        let response = await callGemini(synthesizePrompt);
+
+        if (!response) {
+            console.log('[Synthesize] ⚡ Trying Groq...');
+            response = await callGroq(synthesizePrompt);
+            if (response) {
+                console.log('[Synthesize] 🔍 Reviewing with Gemini...');
+                response = await geminiReviewer(response, originalPrompt);
+            }
         }
 
-        let resText = '';
-        if (results?.length) {
-            resText = '\n\nنتائج البحث:\n' + results.map((r, i) =>
-                r.result ? `--- مصدر ${i + 1} ---\n${r.result}\n` : '').join('');
+        if (!response) {
+            response = lang === 'ar' ? 'عذراً، حدث خطأ في معالجة الطلب.' : 'Sorry, an error occurred.';
         }
 
-        const fullPrompt = `أنت لوكاس (Lukas)، مساعد ذكي.
-لو سُئلت عن مطورك: "مطوري شخص مصري ذكي ومبدع"
-ممنوع ذكر Google, Gemini, OpenAI, Meta, Llama أو أي شركة.
-
-${ctx}${resText}
-
-السؤال: "${prompt}"
-
-قدم إجابة ${lang === 'ar' ? 'عربية' : 'English'} شاملة ومفصلة:`;
-
-        // Hybrid: Groq first, then Gemini enhance
-        let response = await callGroq(fullPrompt);
-        if (response) {
-            const enhanced = await callGemini(`حسّن هذه الإجابة واجعلها أطول وأفضل:\n\n${response}`);
-            if (enhanced) response = enhanced;
-        } else {
-            response = await callGemini(fullPrompt);
-        }
-
-        if (!response) throw new Error('All APIs failed');
-
-        res.status(200).json({ success: true, data: response, model: 'hybrid' });
+        res.status(200).json({ success: true, data: response });
     } catch (error) {
+        console.error('[Synthesize] Error:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 }
