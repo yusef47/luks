@@ -1,6 +1,18 @@
-// AUTONOMOUS AGENT - HYBRID SYSTEM (Groq Speed + Gemini Quality)
-const GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+// AUTONOMOUS AGENT - COMPLETE MULTI-MODEL FALLBACK
+
+const GROQ_MODELS = [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'qwen-qwq-32b',
+    'llama-4-scout-17b-16e-instruct'
+];
+
+const GEMINI_MODELS = [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest'
+];
 
 function getGroqKeys() {
     const keys = [];
