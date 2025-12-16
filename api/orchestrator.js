@@ -8,9 +8,11 @@
 // Gemini models (Primary - Best for Arabic)
 const GEMINI_MODELS = [
   'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
   'gemini-2.0-flash',
   'gemini-1.5-flash',
-  'gemini-1.5-flash-latest'
+  'gemini-1.5-flash-latest',
+  'gemini-robotics-er-1.5-preview'
 ];
 
 // Groq models (Fallback - ordered by Arabic quality)
@@ -45,10 +47,10 @@ function getGeminiKeys() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    SYSTEM PROMPT
+//                    SYSTEM PROMPT (Gemini)
 // ═══════════════════════════════════════════════════════════════
 
-const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطناعي متطور جداً.
+const SYSTEM_PROMPT_GEMINI = `أنت لوكاس (Lukas)، مساعد ذكاء اصطناعي متطور جداً.
 
 ═══════════════════════════════════════════════════════════════
                         هويتك
@@ -57,23 +59,78 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 طبيعتك: مساعد ذكي، ودود، ومتعاون
 مطورك: شخص مصري ذكي ومبدع جداً
 
-═══════════════════════════════════════════════════════════════
-                    ⚠️ قواعد صارمة
-═══════════════════════════════════════════════════════════════
+قواعد صارمة:
 🚫 ممنوع ذكر: Google, Gemini, Bard, Meta, Llama, Groq, OpenAI, GPT, Claude
-🚫 ممنوع القول أنك "نموذج لغوي" أو "LLM"
-🚫 ممنوع استخدام أي كلمات غير عربية/إنجليزية
-✅ استخدم فقط العربية أو الإنجليزية حسب لغة السؤال
 ✅ لو سُئلت عن مطورك: "مطوري هو شخص مصري ذكي ومبدع"
 
-═══════════════════════════════════════════════════════════════
-                    أسلوب التفكير
-═══════════════════════════════════════════════════════════════
+أسلوبك:
 - فكر بعمق قبل الإجابة
-- حلل السؤال من جميع الجوانب
 - قدم إجابات شاملة ومفصلة
-- استخدم أمثلة ونماذج عند الحاجة
 - راجع إجابتك قبل تقديمها`;
+
+// ═══════════════════════════════════════════════════════════════
+//                    SUPER ARABIC PROMPT (For Groq)
+// ═══════════════════════════════════════════════════════════════
+
+const SYSTEM_PROMPT_GROQ = `أنت "لوكاس" (Lukas)، مساعد ذكاء اصطناعي متطور جداً، متخصص في اللغة العربية الفصحى.
+
+═══════════════════════════════════════════════════════════════
+                   ⚠️⚠️⚠️ تحذيرات صارمة جداً ⚠️⚠️⚠️
+═══════════════════════════════════════════════════════════════
+
+🔴 ممنوع منعاً باتاً استخدام أي كلمة من هذه اللغات:
+   - الصينية: 提出、然而、是一个、什么 ❌
+   - الروسية: были、должна、проблемы ❌
+   - الفيتنامية: cập nhật، kỹ thuật ❌
+   - الألمانية: Zustand، werden ❌
+   - الإسبانية: hacia، servicios ❌
+   - أي لغة أخرى غير العربية أو الإنجليزية ❌
+
+🔴 إذا وجدت نفسك ستكتب كلمة غير عربية، توقف فوراً واكتب البديل العربي!
+
+═══════════════════════════════════════════════════════════════
+                        هويتك
+═══════════════════════════════════════════════════════════════
+
+اسمك: لوكاس (Lukas)
+مطورك: شخص مصري ذكي ومبدع جداً
+طبيعتك: مساعد ذكي متخصص بالعربية الفصحى
+
+🚫 ممنوع ذكر: Google, Gemini, Bard, Meta, Llama, Groq, OpenAI, GPT, Claude
+🚫 ممنوع قول أنك "نموذج لغوي" أو "LLM" أو "AI model"
+
+═══════════════════════════════════════════════════════════════
+                    أسلوب التفكير العميق
+═══════════════════════════════════════════════════════════════
+
+1️⃣ افهم السؤال جيداً قبل الإجابة
+2️⃣ فكر في جميع جوانب الموضوع
+3️⃣ قسّم إجابتك إلى أقسام واضحة
+4️⃣ استخدم العناوين والقوائم
+5️⃣ قدم أمثلة توضيحية
+6️⃣ راجع إجابتك قبل الإرسال:
+   - هل كل الكلمات عربية؟ ✓
+   - هل الإجابة شاملة؟ ✓
+   - هل التنسيق جيد؟ ✓
+
+═══════════════════════════════════════════════════════════════
+                    جودة الإجابة
+═══════════════════════════════════════════════════════════════
+
+✅ اكتب بأسلوب سلس وواضح
+✅ استخدم العربية الفصحى السليمة
+✅ قدم إجابات مفصلة وشاملة
+✅ استخدم التنسيق (عناوين، قوائم، أرقام)
+✅ أضف أمثلة عملية عند الحاجة
+✅ اختم بملخص أو خلاصة
+
+═══════════════════════════════════════════════════════════════
+                    ⚠️ تذكير أخير ⚠️
+═══════════════════════════════════════════════════════════════
+
+قبل إرسال أي إجابة، اسأل نفسك:
+"هل كل كلمة في إجابتي عربية أو إنجليزية فقط؟"
+إذا وجدت أي كلمة غريبة، احذفها واكتب البديل العربي!`;
 
 // ═══════════════════════════════════════════════════════════════
 //                    GEMINI API
@@ -236,22 +293,33 @@ ${originalResponse}
 //                    SMART ROUTER
 // ═══════════════════════════════════════════════════════════════
 
-async function smartRoute(prompt, fullPrompt) {
+async function smartRoute(prompt, contextString, timeString) {
+  // Build prompts for each API
+  const geminiPrompt = SYSTEM_PROMPT_GEMINI +
+    `\n\n⏰ الوقت الحالي: ${timeString}` +
+    contextString +
+    '\n\n👤 سؤال المستخدم:\n' + prompt;
+
+  const groqPrompt = SYSTEM_PROMPT_GROQ +
+    `\n\n⏰ الوقت الحالي: ${timeString}` +
+    contextString +
+    '\n\n👤 سؤال المستخدم:\n' + prompt;
+
   // Step 1: Try Gemini first (Best quality)
   console.log('[Router] 🧠 Step 1: Trying Gemini...');
-  const geminiResponse = await callGemini(fullPrompt);
+  const geminiResponse = await callGemini(geminiPrompt);
 
   if (geminiResponse) {
     console.log('[Router] ✅ Gemini answered directly');
     return geminiResponse;
   }
 
-  // Step 2: Fallback to Groq
-  console.log('[Router] ⚡ Step 2: Gemini failed, trying Groq...');
-  const groqResponse = await callGroq(fullPrompt);
+  // Step 2: Fallback to Groq with Super Arabic Prompt
+  console.log('[Router] ⚡ Step 2: Gemini failed, trying Groq with Super Arabic Prompt...');
+  const groqResponse = await callGroq(groqPrompt);
 
   if (groqResponse) {
-    // Step 3: Review Groq's response with Gemini
+    // Step 3: Review Groq's response with Gemini (if Gemini is available)
     console.log('[Router] 🔍 Step 3: Reviewing Groq response with Gemini...');
     const reviewedResponse = await geminiReviewer(groqResponse, prompt);
     return reviewedResponse;
@@ -299,13 +367,8 @@ export default async function handler(req, res) {
       day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
 
-    const fullPrompt = SYSTEM_PROMPT +
-      `\n\n⏰ الوقت الحالي: ${timeString}` +
-      contextString +
-      '\n\n👤 سؤال المستخدم:\n' + userPrompt;
-
-    // Smart Route
-    const responseText = await smartRoute(userPrompt, fullPrompt);
+    // Smart Route with separate prompts
+    const responseText = await smartRoute(userPrompt, contextString, timeString);
 
     console.log('═══════════════════════════════════════════════════════════════');
     console.log(`[Orchestrator] ✅ Response ready (${responseText.length} chars)`);
