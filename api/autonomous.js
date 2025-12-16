@@ -28,6 +28,10 @@ let groqIdx = 0, geminiIdx = 0;
 
 async function callGroq(prompt) {
     const keys = getGroqKeys();
+    if (keys.length === 0) {
+        console.log('[Autonomous] ⚠️ No Groq keys available');
+        return null;
+    }
     for (let i = 0; i < 10; i++) {
         try {
             const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {

@@ -16,7 +16,10 @@ let keyIndex = 0;
 
 async function callGemini(prompt) {
     const keys = getGeminiKeys();
-    if (keys.length === 0) return null;
+    if (keys.length === 0) {
+        console.log('[Plan] ⚠️ No Gemini keys available');
+        return null;
+    }
 
     for (const model of GEMINI_MODELS) {
         for (let i = 0; i < 5; i++) {
@@ -34,7 +37,9 @@ async function callGemini(prompt) {
                     const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (text) return text;
                 }
-            } catch (e) { }
+            } catch (e) {
+                console.log(`[Plan] Error: ${e.message}`);
+            }
         }
     }
     return null;
