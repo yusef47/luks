@@ -1,10 +1,10 @@
-// Synthesize API - COMPLETE MULTI-MODEL FALLBACK
+// Synthesize API - FIXED MODELS
 
 const GROQ_MODELS = [
     'llama-3.3-70b-versatile',
+    'llama-3.1-70b-versatile',
     'llama-3.1-8b-instant',
-    'qwen-qwq-32b',
-    'llama-4-scout-17b-16e-instruct'
+    'gemma2-9b-it'
 ];
 
 const GEMINI_MODELS = [
