@@ -41,45 +41,64 @@ function getGeminiKeys() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    GEMINI CLASSIFIER
+//                    GPT OSS 120B CLASSIFIER (Groq)
 // ═══════════════════════════════════════════════════════════════
 
-async function classifyWithGemini(prompt) {
-  const keys = getGeminiKeys();
+async function classifyWithGPT(prompt) {
+  const keys = getGroqKeys();
   if (keys.length === 0) return 'complex'; // Default to complex if no keys
 
-  const classifyPrompt = `أنت مصنف أسئلة. حلل السؤال التالي وحدد هل هو:
-- "simple": سؤال بسيط، تحية، سؤال مباشر، ترجمة قصيرة، سؤال عام
-- "complex": سؤال معقد، يحتاج تحليل، بحث، خطة، مقارنة، نموذج رياضي، شرح مفصل
+  const classifyPrompt = `أنت مصنف أسئلة ذكي. حلل السؤال التالي وحدد نوعه:
+
+- "simple": سؤال بسيط مثل:
+  - تحية (مرحبا، أهلاً، صباح الخير)
+  - سؤال مباشر بإجابة قصيرة (ما هي عاصمة مصر؟)
+  - طلب ترجمة قصيرة
+  - سؤال عام بسيط
+  - أسئلة عن الوقت أو التاريخ
+
+- "complex": سؤال معقد يحتاج تفكير عميق مثل:
+  - تحليل موقف أو سيناريو
+  - مقارنة بين عدة خيارات
+  - شرح مفصل لموضوع علمي
+  - وضع خطة أو استراتيجية
+  - نموذج رياضي أو حسابات
+  - بحث في موضوع متعدد الجوانب
+  - سيناريوهات افتراضية تحتاج إبداع
 
 السؤال:
-"${prompt.substring(0, 500)}"
+"${prompt.substring(0, 800)}"
 
 أجب بكلمة واحدة فقط: simple أو complex`;
 
   try {
-    const apiKey = keys[0];
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+    console.log('[Classifier] 🧠 Using GPT OSS 120B to classify...');
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      headers: {
+        'Authorization': `Bearer ${keys[0]}`,
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: classifyPrompt }] }],
-        generationConfig: { maxOutputTokens: 10 }
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [{ role: 'user', content: classifyPrompt }],
+        max_tokens: 10
       })
     });
 
     if (response.ok) {
       const data = await response.json();
-      const result = data.candidates?.[0]?.content?.parts?.[0]?.text?.toLowerCase().trim();
-      console.log(`[Classifier] Gemini says: ${result}`);
+      const result = data.choices?.[0]?.message?.content?.toLowerCase().trim();
+      console.log(`[Classifier] GPT says: ${result}`);
       return result?.includes('simple') ? 'simple' : 'complex';
     }
   } catch (error) {
     console.log(`[Classifier] Error: ${error.message}`);
   }
 
-  // Fallback to local check if Gemini fails
-  return prompt.length > 300 ? 'complex' : 'simple';
+  // Default to complex for safety
+  return 'complex';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -212,12 +231,12 @@ async function callGemini(prompt, maxRetries = 15) {
 // ═══════════════════════════════════════════════════════════════
 
 async function smartRoute(prompt) {
-  // Gemini يحدد نوع السؤال أولاً
-  const classification = await classifyWithGemini(prompt);
+  // GPT OSS 120B يحدد نوع السؤال أولاً
+  const classification = await classifyWithGPT(prompt);
   const isComplex = classification === 'complex';
 
   if (isComplex) {
-    console.log('[Router] 🧠 Gemini says: Complex → Using GEMINI');
+    console.log('[Router] 🧠 GPT says: Complex → Using GEMINI');
 
     // Try Gemini first for complex questions
     const geminiResponse = await callGemini(prompt);
