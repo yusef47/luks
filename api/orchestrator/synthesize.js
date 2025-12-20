@@ -97,16 +97,17 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
     try {
-        const { results, originalPrompt } = req.body || {};
-        if (!results || !originalPrompt) return res.status(400).json({ success: false, error: 'Missing data' });
+        const { results, originalPrompt, prompt } = req.body || {};
+        const userPrompt = originalPrompt || prompt; // Accept both names for compatibility
+        if (!results || !userPrompt) return res.status(400).json({ success: false, error: 'Missing data' });
 
-        const lang = /[\u0600-\u06FF]/.test(originalPrompt) ? 'ar' : 'en';
+        const lang = /[\u0600-\u06FF]/.test(userPrompt) ? 'ar' : 'en';
         const resultsText = results.map((r, i) => `[${i + 1}] ${r.result || ''}`).join('\n\n');
 
         const synthesizePrompt = lang === 'ar' ?
             `أنت خبير في دمج المعلومات. اجمع هذه النتائج في إجابة شاملة ومتكاملة.
 
-السؤال: ${originalPrompt}
+السؤال: ${userPrompt}
 
 النتائج:
 ${resultsText}
@@ -114,7 +115,7 @@ ${resultsText}
 قدم إجابة نهائية شاملة ومنظمة:` :
             `Combine these results into a comprehensive answer.
 
-Question: ${originalPrompt}
+Question: ${userPrompt}
 Results: ${resultsText}
 
 Provide a final comprehensive answer:`;
@@ -127,7 +128,7 @@ Provide a final comprehensive answer:`;
             response = await callGroq(synthesizePrompt);
             if (response) {
                 console.log('[Synthesize] 🔍 Reviewing with Gemini...');
-                response = await geminiReviewer(response, originalPrompt);
+                response = await geminiReviewer(response, userPrompt);
             }
         }
 
