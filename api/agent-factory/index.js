@@ -294,51 +294,86 @@ async function executeAgents(agentConfigs) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    STEP 4: SYNTHESIZE
+//                    STEP 4: SYNTHESIZE (Enhanced)
 // ═══════════════════════════════════════════════════════════════
 
 async function synthesizeResults(results, originalPrompt) {
-    const successfulResults = results.filter(r => r.success);
-    if (successfulResults.length === 0) return 'عذراً، لم أتمكن من معالجة طلبك.';
-    if (successfulResults.length === 1) return successfulResults[0].response;
+    const successfulResults = results.filter(r => r.success && r.response);
 
-    const agentOutputs = successfulResults.map(r => `## ${r.emoji} ${r.name}:\n${r.response}`).join('\n\n');
+    console.log(`[Synthesis] Processing ${successfulResults.length} successful results`);
 
-    const synthesizePrompt = `أنت "المنسق العام" لنظام لوكاس. أمامك إجابات من خبراء مختلفين.
+    if (successfulResults.length === 0) {
+        return 'عذراً، لم أتمكن من معالجة طلبك. يرجى إعادة المحاولة.';
+    }
 
-السؤال الأصلي: "${originalPrompt}"
+    // If only one agent, return directly with formatting
+    if (successfulResults.length === 1) {
+        console.log('[Synthesis] Single agent - returning directly');
+        return successfulResults[0].response;
+    }
 
-مهمتك:
-1. دمج الإجابات في رد واحد متسق
-2. حذف التكرار
-3. اختيار الأدق من كل خبير
-4. تنسيق بـ Markdown
-5. لا تذكر أسماء الخبراء
+    // Build agent outputs with clear markers
+    const agentOutputs = successfulResults.map((r, i) =>
+        `━━━ ${r.emoji} ${r.name} ━━━\n${r.response}`
+    ).join('\n\n═════════════════════════════════════\n\n');
 
-الإجابات:
+    // Enhanced synthesis prompt with strong context preservation
+    const synthesizePrompt = `أنت لوكاس، المنسق العام. مهمتك دمج إجابات الخبراء في رد واحد شامل.
+
+═══════════════════════════════════════════════════════════════
+📌 السؤال الأصلي الذي يجب الإجابة عليه:
+═══════════════════════════════════════════════════════════════
+"${originalPrompt}"
+
+═══════════════════════════════════════════════════════════════
+📋 إجابات الخبراء (${successfulResults.length} خبراء):
+═══════════════════════════════════════════════════════════════
 ${agentOutputs}
 
-قدم الرد النهائي المدمج:`;
+═══════════════════════════════════════════════════════════════
+📝 تعليمات الدمج:
+═══════════════════════════════════════════════════════════════
+1. ⚠️ مهم جداً: أجب على السؤال الأصلي المذكور أعلاه تحديداً
+2. ادمج جميع المعلومات من الخبراء في رد واحد متسق
+3. احذف التكرار والمعلومات المتناقضة
+4. استخدم تنسيق Markdown (عناوين ##، نقاط -)
+5. لا تذكر أسماء الخبراء - الرد يكون منك (لوكاس)
+6. ابدأ مباشرة بالمحتوى دون مقدمات عن التلخيص
+
+قدم الرد النهائي المدمج الآن:`;
 
     const keys = getGeminiKeys();
+
     for (const model of GEMINI_MODELS) {
         try {
+            console.log(`[Synthesis] Trying ${model}...`);
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[geminiKeyIndex++ % keys.length] },
                 body: JSON.stringify({
                     contents: [{ role: 'user', parts: [{ text: synthesizePrompt }] }],
-                    generationConfig: { maxOutputTokens: 4000, temperature: 0.4 }
+                    generationConfig: { maxOutputTokens: 8000, temperature: 0.3 }
                 })
             });
+
             if (res.ok) {
                 const d = await res.json();
                 const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (text) return text;
+                if (text && text.length > 50) {
+                    console.log(`[Synthesis] ✅ Success: ${text.length} chars`);
+                    return text;
+                }
+            } else {
+                console.log(`[Synthesis] ${model} failed: ${res.status}`);
             }
-        } catch (e) { }
+        } catch (e) {
+            console.log(`[Synthesis] Error: ${e.message}`);
+        }
     }
-    return agentOutputs;
+
+    // Fallback: combine outputs manually
+    console.log('[Synthesis] ⚠️ Gemini failed, returning combined outputs');
+    return `## إجابة لوكاس\n\nبناءً على تحليل الخبراء:\n\n${agentOutputs}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
