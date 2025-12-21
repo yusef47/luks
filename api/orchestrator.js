@@ -330,6 +330,42 @@ async function smartRoute(prompt, contextString, timeString) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//                    COMPLEXITY DETECTOR
+// ═══════════════════════════════════════════════════════════════
+
+function detectComplexity(prompt) {
+  const keywords = ['مالي', 'تكلفة', 'استثمار', 'سعر', 'قانون', 'ترخيص', 'بحث', 'إحصائيات',
+    '2024', '2025', 'مشروع', 'شركة', 'تحليل', 'توقعات', 'مقارنة'];
+  const matches = keywords.filter(kw => prompt.includes(kw));
+  if (matches.length >= 3) return 'complex';
+  if (matches.length >= 2) return 'moderate';
+  return 'simple';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    AGENT FACTORY CALLER
+// ═══════════════════════════════════════════════════════════════
+
+async function callAgentFactory(prompt) {
+  try {
+    const factoryModule = await import('./agent-factory/index.js');
+    const mockReq = { method: 'POST', body: { prompt } };
+    let result = null;
+    const mockRes = {
+      setHeader: () => { },
+      status: (code) => ({ end: () => { }, json: (data) => { result = { code, data }; } })
+    };
+    await factoryModule.default(mockReq, mockRes);
+    if (result?.code === 200 && result?.data?.success) {
+      return { success: true, response: result.data.data, meta: result.data.meta };
+    }
+  } catch (e) {
+    console.log('[Orchestrator] Agent Factory error:', e.message);
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
 //                    API HANDLER
 // ═══════════════════════════════════════════════════════════════
 
@@ -342,7 +378,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
   try {
-    const { prompt, task, conversationHistory } = req.body || {};
+    const { prompt, task, conversationHistory, useFactory = 'auto' } = req.body || {};
     const userPrompt = prompt || task;
 
     if (!userPrompt) return res.status(400).json({ success: false, error: 'Missing prompt' });
@@ -351,7 +387,24 @@ export default async function handler(req, res) {
     console.log(`[Orchestrator] 🚀 New request: "${userPrompt.substring(0, 50)}..."`);
     console.log('═══════════════════════════════════════════════════════════════');
 
-    // Build context
+    const complexity = detectComplexity(userPrompt);
+    console.log(`[Orchestrator] 📊 Complexity: ${complexity}`);
+
+    // Route complex questions to Agent Factory
+    if (useFactory === 'always' || (useFactory === 'auto' && complexity !== 'simple')) {
+      console.log('[Orchestrator] 🏭 Using Agent Factory...');
+      const factoryResult = await callAgentFactory(userPrompt);
+      if (factoryResult?.success) {
+        return res.status(200).json({
+          success: true,
+          data: factoryResult.response,
+          meta: { ...factoryResult.meta, usedAgentFactory: true }
+        });
+      }
+      console.log('[Orchestrator] 🔄 Agent Factory failed, falling back...');
+    }
+
+    // Regular route for simple questions
     let contextString = '';
     if (conversationHistory && conversationHistory.length > 0) {
       contextString = '\n\n📝 المحادثة السابقة:\n' +
@@ -367,16 +420,14 @@ export default async function handler(req, res) {
       day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
 
-    // Smart Route with separate prompts
     const responseText = await smartRoute(userPrompt, contextString, timeString);
 
-    console.log('═══════════════════════════════════════════════════════════════');
     console.log(`[Orchestrator] ✅ Response ready (${responseText.length} chars)`);
-    console.log('═══════════════════════════════════════════════════════════════');
 
     res.status(200).json({
       success: true,
-      data: responseText
+      data: responseText,
+      meta: { complexity, usedAgentFactory: false }
     });
 
   } catch (error) {
@@ -384,3 +435,4 @@ export default async function handler(req, res) {
     res.status(500).json({ success: false, error: error.message });
   }
 }
+
