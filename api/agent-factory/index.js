@@ -154,7 +154,7 @@ async function analyzeTask(prompt) {
 //                    STEP 2: GENERATE CONFIGS
 // ═══════════════════════════════════════════════════════════════
 
-function generateAgentConfigs(agents, originalPrompt, complexity) {
+function generateAgentConfigs(agents, originalPrompt, complexity, conversationContext = '') {
     return agents.map((agent, index) => {
         const template = TEMPLATES[agent.type] || TEMPLATES.general_expert;
         const model = complexity === 'simple' ? 'llama-3.1-8b-instant' : 'llama-3.3-70b-versatile';
@@ -168,6 +168,7 @@ function generateAgentConfigs(agents, originalPrompt, complexity) {
 3. أجب في نطاق تخصصك فقط
 4. كن مختصراً ومحدداً
 5. ${template.outputFormat}
+${conversationContext ? `\n📝 سياق المحادثة السابقة:\n${conversationContext}` : ''}
 
 المهمة: ${agent.task}
 السؤال الأصلي: ${originalPrompt}`;
@@ -297,7 +298,7 @@ async function executeAgents(agentConfigs) {
 //                    STEP 4: SYNTHESIZE (Enhanced)
 // ═══════════════════════════════════════════════════════════════
 
-async function synthesizeResults(results, originalPrompt) {
+async function synthesizeResults(results, originalPrompt, conversationContext = '') {
     const successfulResults = results.filter(r => r.success && r.response);
 
     console.log(`[Synthesis] Processing ${successfulResults.length} successful results`);
@@ -314,33 +315,44 @@ async function synthesizeResults(results, originalPrompt) {
 
     // Build agent outputs with clear markers
     const agentOutputs = successfulResults.map((r, i) =>
-        `━━━ ${r.emoji} ${r.name} ━━━\n${r.response}`
-    ).join('\n\n═════════════════════════════════════\n\n');
+        `[${r.name}]:\n${r.response}`
+    ).join('\n\n---\n\n');
 
-    // Enhanced synthesis prompt with strong context preservation
-    const synthesizePrompt = `أنت لوكاس، المنسق العام. مهمتك دمج إجابات الخبراء في رد واحد شامل.
+    // Build context section
+    const contextSection = conversationContext
+        ? `【سياق سابق】\n${conversationContext}\n\n`
+        : '';
 
-═══════════════════════════════════════════════════════════════
-📌 السؤال الأصلي الذي يجب الإجابة عليه:
-═══════════════════════════════════════════════════════════════
-"${originalPrompt}"
+    // ENHANCED SYNTHESIS PROMPT - Manus-quality output
+    const synthesizePrompt = `اقرأ النتائج التالية ثم اكتب إجابة واحدة منظمة.
 
-═══════════════════════════════════════════════════════════════
-📋 إجابات الخبراء (${successfulResults.length} خبراء):
-═══════════════════════════════════════════════════════════════
+${contextSection}【السؤال】
+${originalPrompt}
+
+【النتائج】
 ${agentOutputs}
 
-═══════════════════════════════════════════════════════════════
-📝 تعليمات الدمج:
-═══════════════════════════════════════════════════════════════
-1. ⚠️ مهم جداً: أجب على السؤال الأصلي المذكور أعلاه تحديداً
-2. ادمج جميع المعلومات من الخبراء في رد واحد متسق
-3. احذف التكرار والمعلومات المتناقضة
-4. استخدم تنسيق Markdown (عناوين ##، نقاط -)
-5. لا تذكر أسماء الخبراء - الرد يكون منك (لوكاس)
-6. ابدأ مباشرة بالمحتوى دون مقدمات عن التلخيص
+【تعليمات التنسيق - مهم جداً】
+اكتب إجابة منظمة بهذا الشكل بالضبط:
 
-قدم الرد النهائي المدمج الآن:`;
+1. **ابدأ بعنوان رئيسي** (# عنوان)
+2. **مقدمة قصيرة** (2-3 جمل فقط تلخص الموضوع)
+3. **أقسام منظمة** بعناوين فرعية (## عنوان القسم)
+4. **نقاط مختصرة** داخل كل قسم (-)
+5. **جدول ملخص في النهاية** بهذا الشكل:
+
+| المجال | التوقع/النتيجة | مستوى التأثير |
+|--------|---------------|---------------|
+| ... | ... | مرتفع/متوسط/منخفض |
+
+⚠️ قواعد صارمة:
+- لا تبدأ بـ "بصفتي خبيرًا" أو "بناءً على" 
+- ابدأ مباشرة بالعنوان
+- اختصر كل فقرة قدر الإمكان
+- استخدم الأرقام والإحصائيات
+- اجعل الإجابة أقل من 1500 كلمة
+
+【الإجابة】`;
 
     const keys = getGeminiKeys();
 
@@ -389,11 +401,20 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
     try {
-        const { prompt, skipCache = false } = req.body || {};
+        const { prompt, skipCache = false, conversationHistory = [] } = req.body || {};
         if (!prompt) return res.status(400).json({ success: false, error: 'Missing prompt' });
 
         const startTime = Date.now();
         console.log('[AgentFactory] 🏭 Starting...');
+        console.log(`[AgentFactory] 📝 History: ${conversationHistory.length} messages`);
+
+        // Build conversation context string
+        let conversationContext = '';
+        if (conversationHistory && conversationHistory.length > 0) {
+            conversationContext = conversationHistory.slice(-5).map(h =>
+                `المستخدم: ${h.prompt}\nلوكاس: ${(h.results?.[0]?.result || h.response || '').substring(0, 300)}`
+            ).join('\n---\n');
+        }
 
         // Check memory
         if (!skipCache) {
@@ -412,9 +433,9 @@ export default async function handler(req, res) {
         const analysis = await analyzeTask(prompt);
         console.log(`[AgentFactory] Agents: ${analysis.agents.map(a => a.type).join(', ')}`);
 
-        const configs = generateAgentConfigs(analysis.agents, prompt, analysis.complexity);
+        const configs = generateAgentConfigs(analysis.agents, prompt, analysis.complexity, conversationContext);
         const results = await executeAgents(configs);
-        const finalResponse = await synthesizeResults(results, prompt);
+        const finalResponse = await synthesizeResults(results, prompt, conversationContext);
 
         // Save to memory
         await saveToGeneticMemory(prompt, finalResponse, results.map(r => r.type));

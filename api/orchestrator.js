@@ -346,10 +346,10 @@ function detectComplexity(prompt) {
 //                    AGENT FACTORY CALLER
 // ═══════════════════════════════════════════════════════════════
 
-async function callAgentFactory(prompt) {
+async function callAgentFactory(prompt, conversationHistory = []) {
   try {
     const factoryModule = await import('./agent-factory/index.js');
-    const mockReq = { method: 'POST', body: { prompt } };
+    const mockReq = { method: 'POST', body: { prompt, conversationHistory } };
     let result = null;
     const mockRes = {
       setHeader: () => { },
@@ -393,7 +393,7 @@ export default async function handler(req, res) {
     // Route complex questions to Agent Factory
     if (useFactory === 'always' || (useFactory === 'auto' && complexity !== 'simple')) {
       console.log('[Orchestrator] 🏭 Using Agent Factory...');
-      const factoryResult = await callAgentFactory(userPrompt);
+      const factoryResult = await callAgentFactory(userPrompt, conversationHistory);
       if (factoryResult?.success) {
         return res.status(200).json({
           success: true,
