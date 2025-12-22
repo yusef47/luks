@@ -284,17 +284,28 @@ async function executeAgents(agentConfigs) {
                 })
             });
             const duration = (Date.now() - startTime) / 1000;
+            
+            console.log(`[Agent ${config.name}] Response status: ${res.status}`);
+            
             if (res.ok) {
                 const d = await res.json();
-                return { ...config, success: true, response: d.choices?.[0]?.message?.content || '', duration };
+                const content = d.choices?.[0]?.message?.content || '';
+                console.log(`[Agent ${config.name}] ✅ Success, ${content.length} chars`);
+                return { ...config, success: true, response: content, duration };
             }
-            return { ...config, success: false, error: `HTTP ${res.status}`, duration };
+            
+            const errorBody = await res.text();
+            console.log(`[Agent ${config.name}] ❌ Failed: ${res.status} - ${errorBody.substring(0, 200)}`);
+            return { ...config, success: false, error: `HTTP ${res.status}: ${errorBody.substring(0, 100)}`, duration };
         } catch (e) {
+            console.log(`[Agent ${config.name}] ❌ Exception: ${e.message}`);
             return { ...config, success: false, error: e.message, duration: (Date.now() - startTime) / 1000 };
         }
     });
 
-    return Promise.all(promises);
+    const allResults = await Promise.all(promises);
+    console.log(`[Agents] Total: ${allResults.length}, Success: ${allResults.filter(r => r.success).length}`);
+    return allResults;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -326,104 +337,77 @@ async function synthesizeResults(results, originalPrompt, conversationContext = 
         ? `【سياق سابق】\n${conversationContext}\n\n`
         : '';
 
-    // LUKAS PRO SYNTHESIS - Implementing Gemini's 4 Critical Fixes
-    const synthesizePrompt = `You are a Strategic Executive Consultant. Your output must be Data-Dense and Action-Oriented.
+    // LUKAS PRO SYNTHESIS - Simplified & Working
+    const synthesizePrompt = `أنت مستشار استراتيجي. اكتب تقريراً منظماً بالعربية.
 
-${contextSection}【السؤال المطلوب الإجابة عليه】
-${originalPrompt}
+${contextSection}السؤال: ${originalPrompt}
 
-【بيانات الخبراء للدمج】
+البيانات:
 ${agentOutputs}
 
 ═══════════════════════════════════════════════════════════════
-🎯 CRITICAL RULES (VIOLATION = COMPLETE FAILURE)
+اكتب التقرير بهذا الهيكل بالضبط:
 ═══════════════════════════════════════════════════════════════
 
-1️⃣ TOKEN MANAGEMENT:
-   ❌ NO long introductions - Start DIRECTLY with the title
-   ❌ NO "بصفتي" or "يسعدني" or "سأقوم"
-   ✅ Tables FIRST, prose SECOND
-   ✅ If response is long, prioritize TABLES over text
+# [عنوان]
 
-2️⃣ MANDATORY OUTPUT STRUCTURE:
-
-# [عنوان قوي مباشر]
-
-## 📌 الملخص التنفيذي
+## الملخص التنفيذي
 | البند | التفاصيل |
 |-------|----------|
-| 🎯 الهدف | [جملة واحدة] |
-| 💰 التكلفة الإجمالية | [رقم بالدولار] |
-| ⏱️ المدة | [سنوات] |
-| ⚠️ الخطر الرئيسي | [جملة] |
-| ✅ التوصية | [جملة] |
+| الهدف | [جملة] |
+| التكلفة | [رقم] |
+| المدة | [فترة] |
+| الخطر الرئيسي | [جملة] |
 
 ---
 
-## 1️⃣ [القسم الأول]
-**Key Takeaway:** [جملة واحدة]
-- [نقطة + رقم]
-- [نقطة + رقم]
+## التحليل التفصيلي
 
-## 2️⃣ [القسم الثاني]
-**Key Takeaway:** [جملة واحدة]
-- [نقطة + رقم]
+### 1. [القسم الأول]
+- [نقطة مع رقم]
+- [نقطة مع رقم]
 
----
-
-## 📊 جدول المقارنة
-| العنصر | القيمة | التأثير |
-|--------|--------|---------|
-| [بند] | [رقم] | 🔴/🟡/🟢 |
+### 2. [القسم الثاني]
+- [نقطة مع رقم]
 
 ---
 
-## ⏱️ الجدول الزمني (Timeline)
-| المرحلة | الفترة | الهدف | التكلفة |
-|---------|--------|-------|---------|
-| 1 | 20XX | [هدف] | $XX M |
-| 2 | 20XX | [هدف] | $XX M |
-| 3 | 20XX | [هدف] | $XX M |
+## جدول المقارنة
+| العنصر | القيمة | الملاحظات |
+|--------|--------|-----------|
+| ... | ... | ... |
 
 ---
 
-## ⚠️ مصفوفة المخاطر
-| المخاطرة | الاحتمالية | التأثير | الإجراء الوقائي |
-|----------|------------|---------|-----------------|
-| [خطر] | 🔴 مرتفع | 🔴 | [حل] |
-| [خطر] | 🟡 متوسط | 🟡 | [حل] |
-| [خطر] | 🟢 منخفض | 🔴 | [حل] |
+## الجدول الزمني
+| المرحلة | الفترة | الهدف |
+|---------|--------|-------|
+| 1 | ... | ... |
+| 2 | ... | ... |
+| 3 | ... | ... |
 
 ---
 
-## ✅ قائمة التحقق (Compliance Checklist)
-- [x] ملخص تنفيذي ✓
-- [x] جداول مقارنة ✓
-- [x] جدول زمني ✓
-- [x] مصفوفة مخاطر ✓
-- [x] توصيات محددة ✓
+## مصفوفة المخاطر
+| المخاطرة | الاحتمالية | التأثير | الحل |
+|----------|------------|---------|------|
+| ... | مرتفع/متوسط/منخفض | مرتفع/متوسط/منخفض | ... |
 
 ---
 
-## 🎯 التوصيات النهائية
-1. [توصية محددة وقابلة للتنفيذ]
-2. [توصية محددة وقابلة للتنفيذ]
-3. [توصية محددة وقابلة للتنفيذ]
+## التوصيات
+1. [توصية]
+2. [توصية]
+3. [توصية]
 
 ═══════════════════════════════════════════════════════════════
+قواعد مهمة:
+- لا تبدأ بـ "بصفتي" أو "سأقوم"
+- ابدأ مباشرة بالعنوان
+- كل الأرقام يجب أن تكون واقعية
+- أضف 4 جداول على الأقل
 
-3️⃣ FORMATTING RULES:
-   ✅ Every section MUST end with "Key Takeaway"
-   ✅ Every number MUST have unit (%, $, years, etc.)
-   ✅ Use 🔴 🟡 🟢 for risk levels
-   ✅ Minimum 4 tables required
-
-4️⃣ QUALITY CHECK:
-   - If asked for N items, deliver exactly N items
-   - Show Compliance Checklist at the end
-   - Be CONCISE - max 2 lines per bullet point
-
-【ابدأ مباشرة بالعنوان بدون أي مقدمة - الآن】`;
+ابدأ الآن:`;
 
     const keys = getGeminiKeys();
 
