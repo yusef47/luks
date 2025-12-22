@@ -105,20 +105,26 @@ export default async function handler(req, res) {
         const resultsText = results.map((r, i) => `[${i + 1}] ${r.result || ''}`).join('\n\n');
 
         const synthesizePrompt = lang === 'ar' ?
-            `أنت خبير في دمج المعلومات. اجمع هذه النتائج في إجابة شاملة ومتكاملة.
+            `اكتب إجابة شاملة ومنظمة على هذا السؤال.
 
 السؤال: ${userPrompt}
 
-النتائج:
-${resultsText}
+${resultsText ? `البيانات المتاحة:\n${resultsText}` : ''}
 
-قدم إجابة نهائية شاملة ومنظمة:` :
-            `Combine these results into a comprehensive answer.
+═══════════════════════════════════════════════════════════
+قواعد صارمة:
+- ابدأ مباشرة بالإجابة (لا تقل "بصفتي" أو "سأقوم")
+- استخدم جداول إن أمكن
+- كن مختصراً ومنظماً
+═══════════════════════════════════════════════════════════
+
+الإجابة:` :
+            `Write a comprehensive and organized answer.
 
 Question: ${userPrompt}
-Results: ${resultsText}
+${resultsText ? `Available data:\n${resultsText}` : ''}
 
-Provide a final comprehensive answer:`;
+Start directly with the answer:`;
 
         console.log('[Synthesize] 🧠 Trying Gemini...');
         let response = await callGemini(synthesizePrompt);
