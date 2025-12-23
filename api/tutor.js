@@ -10,6 +10,19 @@ const MODELS = {
     TTS: 'playai-tts'
 };
 
+// Available voices for TTS
+const VOICES = {
+    // UI Name: Groq Voice ID
+    'james': 'Fritz-PlayAI',      // Professional & Clear (Male)
+    'emma': 'Arista-PlayAI',      // Friendly & Patient (Female)
+    'atlas': 'Atlas-PlayAI',      // Deep & Confident (Male)
+    'basil': 'Basil-PlayAI',      // Calm & Steady (Male)
+    'briggs': 'Briggs-PlayAI',    // Energetic (Male)
+    'coral': 'Coral-PlayAI',      // Warm & Expressive (Female)
+    'indigo': 'Indigo-PlayAI',    // Professional (Female)
+    'jasper': 'Jasper-PlayAI'     // Friendly (Male)
+};
+
 function getGroqKeys() {
     const keys = [];
     for (let i = 1; i <= 10; i++) {
@@ -132,16 +145,20 @@ async function handleSTT(body) {
 // ═══════════════════════════════════════════════════════════════
 
 async function handleTTS(body) {
-    const { text, voice } = body;
+    const { text, voice, speed } = body;
     if (!text) throw new Error('Missing text');
 
-    const selectedVoice = voice || 'Fritz-PlayAI';
-    const audioBuffer = await synthesizeSpeech(text, selectedVoice);
+    // Map tutor name to Groq voice ID (e.g., 'james' → 'Fritz-PlayAI')
+    const voiceName = (voice || 'james').toLowerCase();
+    const selectedVoice = VOICES[voiceName] || VOICES['james'];
+
+    const audioBuffer = await synthesizeSpeech(text, selectedVoice, speed);
 
     return {
         audio: audioBuffer.toString('base64'),
         format: 'mp3',
-        voice: selectedVoice
+        voice: selectedVoice,
+        tutor: voiceName
     };
 }
 
@@ -208,14 +225,24 @@ async function transcribeAudio(audioBuffer, model = MODELS.STT, retries = 3) {
     throw new Error('STT failed');
 }
 
-async function synthesizeSpeech(text, voice, retries = 3) {
+async function synthesizeSpeech(text, voice, speed = 'normal', retries = 3) {
+    // Map speed names to values
+    const speedMap = { 'slow': 0.8, 'normal': 1.0, 'fast': 1.2 };
+    const speedValue = speedMap[speed] || 1.0;
+
     for (let attempt = 0; attempt < retries; attempt++) {
         const key = getNextKey();
         try {
             const response = await fetch('https://api.groq.com/openai/v1/audio/speech', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: MODELS.TTS, input: text, voice, response_format: 'mp3' })
+                body: JSON.stringify({
+                    model: MODELS.TTS,
+                    input: text,
+                    voice,
+                    speed: speedValue,
+                    response_format: 'mp3'
+                })
             });
 
             if (response.status === 429 || response.status === 503) continue;
@@ -264,6 +291,23 @@ export default async function handler(req, res) {
             case 'tts':
             case 'text-to-speech':
                 result = await handleTTS(body);
+                break;
+            case 'voices':
+                // Return available voices/tutors
+                result = {
+                    tutors: [
+                        { id: 'james', name: 'James', description: 'Professional & Clear', gender: 'male' },
+                        { id: 'emma', name: 'Emma', description: 'Friendly & Patient', gender: 'female' },
+                        { id: 'atlas', name: 'Atlas', description: 'Deep & Confident', gender: 'male' },
+                        { id: 'basil', name: 'Basil', description: 'Calm & Steady', gender: 'male' },
+                        { id: 'briggs', name: 'Briggs', description: 'Energetic', gender: 'male' },
+                        { id: 'coral', name: 'Coral', description: 'Warm & Expressive', gender: 'female' },
+                        { id: 'indigo', name: 'Indigo', description: 'Professional', gender: 'female' },
+                        { id: 'jasper', name: 'Jasper', description: 'Friendly', gender: 'male' }
+                    ],
+                    speeds: ['slow', 'normal', 'fast'],
+                    levels: ['A1', 'A2', 'B1', 'B2', 'C1']
+                };
                 break;
             default:
                 // Default to chat for backwards compatibility
