@@ -1,56 +1,79 @@
-// Tutor Chat API - uses gemini-2.5-flash-lite for fast response
+// Tutor Chat API - Groq with Key Rotation
+// Uses llama-3.3-70b-versatile for multilingual support
+
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash-lite',
-    FALLBACK: 'gemini-2.5-flash'
+    PRIMARY: 'llama-3.3-70b-versatile',
+    FALLBACK: 'llama-3.1-8b-instant'
 };
 
-function getAPIKeys() {
+function getGroqKeys() {
     const keys = [];
-    for (let i = 1; i <= 13; i++) {
-        const key = process.env[`GEMINI_API_KEY_${i}`];
+    for (let i = 1; i <= 10; i++) {
+        const key = process.env[`GROQ_API_KEY_${i}`];
         if (key && key.trim().length > 0) {
             keys.push(key.trim());
         }
     }
-    if (process.env.GEMINI_API_KEY) {
-        keys.push(process.env.GEMINI_API_KEY.trim());
-    }
     return keys;
 }
 
+let keyIndex = 0;
+
 function getNextKey() {
-    const keys = getAPIKeys();
+    const keys = getGroqKeys();
     if (keys.length === 0) return null;
-    return keys[Math.floor(Math.random() * keys.length)];
+    const key = keys[keyIndex % keys.length];
+    keyIndex++;
+    return key;
 }
 
-async function callGeminiAPI(prompt, apiKey, model = MODELS.PRIMARY) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+async function callGroqAPI(messages, model = MODELS.PRIMARY, retries = 3) {
+    const keys = getGroqKeys();
+    if (keys.length === 0) throw new Error('No Groq API keys available');
 
-    console.log(`[Tutor] Using ${model}...`);
+    for (let attempt = 0; attempt < retries; attempt++) {
+        const key = getNextKey();
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }]
-        })
-    });
+        try {
+            console.log(`[Tutor] Using ${model} (attempt ${attempt + 1})...`);
 
-    if ((response.status === 429 || response.status === 404 || response.status === 503) && model === MODELS.PRIMARY) {
-        return callGeminiAPI(prompt, apiKey, MODELS.FALLBACK);
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model,
+                    messages,
+                    max_tokens: 2000,
+                    temperature: 0.7
+                })
+            });
+
+            if (response.status === 429 || response.status === 503) {
+                console.log(`[Tutor] Rate limited, trying next key...`);
+                continue;
+            }
+
+            if (response.status === 404 && model === MODELS.PRIMARY) {
+                console.log(`[Tutor] Falling back to ${MODELS.FALLBACK}...`);
+                return callGroqAPI(messages, MODELS.FALLBACK, retries - attempt);
+            }
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Groq error ${response.status}: ${errorText.substring(0, 200)}`);
+            }
+
+            const data = await response.json();
+            return data.choices?.[0]?.message?.content || '';
+        } catch (e) {
+            console.log(`[Tutor] Attempt ${attempt + 1} failed: ${e.message}`);
+            if (attempt === retries - 1) throw e;
+        }
     }
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`${model} error ${response.status}: ${errorText.substring(0, 200)}`);
-    }
-
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    throw new Error('All retry attempts failed');
 }
 
 export default async function handler(req, res) {
@@ -71,27 +94,47 @@ export default async function handler(req, res) {
     try {
         const { history, message, level } = req.body || {};
 
-        const apiKey = getNextKey();
-        if (!apiKey) {
-            res.status(500).json({ success: false, error: 'No API keys available' });
+        if (!message) {
+            res.status(400).json({ success: false, error: 'Missing message' });
             return;
         }
 
-        const tutorPrompt = `You are Lukas, a friendly English tutor. 
-Never mention Google, Gemini, or technical details.
-Level: ${level || 'B1'}
+        const systemPrompt = `You are Lukas (لوكاس), a friendly and patient language tutor.
 
-${history?.map(h => `${h.role}: ${h.content}`).join('\n') || ''}
+IMPORTANT RULES:
+1. Understand and respond in ANY language the student uses
+2. If student speaks Arabic, respond in Arabic  
+3. If student speaks English, respond in English
+4. If student mixes languages, adapt naturally
+5. Correct mistakes gently in the same language
+6. Be encouraging, patient, and supportive
+7. Keep responses concise but helpful
+8. Never mention you are an AI or technical details
 
-Student: ${message}
+Student Level: ${level || 'B1'}`;
 
-Respond naturally as Lukas. Correct mistakes gently, encourage the student.`;
+        const messages = [
+            { role: 'system', content: systemPrompt }
+        ];
 
-        const responseText = await callGeminiAPI(tutorPrompt, apiKey);
+        // Add conversation history
+        if (history && Array.isArray(history)) {
+            history.forEach(h => {
+                messages.push({
+                    role: h.role === 'user' ? 'user' : 'assistant',
+                    content: h.content
+                });
+            });
+        }
+
+        // Add current message
+        messages.push({ role: 'user', content: message });
+
+        const responseText = await callGroqAPI(messages);
 
         res.status(200).json({ success: true, data: responseText });
     } catch (error) {
-        console.error('[Tutor] Error:', error.message);
+        console.error('[Tutor Chat] Error:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 }
