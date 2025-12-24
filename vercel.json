@@ -3,6 +3,12 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "installCommand": "npm install",
+  "crons": [
+    {
+      "path": "/api/oracle?action=cycle",
+      "schedule": "*/30 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
