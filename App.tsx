@@ -23,12 +23,6 @@ import PresentationGenerator from './src/components/presentation/PresentationGen
 import AutonomousMode from './src/components/AutonomousMode';
 import DailyFeedSettings from './src/components/DailyFeedSettings';
 
-// Services
-import { groqSpeechService } from './src/services/groqSpeechService';
-import { getPersonaById, tutorPersonas } from './src/config/tutorPersonas';
-
-// Types
-export type LanguageLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
 
 // Note: All Gemini API calls are now handled by the backend proxy
 // Frontend no longer imports directly from geminiService (deprecated)
@@ -218,22 +212,6 @@ const App: React.FC = () => {
   const [fileType, setFileType] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ========== TUTOR MODE ==========
-  const [isTutorMode, setIsTutorMode] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [hasGreeted, setHasGreeted] = useState(false);
-  const [speechRate, setSpeechRate] = useState(1.0);
-  const [languageLevel, setLanguageLevel] = useState<LanguageLevel>('B1');
-  const [personaId, setPersonaId] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('tutor_persona') || 'emma';
-    }
-    return 'emma';
-  });
-  const continuousListeningRef = useRef(false);
-  const activeRecognitionRef = useRef<any>(null);
-  const tutorConversationIdRef = useRef<string | null>(null);
-  const recognitionStarterRef = useRef<(() => void) | null>(null);
 
   // ========== PRESENTATION MODE ==========
   const [isPresentationMode, setIsPresentationMode] = useState(false);
@@ -314,35 +292,6 @@ const App: React.FC = () => {
       if (latest) setViewedStep(latest);
     }
   }, [activeExchange]);
-
-  // Get current persona
-  const currentPersona = getPersonaById(personaId) || tutorPersonas[0];
-
-  // Tutor welcome - persona and level appropriate
-  useEffect(() => {
-    if (isTutorMode && !hasGreeted) {
-      // Personalized welcome messages (Arabic)
-      const personaWelcomes: Record<string, string> = {
-        'emma': "Hi! I'm Emma, your friendly tutor. Happy to help you learn!",
-        'james': "Hello, I'm James, your professional instructor.",
-        'atlas': "Hello, I'm Atlas. My voice is deep and confident.",
-        'basil': "Hello, I'm Basil. Calm and steady.",
-        'briggs': "Hey! I'm Briggs! Energetic and enthusiastic!",
-        'coral': "Hi! I'm Coral. Warm and expressive!",
-        'indigo': "Hello, I'm Indigo. Professional and sophisticated.",
-        'jasper': "Hey! I'm Jasper! Friendly and cheerful!"
-      };
-
-      const welcomeText = personaWelcomes[personaId] || `Hello! I'm ${currentPersona.name}, your tutor. How can I help you?`;
-
-      groqSpeechService.speak(welcomeText, {
-        voice: personaId
-      }).then(() => setHasGreeted(true));
-    } else if (!isTutorMode) {
-      setHasGreeted(false);
-      tutorConversationIdRef.current = null;
-    }
-  }, [isTutorMode, hasGreeted, speechRate, personaId, currentPersona]);
 
   // Auto-show computer
   useEffect(() => {
@@ -455,160 +404,10 @@ const App: React.FC = () => {
     }
   };
 
-  // ========== TUTOR HANDLERS ==========
-
-  const handleTutorSubmit = async (text: string) => {
-    if (!text.trim()) return;
-
-    const newExchange: Exchange = {
-      id: Date.now().toString(),
-      prompt: text,
-      imageFile: null,
-      videoFile: null,
-      documentFile: null,
-      plan: null,
-      results: [],
-      status: 'executing'
-    };
-
-    let convoId = tutorConversationIdRef.current || activeConversationId;
-
-    if (!convoId) {
-      const newConvoId = Date.now().toString();
-      convoId = newConvoId;
-      tutorConversationIdRef.current = newConvoId;
-      setConversations(prev => [...prev, { id: newConvoId, title: "English Tutor Session", exchanges: [newExchange] }]);
-      setActiveConversationId(newConvoId);
-    } else {
-      setConversations(prev => prev.map(c =>
-        c.id === convoId ? { ...c, exchanges: [...c.exchanges, newExchange] } : c
-      ));
-    }
-
-    setPrompt('');
-    setIsLoading(true);
-
-    try {
-      const currentConvo = conversations.find(c => c.id === convoId) || { exchanges: [] };
-      const history = currentConvo.exchanges.map(ex => {
-        const resp = ex.results.find(r => r.agent === Agent.Orchestrator);
-        return [
-          { role: 'user' as const, content: ex.prompt },
-          ...(resp?.result ? [{ role: 'assistant' as const, content: resp.result }] : [])
-        ];
-      }).flat();
-
-      let fullResponse = '';
-      const onChunk = (chunk: string) => {
-        fullResponse += chunk;
-        updateExchange(convoId!, newExchange.id, {
-          status: 'executing',
-          results: [{ step: 1, agent: Agent.Orchestrator, task: 'Tutor Response', result: fullResponse, status: 'running' }]
-        });
-      };
-
-      // Import backend tutor client
-      const { generateTutorResponse } = await import('./src/services/tutorClient');
-      const responseText = await generateTutorResponse(history, text, languageLevel);
-
-      // Stop recognition before TTS
-      if (activeRecognitionRef.current) {
-        try { activeRecognitionRef.current.stop(); } catch { }
-        activeRecognitionRef.current = null;
-      }
-
-      const wasListening = continuousListeningRef.current;
-      if (wasListening) {
-        continuousListeningRef.current = false;
-        setIsListening(false);
-      }
-
-      // Speak response with Groq Orpheus TTS
-      await groqSpeechService.speak(responseText, {
-        voice: personaId
-      });
-
-      // Resume listening
-      if (wasListening && isTutorMode && recognitionStarterRef.current) {
-        continuousListeningRef.current = true;
-        setTimeout(() => recognitionStarterRef.current?.(), 500);
-      }
-
-      updateExchange(convoId!, newExchange.id, {
-        status: 'completed',
-        results: [{ step: 1, agent: Agent.Orchestrator, task: 'Tutor Response', result: responseText, status: 'completed' }]
-      });
-
-    } catch (error: any) {
-      updateExchange(convoId!, newExchange.id, { status: 'error', errorMessage: error.message });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // ========== SPEECH RECOGNITION ==========
-
-  const startListening = () => {
-    if (!('webkitSpeechRecognition' in window)) {
-      alert("Speech recognition not supported. Use Chrome.");
-      return;
-    }
-
-    if (isListening || continuousListeningRef.current) {
-      if (activeRecognitionRef.current) {
-        try { activeRecognitionRef.current.stop(); } catch { }
-        activeRecognitionRef.current = null;
-      }
-      continuousListeningRef.current = false;
-      setIsListening(false);
-      return;
-    }
-
-    continuousListeningRef.current = true;
-
-    const startRecognition = () => {
-      if (!continuousListeningRef.current) return;
-
-      const recognition = new (window as any).webkitSpeechRecognition();
-      activeRecognitionRef.current = recognition;
-      recognition.lang = 'en-US';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      recognition.onstart = () => setIsListening(true);
-
-      recognition.onend = () => {
-        if (continuousListeningRef.current && !groqSpeechService.isSpeaking()) {
-          setTimeout(startRecognition, 300);
-        } else {
-          setIsListening(false);
-        }
-      };
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setPrompt(transcript);
-        if (isTutorMode) handleTutorSubmit(transcript);
-      };
-
-      recognition.onerror = (event: any) => {
-        if (event.error === 'no-speech' && continuousListeningRef.current && !groqSpeechService.isSpeaking()) {
-          setTimeout(startRecognition, 300);
-        }
-      };
-
-      try { recognition.start(); } catch { }
-    };
-
-    recognitionStarterRef.current = startRecognition;
-    startRecognition();
-  };
-
   // ========== ORCHESTRATOR HANDLERS ==========
 
   const handleSubmit = async () => {
     if (!prompt.trim() && !attachedFile) return;
-    if (isTutorMode) { handleTutorSubmit(prompt); return; }
 
     // Determine file type
     const isImage = attachedFile?.type.startsWith('image/');
@@ -857,17 +656,6 @@ ${fileAnalysis}
         activeConversationId={activeConversationId}
         onSelectConversation={setActiveConversationId}
         onNewChat={() => setActiveConversationId(null)}
-        isTutorMode={isTutorMode}
-        onToggleTutor={() => setIsTutorMode(!isTutorMode)}
-        speechRate={speechRate}
-        onSpeechRateChange={setSpeechRate}
-        languageLevel={languageLevel}
-        onLanguageLevelChange={setLanguageLevel}
-        personaId={personaId}
-        onPersonaChange={(id) => {
-          setPersonaId(id);
-          localStorage.setItem('tutor_persona', id);
-        }}
         isPresentationMode={isPresentationMode}
         onTogglePresentation={() => setIsPresentationMode(!isPresentationMode)}
         isAutonomousMode={isAutonomousMode}
@@ -901,10 +689,6 @@ ${fileAnalysis}
               fileType={fileType}
               onFileSelect={handleFileChange}
               onClearAttachment={clearAttachment}
-              isListening={isListening}
-              onToggleListening={startListening}
-              isTutorMode={isTutorMode}
-              tutorMessages={[]}
               isSettingsOpen={isSettingsOpen}
               onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
               cycleCount={cycleCount}
