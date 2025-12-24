@@ -5,15 +5,15 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { speechService, SpeechRecognitionResult } from '../services/speechService';
-import { 
-  generateTutorResponse, 
-  generatePracticeSentence, 
+import { groqSpeechService } from '../services/groqSpeechService';
+import {
+  generateTutorResponse,
+  generatePracticeSentence,
   evaluateAttempt,
-  TutorMessage, 
-  LanguageLevel, 
-  TutorFeedback, 
-  SentencePractice 
+  TutorMessage,
+  LanguageLevel,
+  TutorFeedback,
+  SentencePractice
 } from '../services/tutorClient';
 import { tutorPersonas, TutorPersona, getPersonaById, defaultPersonaId } from '../config/tutorPersonas';
 
@@ -61,7 +61,7 @@ export function useEnglishTutor() {
   const [lastFeedback, setLastFeedback] = useState<TutorFeedback | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasGreeted, setHasGreeted] = useState(false);
-  
+
   // Get current persona
   const currentPersona = getPersonaById(personaId) || tutorPersonas[0];
 
@@ -69,7 +69,7 @@ export function useEnglishTutor() {
   useEffect(() => {
     localStorage.setItem('tutor_persona', personaId);
   }, [personaId]);
-  
+
   // Session management
   const [messages, setMessages] = useState<TutorMessage[]>([]);
   const sessionRef = useRef<TutorSession>({
@@ -99,39 +99,42 @@ export function useEnglishTutor() {
   }, []);
 
   /**
-   * Speak with persona's voice
+   * Speak with persona's voice using Groq
    */
   const speakWithPersona = useCallback(async (text: string) => {
     setIsSpeaking(true);
     try {
-      await speechService.speak(text, {
-        rate: speechRate * currentPersona.speechRate,
-        pitch: currentPersona.pitch,
-        voiceHints: currentPersona.voiceHints
+      await groqSpeechService.speak(text, {
+        voice: personaId,
+        speed: speechRate < 0.9 ? 'slow' : speechRate > 1.1 ? 'fast' : 'normal'
       });
     } catch (e) {
       console.error('Speech error:', e);
     } finally {
       setIsSpeaking(false);
     }
-  }, [speechRate, currentPersona]);
+  }, [speechRate, personaId]);
 
   /**
-   * Play welcome greeting
+   * Play welcome greeting (Arabic)
    */
   const playWelcome = useCallback(async () => {
     if (hasGreeted) return;
-    
-    // Personalized welcome based on persona
+
+    // Personalized welcome based on persona (Arabic for 8 Groq voices)
     const welcomeTexts: Record<string, string> = {
-      'emma': "Hi there! I'm Emma, your English tutor. I'm so happy to help you learn today! What would you like to practice?",
-      'james': "Hello. I'm James, your English instructor. I'm here to help you improve your language skills. How can I assist you?",
-      'sofia': "Hey! I'm Sofia! Super excited to practice English with you today! Ready to have some fun while learning?",
-      'michael': "Hello. I'm Michael, your English teacher. I'll take my time to explain everything clearly. What would you like to work on?"
+      'emma': "أهلاً! أنا إيما، معلمتك الودودة. سعيدة إني أساعدك!",
+      'james': "مرحباً، أنا جيمس، مدرسك المحترف.",
+      'atlas': "أهلاً، أنا أطلس. صوتي عميق وواثق.",
+      'basil': "مرحباً، أنا باسل. هادئ ومتزن.",
+      'briggs': "هاي! أنا بريجز! نشيط وحماسي!",
+      'coral': "أهلاً! أنا كورال. دافئة ومعبرة!",
+      'indigo': "مرحباً، أنا إنديجو. محترفة ومتطورة.",
+      'jasper': "هاي! أنا جاسبر! ودود ومرح!"
     };
-    
-    const welcomeText = welcomeTexts[personaId] || `Hello! I'm ${currentPersona.name}, your English tutor. How can I help you today?`;
-    
+
+    const welcomeText = welcomeTexts[personaId] || `مرحباً! أنا ${currentPersona.displayName}، معلمك.`;
+
     await speakWithPersona(welcomeText);
     setHasGreeted(true);
   }, [hasGreeted, personaId, currentPersona, speakWithPersona]);
@@ -150,7 +153,7 @@ export function useEnglishTutor() {
       practiceCount: 0,
       averageScore: 0
     };
-    
+
     // Play welcome
     await playWelcome();
   }, [playWelcome]);
@@ -162,8 +165,8 @@ export function useEnglishTutor() {
     setIsActive(false);
     setIsListening(false);
     setHasGreeted(false);
-    speechService.stopListening();
-    speechService.stopSpeaking();
+    groqSpeechService.cancelRecording();
+    groqSpeechService.stopSpeaking();
   }, []);
 
   /**
@@ -180,8 +183,8 @@ export function useEnglishTutor() {
   /**
    * Handle speech recognition result
    */
-  const handleSpeechResult = useCallback(async (result: SpeechRecognitionResult) => {
-    const userText = result.transcript.trim();
+  const handleSpeechResult = useCallback(async (result: { text: string }) => {
+    const userText = result.text.trim();
     if (!userText) return;
 
     // Add user message
@@ -189,14 +192,14 @@ export function useEnglishTutor() {
     setMessages(prev => [...prev, userMessage]);
     onMessageRef.current?.(userMessage);
 
-    // Pause listening while processing
-    speechService.pauseListening();
+    // Processing (no pause needed with Groq recording)
+    // groqSpeechService.cancelRecording();
     setIsListening(false);
     setIsProcessing(true);
 
     try {
       let responseText = '';
-      
+
       if (mode === 'practice' && currentPractice) {
         // Evaluate the practice attempt
         const feedback = await evaluateAttempt(
@@ -205,16 +208,15 @@ export function useEnglishTutor() {
           languageLevel
         );
         setLastFeedback(feedback);
-        
+
         // Update session stats
         sessionRef.current.practiceCount++;
-        sessionRef.current.averageScore = 
-          (sessionRef.current.averageScore * (sessionRef.current.practiceCount - 1) + feedback.score) 
+        sessionRef.current.averageScore =
+          (sessionRef.current.averageScore * (sessionRef.current.practiceCount - 1) + feedback.score)
           / sessionRef.current.practiceCount;
 
-        responseText = `Score: ${feedback.score}%. ${feedback.correctedSentence !== userText ? 
-          `The correct way is: "${feedback.correctedSentence}". ` : 'Perfect! '}${
-          feedback.pronunciationTips.length > 0 ? feedback.pronunciationTips[0] : ''}`;
+        responseText = `Score: ${feedback.score}%. ${feedback.correctedSentence !== userText ?
+          `The correct way is: "${feedback.correctedSentence}". ` : 'Perfect! '}${feedback.pronunciationTips.length > 0 ? feedback.pronunciationTips[0] : ''}`;
       } else {
         // Conversation mode
         responseText = await generateTutorResponse(
@@ -231,16 +233,12 @@ export function useEnglishTutor() {
 
       // Speak the response with persona voice
       setIsProcessing(false);
-      
+
       await speakWithPersona(responseText);
 
-      // Resume listening if still active
+      // Resume listening if still active (using browser recognition for now)
       if (isActive) {
-        speechService.resumeListening(
-          handleSpeechResult,
-          (err) => setError(err),
-          { lang: 'en-US' }
-        );
+        // Note: Groq STT requires manual recording start
         setIsListening(true);
       }
 
@@ -256,27 +254,30 @@ export function useEnglishTutor() {
    * Start listening
    */
   const startListening = useCallback(() => {
-    if (!speechService.isRecognitionSupported()) {
-      setError('Speech recognition not supported in this browser. Please use Chrome.');
+    if (!groqSpeechService.isRecognitionSupported()) {
+      setError('Microphone access not supported.');
       return;
     }
 
     setError(null);
-    speechService.startContinuousListening(
-      handleSpeechResult,
-      (err) => setError(err),
-      { lang: 'en-US' }
-    );
-    setIsListening(true);
-  }, [handleSpeechResult]);
+    // Start Groq recording
+    groqSpeechService.startRecording().then(() => {
+      setIsListening(true);
+    }).catch(err => {
+      setError(err.message);
+    });
+  }, []);
 
   /**
    * Stop listening
    */
-  const stopListening = useCallback(() => {
-    speechService.stopListening();
+  const stopListening = useCallback(async () => {
+    const text = await groqSpeechService.stopRecordingAndTranscribe();
     setIsListening(false);
-  }, []);
+    if (text) {
+      await handleSpeechResult({ text });
+    }
+  }, [handleSpeechResult]);
 
   /**
    * Toggle listening
@@ -293,11 +294,7 @@ export function useEnglishTutor() {
    * Send text message (for typing instead of speaking)
    */
   const sendMessage = useCallback(async (text: string) => {
-    const mockResult: SpeechRecognitionResult = {
-      transcript: text,
-      confidence: 1.0
-    };
-    await handleSpeechResult(mockResult);
+    await handleSpeechResult({ text });
   }, [handleSpeechResult]);
 
   /**
@@ -311,13 +308,13 @@ export function useEnglishTutor() {
     try {
       const practice = await generatePracticeSentence(languageLevel, topic);
       setCurrentPractice(practice);
-      
+
       // Speak the practice sentence
       const instruction = `Please repeat after me: ${practice.sentence}`;
       setIsSpeaking(true);
-      await speechService.speak(instruction, { rate: speechRate });
+      await groqSpeechService.speak(instruction, { voice: personaId });
       setIsSpeaking(false);
-      
+
       // Start listening for the attempt
       startListening();
     } catch (e: any) {
@@ -365,8 +362,8 @@ export function useEnglishTutor() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      speechService.stopListening();
-      speechService.stopSpeaking();
+      groqSpeechService.cancelRecording();
+      groqSpeechService.stopSpeaking();
     };
   }, []);
 
@@ -390,7 +387,7 @@ export function useEnglishTutor() {
     lastFeedback,
     error,
     messages,
-    
+
     // Persona
     personaId,
     currentPersona,
@@ -416,7 +413,7 @@ export function useEnglishTutor() {
     setOnStream,
 
     // Helpers
-    isSupported: speechService.isRecognitionSupported()
+    isSupported: groqSpeechService.isRecognitionSupported()
   };
 }
 

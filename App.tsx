@@ -24,7 +24,7 @@ import AutonomousMode from './src/components/AutonomousMode';
 import DailyFeedSettings from './src/components/DailyFeedSettings';
 
 // Services
-import { speechService } from './src/services/speechService';
+import { groqSpeechService } from './src/services/groqSpeechService';
 import { getPersonaById, tutorPersonas } from './src/config/tutorPersonas';
 
 // Types
@@ -321,20 +321,23 @@ const App: React.FC = () => {
   // Tutor welcome - persona and level appropriate
   useEffect(() => {
     if (isTutorMode && !hasGreeted) {
-      // Personalized welcome messages
+      // Personalized welcome messages (Arabic)
       const personaWelcomes: Record<string, string> = {
-        'emma': "Hi there! I'm Emma, your English tutor. I'm so happy to help you learn today! What would you like to practice?",
-        'james': "Hello. I'm James, your English instructor. I'm here to help you improve your language skills. How can I assist you?",
-        'sofia': "Hey! I'm Sofia! Super excited to practice English with you today! Ready to have some fun while learning?",
-        'michael': "Hello. I'm Michael, your English teacher. I'll take my time to explain everything clearly. What would you like to work on?"
+        'emma': "أهلاً! أنا إيما، معلمتك الودودة. سعيدة إني أساعدك تتعلم!",
+        'james': "مرحباً، أنا جيمس، مدرسك المحترف.",
+        'atlas': "أهلاً، أنا أطلس. صوتي عميق وواثق.",
+        'basil': "مرحباً، أنا باسل. هادئ ومتزن.",
+        'briggs': "هاي! أنا بريجز! نشيط وحماسي!",
+        'coral': "أهلاً! أنا كورال. دافئة ومعبرة!",
+        'indigo': "مرحباً، أنا إنديجو. محترفة ومتطورة.",
+        'jasper': "هاي! أنا جاسبر! ودود ومرح!"
       };
 
-      const welcomeText = personaWelcomes[personaId] || `Hello! I'm ${currentPersona.name}, your English tutor. How can I help you today?`;
+      const welcomeText = personaWelcomes[personaId] || `مرحباً! أنا ${currentPersona.displayName}، معلمك. كيف أقدر أساعدك؟`;
 
-      speechService.speak(welcomeText, {
-        rate: speechRate * currentPersona.speechRate,
-        pitch: currentPersona.pitch,
-        voiceHints: currentPersona.voiceHints
+      groqSpeechService.speak(welcomeText, {
+        voice: personaId,
+        speed: speechRate < 0.9 ? 'slow' : speechRate > 1.1 ? 'fast' : 'normal'
       }).then(() => setHasGreeted(true));
     } else if (!isTutorMode) {
       setHasGreeted(false);
@@ -521,11 +524,10 @@ const App: React.FC = () => {
         setIsListening(false);
       }
 
-      // Speak response with persona voice
-      await speechService.speak(responseText, {
-        rate: speechRate * currentPersona.speechRate,
-        pitch: currentPersona.pitch,
-        voiceHints: currentPersona.voiceHints
+      // Speak response with Groq PlayAI voice
+      await groqSpeechService.speak(responseText, {
+        voice: personaId,
+        speed: speechRate < 0.9 ? 'slow' : speechRate > 1.1 ? 'fast' : 'normal'
       });
 
       // Resume listening
@@ -578,7 +580,7 @@ const App: React.FC = () => {
       recognition.onstart = () => setIsListening(true);
 
       recognition.onend = () => {
-        if (continuousListeningRef.current && !speechService.isSpeaking()) {
+        if (continuousListeningRef.current && !groqSpeechService.isSpeaking()) {
           setTimeout(startRecognition, 300);
         } else {
           setIsListening(false);
@@ -592,7 +594,7 @@ const App: React.FC = () => {
       };
 
       recognition.onerror = (event: any) => {
-        if (event.error === 'no-speech' && continuousListeningRef.current && !speechService.isSpeaking()) {
+        if (event.error === 'no-speech' && continuousListeningRef.current && !groqSpeechService.isSpeaking()) {
           setTimeout(startRecognition, 300);
         }
       };

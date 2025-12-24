@@ -1,11 +1,10 @@
 /**
- * PersonaSelector Component
- * مكون اختيار الشخصية للمعلم
+ * PersonaSelector Component - Groq Voice
+ * مكون اختيار الشخصية للمعلم - يستخدم Groq PlayAI
  */
 
 import React from 'react';
 import { tutorPersonas, TutorPersona } from '../../config/tutorPersonas';
-import { speechService } from '../../services/speechService';
 
 interface PersonaSelectorProps {
   selectedPersonaId: string;
@@ -13,42 +12,64 @@ interface PersonaSelectorProps {
   isCompact?: boolean;
 }
 
+// Arabic preview messages
+const previewTexts: Record<string, string> = {
+  'emma': "أهلاً! أنا إيما، معلمتك الودودة. سعيدة إني أساعدك!",
+  'james': "مرحباً، أنا جيمس، مدرسك المحترف.",
+  'atlas': "أهلاً، أنا أطلس. صوتي عميق وواثق.",
+  'basil': "مرحباً، أنا باسل. هادئ ومتزن.",
+  'briggs': "هاي! أنا بريجز! نشيط وحماسي!",
+  'coral': "أهلاً! أنا كورال. دافئة ومعبرة!",
+  'indigo': "مرحباً، أنا إنديجو. محترفة ومتطورة.",
+  'jasper': "هاي! أنا جاسبر! ودود ومرح!"
+};
+
 export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
   selectedPersonaId,
   onSelectPersona,
   isCompact = false
 }) => {
   const [previewingId, setPreviewingId] = React.useState<string | null>(null);
+  const [audioRef] = React.useState<HTMLAudioElement | null>(() =>
+    typeof window !== 'undefined' ? new Audio() : null
+  );
 
   const handlePreview = async (persona: TutorPersona, e: React.MouseEvent) => {
     e.stopPropagation();
 
     if (previewingId) {
-      speechService.stopSpeaking();
+      audioRef?.pause();
       setPreviewingId(null);
       return;
     }
 
     setPreviewingId(persona.id);
 
-    const previewTexts: Record<string, string> = {
-      'emma': "Hi there! I'm Emma, your friendly English tutor. I'm here to help you learn in a warm and supportive way!",
-      'james': "Hello. I'm James, your English instructor. I focus on clear explanations and practical language skills.",
-      'sofia': "Hey! I'm Sofia! Ready to have some fun while learning English? Let's make this exciting!",
-      'michael': "Hello. I'm Michael. I take my time to explain things clearly, step by step. No rushing here."
-    };
-
     try {
-      await speechService.speak(previewTexts[persona.id] || `Hi, I'm ${persona.name}!`, {
-        voiceHints: persona.voiceHints,
-        rate: persona.speechRate,
-        pitch: persona.pitch
+      // Call Groq TTS via backend
+      const response = await fetch('/api/tutor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'tts',
+          text: previewTexts[persona.id] || `مرحباً، أنا ${persona.displayName}!`,
+          voice: persona.id,
+          speed: 'normal'
+        })
       });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data?.audio && audioRef) {
+          audioRef.src = `data:audio/mp3;base64,${data.data.audio}`;
+          audioRef.onended = () => setPreviewingId(null);
+          await audioRef.play();
+        }
+      }
     } catch (err) {
       console.error('Preview error:', err);
+      setPreviewingId(null);
     }
-
-    setPreviewingId(null);
   };
 
   // State for collapse/expand
@@ -85,7 +106,7 @@ export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
             }}
           >
             <span className="text-xl">{persona.avatar}</span>
-            <span className="text-sm font-medium text-white">{persona.name}</span>
+            <span className="text-sm font-medium text-white">{persona.displayName}</span>
           </button>
         ))}
       </div>
@@ -99,12 +120,12 @@ export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
       return (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-400">Your Tutor</h3>
+            <h3 className="text-sm font-medium text-gray-400">معلمك</h3>
             <button
               onClick={() => setIsExpanded(true)}
               className="text-xs text-[var(--accent-color)] hover:underline"
             >
-              Change
+              تغيير
             </button>
           </div>
 
@@ -125,8 +146,8 @@ export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
                 {selectedPersona.avatar}
               </div>
               <div>
-                <h4 className="font-semibold text-white text-sm">{selectedPersona.name}</h4>
-                <p className="text-xs text-gray-400">{selectedPersona.personality}</p>
+                <h4 className="font-semibold text-white text-sm">{selectedPersona.displayName}</h4>
+                <p className="text-xs text-gray-400">{selectedPersona.descriptionAr}</p>
               </div>
             </div>
           </div>
@@ -139,13 +160,13 @@ export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-400">Choose Your Tutor</h3>
+        <h3 className="text-sm font-medium text-gray-400">اختر معلمك</h3>
         {selectedPersonaId && (
           <button
             onClick={() => setIsExpanded(false)}
             className="text-xs text-gray-500 hover:text-white"
           >
-            Cancel
+            إلغاء
           </button>
         )}
       </div>
@@ -201,8 +222,8 @@ export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
                   {persona.avatar}
                 </div>
                 <div>
-                  <h4 className="font-semibold text-white">{persona.name}</h4>
-                  <p className="text-xs text-gray-400">{persona.description}</p>
+                  <h4 className="font-semibold text-white">{persona.displayName}</h4>
+                  <p className="text-xs text-gray-400">{persona.descriptionAr}</p>
                 </div>
               </div>
 
@@ -229,14 +250,14 @@ export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
                     <svg className="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
-                    Stop
+                    إيقاف
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                     </svg>
-                    Preview Voice
+                    معاينة الصوت
                   </>
                 )}
               </button>
