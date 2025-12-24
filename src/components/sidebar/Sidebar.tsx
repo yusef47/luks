@@ -6,8 +6,6 @@
 import React from 'react';
 import { Conversation } from '../../../types';
 import { SettingsIcon } from '../../../components/icons';
-import { TutorControls } from './TutorControls';
-import type { LanguageLevel } from '../../services/tutorClient';
 
 interface SidebarProps {
   // Conversations
@@ -15,16 +13,6 @@ interface SidebarProps {
   activeConversationId: string | null;
   onSelectConversation: (id: string) => void;
   onNewChat: () => void;
-
-  // Tutor
-  isTutorMode: boolean;
-  onToggleTutor: () => void;
-  speechRate: number;
-  onSpeechRateChange: (rate: number) => void;
-  languageLevel: LanguageLevel;
-  onLanguageLevelChange: (level: LanguageLevel) => void;
-  personaId: string;
-  onPersonaChange: (personaId: string) => void;
 
   // Presentation
   isPresentationMode: boolean;
@@ -46,14 +34,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeConversationId,
   onSelectConversation,
   onNewChat,
-  isTutorMode,
-  onToggleTutor,
-  speechRate,
-  onSpeechRateChange,
-  languageLevel,
-  onLanguageLevelChange,
-  personaId,
-  onPersonaChange,
   isPresentationMode,
   onTogglePresentation,
   isAutonomousMode,
@@ -124,18 +104,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="text-sm font-medium">Daily Intelligence</span>
         </button>
       </div>
-
-      {/* Tutor Controls */}
-      <TutorControls
-        isActive={isTutorMode}
-        onToggle={onToggleTutor}
-        speechRate={speechRate}
-        onSpeechRateChange={onSpeechRateChange}
-        languageLevel={languageLevel}
-        onLanguageLevelChange={onLanguageLevelChange}
-        personaId={personaId}
-        onPersonaChange={onPersonaChange}
-      />
 
       {/* Conversations List */}
       <div className="flex-grow overflow-y-auto px-3 py-2 space-y-1 custom-scrollbar">
