@@ -145,18 +145,20 @@ async function handleSTT(body) {
 // ═══════════════════════════════════════════════════════════════
 
 async function handleTTS(body) {
-    const { text, voice, speed } = body;
+    const { text, voice } = body;
     if (!text) throw new Error('Missing text');
 
-    // Map tutor name to Groq voice ID (e.g., 'james' → 'Fritz-PlayAI')
-    const voiceName = (voice || 'james').toLowerCase();
-    const selectedVoice = VOICES[voiceName] || VOICES['james'];
+    // Map tutor name to Orpheus voice ID (e.g., 'emma' → 'hannah')
+    const voiceName = (voice || 'emma').toLowerCase();
+    const selectedVoice = VOICES[voiceName] || VOICES['emma'];
 
-    const audioBuffer = await synthesizeSpeech(text, selectedVoice, speed);
+    console.log(`[handleTTS] Tutor: ${voiceName} → Voice: ${selectedVoice}`);
+
+    const audioBuffer = await synthesizeSpeech(text, selectedVoice);
 
     return {
         audio: audioBuffer.toString('base64'),
-        format: 'mp3',
+        format: 'wav',
         voice: selectedVoice,
         tutor: voiceName
     };
