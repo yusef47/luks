@@ -12,16 +12,16 @@ interface PersonaSelectorProps {
   isCompact?: boolean;
 }
 
-// Arabic preview messages
+// English preview messages (PlayAI TTS only supports English)
 const previewTexts: Record<string, string> = {
-  'emma': "أهلاً! أنا إيما، معلمتك الودودة. سعيدة إني أساعدك!",
-  'james': "مرحباً، أنا جيمس، مدرسك المحترف.",
-  'atlas': "أهلاً، أنا أطلس. صوتي عميق وواثق.",
-  'basil': "مرحباً، أنا باسل. هادئ ومتزن.",
-  'briggs': "هاي! أنا بريجز! نشيط وحماسي!",
-  'coral': "أهلاً! أنا كورال. دافئة ومعبرة!",
-  'indigo': "مرحباً، أنا إنديجو. محترفة ومتطورة.",
-  'jasper': "هاي! أنا جاسبر! ودود ومرح!"
+  'emma': "Hi! I'm Emma, your friendly tutor. Happy to help you learn!",
+  'james': "Hello, I'm James, your professional instructor.",
+  'atlas': "Hello, I'm Atlas. My voice is deep and confident.",
+  'basil': "Hello, I'm Basil. Calm and steady.",
+  'briggs': "Hey! I'm Briggs! Energetic and enthusiastic!",
+  'coral': "Hi! I'm Coral. Warm and expressive!",
+  'indigo': "Hello, I'm Indigo. Professional and sophisticated.",
+  'jasper': "Hey! I'm Jasper! Friendly and cheerful!"
 };
 
 export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
@@ -52,16 +52,15 @@ export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'tts',
-          text: previewTexts[persona.id] || `مرحباً، أنا ${persona.displayName}!`,
-          voice: persona.id,
-          speed: 'normal'
+          text: previewTexts[persona.id] || `Hello, I'm ${persona.name}!`,
+          voice: persona.id
         })
       });
 
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data?.audio && audioRef) {
-          audioRef.src = `data:audio/mp3;base64,${data.data.audio}`;
+          audioRef.src = `data:audio/wav;base64,${data.data.audio}`;
           audioRef.onended = () => setPreviewingId(null);
           await audioRef.play();
         }
@@ -171,7 +170,7 @@ export const PersonaSelector: React.FC<PersonaSelectorProps> = ({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-2">
         {tutorPersonas.map((persona) => {
           const isSelected = selectedPersonaId === persona.id;
           const isPreviewing = previewingId === persona.id;

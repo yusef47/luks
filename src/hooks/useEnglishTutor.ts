@@ -105,8 +105,7 @@ export function useEnglishTutor() {
     setIsSpeaking(true);
     try {
       await groqSpeechService.speak(text, {
-        voice: personaId,
-        speed: speechRate < 0.9 ? 'slow' : speechRate > 1.1 ? 'fast' : 'normal'
+        voice: personaId
       });
     } catch (e) {
       console.error('Speech error:', e);
@@ -116,24 +115,24 @@ export function useEnglishTutor() {
   }, [speechRate, personaId]);
 
   /**
-   * Play welcome greeting (Arabic)
+   * Play welcome greeting (English - PlayAI TTS)
    */
   const playWelcome = useCallback(async () => {
     if (hasGreeted) return;
 
-    // Personalized welcome based on persona (Arabic for 8 Groq voices)
+    // Personalized welcome (English for PlayAI TTS)
     const welcomeTexts: Record<string, string> = {
-      'emma': "أهلاً! أنا إيما، معلمتك الودودة. سعيدة إني أساعدك!",
-      'james': "مرحباً، أنا جيمس، مدرسك المحترف.",
-      'atlas': "أهلاً، أنا أطلس. صوتي عميق وواثق.",
-      'basil': "مرحباً، أنا باسل. هادئ ومتزن.",
-      'briggs': "هاي! أنا بريجز! نشيط وحماسي!",
-      'coral': "أهلاً! أنا كورال. دافئة ومعبرة!",
-      'indigo': "مرحباً، أنا إنديجو. محترفة ومتطورة.",
-      'jasper': "هاي! أنا جاسبر! ودود ومرح!"
+      'emma': "Hi! I'm Emma, your friendly tutor. Happy to help you learn!",
+      'james': "Hello, I'm James, your professional instructor.",
+      'atlas': "Hello, I'm Atlas. My voice is deep and confident.",
+      'basil': "Hello, I'm Basil. Calm and steady.",
+      'briggs': "Hey! I'm Briggs! Energetic and enthusiastic!",
+      'coral': "Hi! I'm Coral. Warm and expressive!",
+      'indigo': "Hello, I'm Indigo. Professional and sophisticated.",
+      'jasper': "Hey! I'm Jasper! Friendly and cheerful!"
     };
 
-    const welcomeText = welcomeTexts[personaId] || `مرحباً! أنا ${currentPersona.displayName}، معلمك.`;
+    const welcomeText = welcomeTexts[personaId] || `Hello! I'm ${currentPersona.name}, your tutor.`;
 
     await speakWithPersona(welcomeText);
     setHasGreeted(true);

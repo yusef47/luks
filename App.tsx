@@ -323,21 +323,20 @@ const App: React.FC = () => {
     if (isTutorMode && !hasGreeted) {
       // Personalized welcome messages (Arabic)
       const personaWelcomes: Record<string, string> = {
-        'emma': "أهلاً! أنا إيما، معلمتك الودودة. سعيدة إني أساعدك تتعلم!",
-        'james': "مرحباً، أنا جيمس، مدرسك المحترف.",
-        'atlas': "أهلاً، أنا أطلس. صوتي عميق وواثق.",
-        'basil': "مرحباً، أنا باسل. هادئ ومتزن.",
-        'briggs': "هاي! أنا بريجز! نشيط وحماسي!",
-        'coral': "أهلاً! أنا كورال. دافئة ومعبرة!",
-        'indigo': "مرحباً، أنا إنديجو. محترفة ومتطورة.",
-        'jasper': "هاي! أنا جاسبر! ودود ومرح!"
+        'emma': "Hi! I'm Emma, your friendly tutor. Happy to help you learn!",
+        'james': "Hello, I'm James, your professional instructor.",
+        'atlas': "Hello, I'm Atlas. My voice is deep and confident.",
+        'basil': "Hello, I'm Basil. Calm and steady.",
+        'briggs': "Hey! I'm Briggs! Energetic and enthusiastic!",
+        'coral': "Hi! I'm Coral. Warm and expressive!",
+        'indigo': "Hello, I'm Indigo. Professional and sophisticated.",
+        'jasper': "Hey! I'm Jasper! Friendly and cheerful!"
       };
 
-      const welcomeText = personaWelcomes[personaId] || `مرحباً! أنا ${currentPersona.displayName}، معلمك. كيف أقدر أساعدك؟`;
+      const welcomeText = personaWelcomes[personaId] || `Hello! I'm ${currentPersona.name}, your tutor. How can I help you?`;
 
       groqSpeechService.speak(welcomeText, {
-        voice: personaId,
-        speed: speechRate < 0.9 ? 'slow' : speechRate > 1.1 ? 'fast' : 'normal'
+        voice: personaId
       }).then(() => setHasGreeted(true));
     } else if (!isTutorMode) {
       setHasGreeted(false);
@@ -524,10 +523,9 @@ const App: React.FC = () => {
         setIsListening(false);
       }
 
-      // Speak response with Groq PlayAI voice
+      // Speak response with Groq Orpheus TTS
       await groqSpeechService.speak(responseText, {
-        voice: personaId,
-        speed: speechRate < 0.9 ? 'slow' : speechRate > 1.1 ? 'fast' : 'normal'
+        voice: personaId
       });
 
       // Resume listening

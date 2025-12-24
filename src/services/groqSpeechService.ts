@@ -4,7 +4,7 @@
  * 
  * يستخدم:
  * - Whisper Large v3 Turbo للتعرف على الصوت (STT)
- * - PlayAI TTS لإنشاء الصوت (TTS)
+ * - Orpheus TTS لإنشاء الصوت (TTS)
  */
 
 class GroqSpeechService {
@@ -47,11 +47,10 @@ class GroqSpeechService {
     }
 
     /**
-     * Speak text using Groq PlayAI TTS
+     * Speak text using Groq Orpheus TTS
      */
     async speak(text: string, options: {
         voice?: string;
-        speed?: 'slow' | 'normal' | 'fast';
     } = {}): Promise<void> {
         if (!text || !this.audio) return;
 
@@ -64,8 +63,7 @@ class GroqSpeechService {
                 body: JSON.stringify({
                     action: 'tts',
                     text,
-                    voice: options.voice || 'emma',
-                    speed: options.speed || 'normal'
+                    voice: options.voice || 'emma'
                 })
             });
 
@@ -82,7 +80,7 @@ class GroqSpeechService {
                         return;
                     }
 
-                    this.audio.src = `data:audio/mp3;base64,${data.data.audio}`;
+                    this.audio.src = `data:audio/wav;base64,${data.data.audio}`;
                     this.audio.onended = () => {
                         this._isSpeaking = false;
                         resolve();

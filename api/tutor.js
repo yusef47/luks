@@ -7,20 +7,20 @@ const MODELS = {
     CHAT_FALLBACK: 'llama-3.1-8b-instant',
     STT: 'whisper-large-v3-turbo',
     STT_FALLBACK: 'whisper-large-v3',
-    TTS: 'playai-tts'
+    TTS: 'canopylabs/orpheus-v1-english'  // Updated from playai-tts
 };
 
-// Available voices for TTS
+// Available voices for Orpheus TTS
 const VOICES = {
-    // UI Name: Groq Voice ID
-    'james': 'Fritz-PlayAI',      // Professional & Clear (Male)
-    'emma': 'Arista-PlayAI',      // Friendly & Patient (Female)
-    'atlas': 'Atlas-PlayAI',      // Deep & Confident (Male)
-    'basil': 'Basil-PlayAI',      // Calm & Steady (Male)
-    'briggs': 'Briggs-PlayAI',    // Energetic (Male)
-    'coral': 'Coral-PlayAI',      // Warm & Expressive (Female)
-    'indigo': 'Indigo-PlayAI',    // Professional (Female)
-    'jasper': 'Jasper-PlayAI'     // Friendly (Male)
+    // UI Name: Orpheus Voice ID
+    'emma': 'hannah',       // Friendly & Patient (Female)
+    'james': 'austin',      // Professional & Clear (Male)
+    'atlas': 'troy',        // Deep & Confident (Male)
+    'basil': 'daniel',      // Calm & Steady (Male)
+    'briggs': 'troy',       // Energetic (Male) - using troy
+    'coral': 'diana',       // Warm & Expressive (Female)
+    'indigo': 'autumn',     // Professional (Female)
+    'jasper': 'austin'      // Friendly (Male) - using austin
 };
 
 function getGroqKeys() {
@@ -225,14 +225,13 @@ async function transcribeAudio(audioBuffer, model = MODELS.STT, retries = 3) {
     throw new Error('STT failed');
 }
 
-async function synthesizeSpeech(text, voice, speed = 'normal', retries = 3) {
-    // Map speed names to values
-    const speedMap = { 'slow': 0.8, 'normal': 1.0, 'fast': 1.2 };
-    const speedValue = speedMap[speed] || 1.0;
-
+async function synthesizeSpeech(text, voice, retries = 3) {
+    // Orpheus TTS doesn't support speed parameter
     for (let attempt = 0; attempt < retries; attempt++) {
         const key = getNextKey();
         try {
+            console.log(`[TTS] Attempt ${attempt + 1}: voice=${voice}, text="${text.substring(0, 50)}..."`);
+
             const response = await fetch('https://api.groq.com/openai/v1/audio/speech', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -240,21 +239,30 @@ async function synthesizeSpeech(text, voice, speed = 'normal', retries = 3) {
                     model: MODELS.TTS,
                     input: text,
                     voice,
-                    speed: speedValue,
-                    response_format: 'mp3'
+                    response_format: 'wav'  // Orpheus default
                 })
             });
 
-            if (response.status === 429 || response.status === 503) continue;
-            if (!response.ok) throw new Error(`Groq TTS error ${response.status}`);
+            if (response.status === 429 || response.status === 503) {
+                console.log(`[TTS] Rate limited, retrying...`);
+                continue;
+            }
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`[TTS] Error ${response.status}: ${errorText}`);
+                throw new Error(`Groq TTS error ${response.status}: ${errorText}`);
+            }
 
             const audioBuffer = await response.arrayBuffer();
+            console.log(`[TTS] Success! Audio size: ${audioBuffer.byteLength} bytes`);
             return Buffer.from(audioBuffer);
         } catch (e) {
+            console.error(`[TTS] Attempt ${attempt + 1} failed:`, e.message);
             if (attempt === retries - 1) throw e;
         }
     }
-    throw new Error('TTS failed');
+    throw new Error('TTS failed after all retries');
 }
 
 // ═══════════════════════════════════════════════════════════════
