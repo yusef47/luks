@@ -1,5 +1,88 @@
-// Oracle API - Simple Entry Point
+// Oracle API - Lukas Oracle with Gemini Fallback
 // Vercel Serverless Function
+
+// ═══════════════════════════════════════════════════════════════
+//                      GEMINI FALLBACK SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+const MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+
+function getGeminiKeys() {
+    const keys = [];
+    for (let i = 1; i <= 13; i++) {
+        const key = process.env[`GEMINI_API_KEY_${i}`];
+        if (key && key.trim()) keys.push(key.trim());
+    }
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
+    // Shuffle keys
+    return keys.sort(() => Math.random() - 0.5);
+}
+
+async function callGemini(prompt, options = {}) {
+    const keys = getGeminiKeys();
+    const { useSearch = false, maxTokens = 200, temperature = 0.9 } = options;
+
+    if (keys.length === 0) {
+        console.error('[Oracle] No Gemini API keys found');
+        return null;
+    }
+
+    console.log(`[Oracle] Trying ${keys.length} keys with ${MODELS.length} models...`);
+
+    // Try each model
+    for (const model of MODELS) {
+        // Try each key
+        for (const key of keys) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+                const body = {
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    generationConfig: { maxOutputTokens: maxTokens, temperature }
+                };
+
+                if (useSearch) {
+                    body.tools = [{ googleSearch: {} }];
+                }
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+                    body: JSON.stringify(body)
+                });
+
+                if (response.status === 429) {
+                    console.log(`[Oracle] Key rate limited, trying next...`);
+                    continue;
+                }
+
+                if (response.status === 404) {
+                    console.log(`[Oracle] Model ${model} not found, trying next...`);
+                    break; // Skip to next model
+                }
+
+                if (!response.ok) {
+                    console.log(`[Oracle] Error ${response.status}, trying next...`);
+                    continue;
+                }
+
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (text) {
+                    console.log(`[Oracle] Success with ${model}!`);
+                    return text;
+                }
+            } catch (e) {
+                console.log(`[Oracle] Exception: ${e.message}`);
+                continue;
+            }
+        }
+    }
+
+    console.error('[Oracle] All keys/models exhausted');
+    return null;
+}
 
 // ═══════════════════════════════════════════════════════════════
 //                      DATA SOURCES
@@ -7,31 +90,16 @@
 
 async function fetchNews() {
     try {
-        const GEMINI_KEY = process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY;
-        if (!GEMINI_KEY) return [];
-
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
-                body: JSON.stringify({
-                    contents: [{
-                        role: 'user', parts: [{
-                            text:
-                                `Search for the top 5 breaking news stories from the last 6 hours.
-                         Return ONLY a JSON array with format:
-                         [{"title": "...", "description": "...", "source": "..."}]
-                         No markdown, no explanation.`
-                        }]
-                    }],
-                    tools: [{ googleSearch: {} }]
-                })
-            }
+        const result = await callGemini(
+            `Search for the top 5 breaking news stories from the last 6 hours.
+             Return ONLY a JSON array with format:
+             [{"title": "...", "description": "...", "source": "..."}]
+             No markdown, no explanation.`,
+            { useSearch: true, maxTokens: 500 }
         );
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-        return JSON.parse(text.replace(/```json?|```/g, '').trim());
+
+        if (!result) return [];
+        return JSON.parse(result.replace(/```json?|```/g, '').trim());
     } catch (e) {
         console.error('[Oracle] News error:', e.message);
         return [];
@@ -109,12 +177,7 @@ function findSignificantEvents(data) {
     return events;
 }
 
-async function draftTweet(events, data) {
-    const GEMINI_KEY = process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY;
-    if (!GEMINI_KEY) {
-        console.log('[Oracle] No Gemini key for drafting');
-        return createFallbackTweet(events);
-    }
+async function draftTweet(events) {
     if (events.length === 0) return null;
 
     const eventsSummary = events.slice(0, 3).map((e, i) => {
@@ -138,63 +201,17 @@ WRITE A TWEET (max 280 characters):
 - No hashtags except $BTC, $ETH, stock tickers
 - No emojis
 
-RESPOND WITH ONLY THE TWEET TEXT.`;
+RESPOND WITH ONLY THE TWEET TEXT, nothing else.`;
 
-    try {
-        console.log('[Oracle] Calling Gemini to draft tweet...');
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
-                body: JSON.stringify({
-                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                    generationConfig: { maxOutputTokens: 100, temperature: 1.0 }
-                })
-            }
-        );
-        const result = await response.json();
-        console.log('[Oracle] Gemini response status:', response.status);
+    let tweet = await callGemini(prompt, { maxTokens: 100, temperature: 1.0 });
 
-        let tweet = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-        if (!tweet) {
-            console.log('[Oracle] Gemini returned empty, using fallback');
-            return createFallbackTweet(events);
-        }
-
+    if (tweet) {
+        // Clean up the tweet
+        tweet = tweet.replace(/^["']|["']$/g, '').trim();
         if (tweet.length > 280) tweet = tweet.substring(0, 277) + '...';
-        console.log('[Oracle] Tweet drafted:', tweet.substring(0, 50) + '...');
-        return tweet;
-    } catch (e) {
-        console.error('[Oracle] Draft error:', e.message);
-        return createFallbackTweet(events);
     }
-}
 
-function createFallbackTweet(events) {
-    const event = events[0];
-    if (!event) return null;
-
-    if (event.type === 'EARTHQUAKE') {
-        return `Seismic activity detected.
-Coordinates: ${event.lat}°N, ${event.lng}°E
-Magnitude: ${event.magnitude}
-${event.place}
-The earth speaks. Few listen.`;
-    }
-    if (event.type === 'CRYPTO') {
-        return `$${event.symbol} ${event.change > 0 ? '+' : ''}${event.change?.toFixed(1)}%.
-Price: $${event.price?.toLocaleString()}
-The whales are moving.
-Are you?`;
-    }
-    if (event.type === 'NEWS') {
-        return `Signal detected.
-${event.title?.substring(0, 100)}
-Watch what happens next.`;
-    }
-    return null;
+    return tweet;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -210,11 +227,13 @@ export default async function handler(req, res) {
 
     const { action } = req.query;
 
-    console.log('[Oracle] Action:', action || 'cycle');
+    console.log('[Oracle] ═══════════════════════════════════════════');
+    console.log('[Oracle] 🔮 LUKAS ORACLE - Action:', action || 'cycle');
+    console.log('[Oracle] Time:', new Date().toISOString());
 
     try {
         // Scan all sources
-        console.log('[Oracle] Scanning sources...');
+        console.log('[Oracle] 📡 Scanning sources...');
         const [news, crypto, earthquakes] = await Promise.all([
             fetchNews(),
             fetchCrypto(),
@@ -222,6 +241,7 @@ export default async function handler(req, res) {
         ]);
 
         const data = { news, crypto, earthquakes, timestamp: new Date().toISOString() };
+        console.log(`[Oracle] Found: ${news.length} news, ${crypto.length} crypto, ${earthquakes.length} earthquakes`);
 
         if (action === 'scan') {
             return res.status(200).json({ success: true, data });
@@ -229,13 +249,14 @@ export default async function handler(req, res) {
 
         // Find significant events
         const events = findSignificantEvents(data);
-        console.log(`[Oracle] Found ${events.length} significant events`);
+        console.log(`[Oracle] 🔍 Found ${events.length} significant events`);
 
         if (action === 'analyze') {
             return res.status(200).json({ success: true, events, data });
         }
 
         if (events.length === 0) {
+            console.log('[Oracle] 💤 No significant events. Going back to sleep.');
             return res.status(200).json({
                 success: true,
                 action: 'SLEEP',
@@ -245,29 +266,30 @@ export default async function handler(req, res) {
         }
 
         // Draft tweet
-        const tweet = await draftTweet(events, data);
+        console.log('[Oracle] ✍️ Drafting tweet...');
+        const tweet = await draftTweet(events);
 
         if (action === 'draft') {
             return res.status(200).json({ success: true, tweet, events });
         }
 
-        // Full cycle - log the tweet (Twitter posting disabled for now)
-        console.log('═══════════════════════════════════════════');
-        console.log('🔮 LUKAS ORACLE WOULD TWEET:');
-        console.log(tweet);
-        console.log('═══════════════════════════════════════════');
+        // Full cycle - log the tweet
+        console.log('[Oracle] ═══════════════════════════════════════════');
+        console.log('[Oracle] 🔮 TWEET DRAFTED:');
+        console.log(tweet || '(no tweet generated)');
+        console.log('[Oracle] ═══════════════════════════════════════════');
 
         return res.status(200).json({
             success: true,
             action: 'DRAFTED',
-            tweet,
+            tweet: tweet || null,
             events,
-            message: 'Tweet drafted. Twitter posting not enabled yet.',
+            message: tweet ? 'Tweet drafted successfully!' : 'Failed to draft tweet.',
             timestamp: new Date().toISOString()
         });
 
     } catch (error) {
-        console.error('[Oracle] Error:', error.message);
+        console.error('[Oracle] ❌ Error:', error.message);
         return res.status(500).json({ success: false, error: error.message });
     }
 }
