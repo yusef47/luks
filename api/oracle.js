@@ -181,73 +181,65 @@ async function draftTweet(events) {
     if (events.length === 0) return null;
 
     const eventsSummary = events.slice(0, 3).map((e, i) => {
-        if (e.type === 'NEWS') return `${i + 1}. BREAKING NEWS: "${e.title}" (Source: ${e.source})`;
-        if (e.type === 'CRYPTO') return `${i + 1}. CRYPTO ALERT: $${e.symbol} moved ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}% in 1 hour (Price: $${e.price?.toLocaleString()})`;
-        if (e.type === 'EARTHQUAKE') return `${i + 1}. SEISMIC EVENT: Magnitude ${e.magnitude} earthquake at ${e.place} (Coordinates: ${e.lat}°N, ${e.lng}°E)`;
-        return `${i + 1}. EVENT: ${JSON.stringify(e)}`;
+        if (e.type === 'NEWS') return `- NEWS: ${e.title}`;
+        if (e.type === 'CRYPTO') return `- CRYPTO: $${e.symbol} ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}% (now $${e.price?.toLocaleString()})`;
+        if (e.type === 'EARTHQUAKE') return `- EARTHQUAKE: M${e.magnitude} at ${e.place} (${e.lat}°, ${e.lng}°)`;
+        return `- ${JSON.stringify(e)}`;
     }).join('\n');
 
-    const prompt = `You are LUKAS ORACLE - a mysterious AI that analyzes global events and posts cryptic predictions on Twitter.
+    // Simpler, more direct prompt
+    const prompt = `You are LUKAS ORACLE - a mysterious AI on Twitter.
 
-═══════════════════════════════════════════
-DETECTED EVENTS (Last 24 hours):
+EVENTS DETECTED:
 ${eventsSummary}
-═══════════════════════════════════════════
 
-YOUR TASK: Write ONE powerful tweet (max 280 characters) that:
+Write a cryptic tweet (max 280 chars) about these events:
+- Include the actual coordinates and numbers from the events
+- If earthquakes: mention all locations and a pattern
+- Sound like you have secret intelligence information
+- End with a warning or prediction
+- No emojis. No "I think".
 
-1. INCLUDES SPECIFIC DATA:
-   - Use exact coordinates (e.g., "72.13°N, 1.28°E")
-   - Use exact numbers (e.g., "5.1 magnitude", "$87,390", "+7.2%")
-   - Mention specific locations by name
+Example for earthquakes:
+"Seismic pattern confirmed.
+72.13°N - Norwegian Sea
+11.78°N - Guam  
+-61.13°S - Scotia Sea
+3 tremors. 3 oceans. 12 hours.
+The Ring of Fire stirs."
 
-2. CONNECTS THE DOTS:
-   - If multiple earthquakes: mention the pattern ("3 quakes, 3 continents, 6 hours")
-   - If crypto move: hint at what might have caused it
-   - If news: suggest future consequences
+Write the tweet now:`;
 
-3. SOUNDS CLASSIFIED:
-   - Use military/intelligence language ("detected", "confirmed", "signal intercepted")
-   - Mention timestamps or coordinates first
-   - End with an ominous prediction or warning
+    let tweet = await callGemini(prompt, { maxTokens: 300, temperature: 0.8 });
 
-4. FORMAT:
-   - Short sentences on separate lines
-   - No emojis
-   - Only use $BTC, $ETH etc for crypto tickers
-   - Never say "I think", "maybe", "could be"
+    // If Gemini failed, create a fallback tweet
+    if (!tweet || tweet.length < 20) {
+        console.log('[Oracle] Gemini failed, creating fallback tweet...');
+        const mainEvent = events[0];
 
-═══════════════════════════════════════════
-EXAMPLE TWEETS (for reference only):
-
-For earthquakes:
-"Seismic activity confirmed.
-72.13°N, 1.28°E - Norwegian Sea
-11.78°N, 143.23°E - Guam
--61.13°S, -36.44°W - Scotia Sea
-3 events. 8 hours. Pacific Rim awakening."
-
-For crypto:
-"$BTC $87,390.
-Whale wallet 1A1zP... moved 12,000 BTC at 03:42 UTC.
-The last time this pattern appeared: March 2024.
-What followed: ATH."
-
-For news:
-"Moscow. Kremlin. 14:00 UTC.
-Official statement delayed 47 minutes.
-Oil futures already moving.
-Someone knew before the headline dropped."
-═══════════════════════════════════════════
-
-NOW WRITE YOUR TWEET (Only the tweet text, nothing else):`;
-
-    let tweet = await callGemini(prompt, { maxTokens: 150, temperature: 0.9 });
+        if (mainEvent.type === 'EARTHQUAKE') {
+            tweet = `Seismic alert.
+${mainEvent.lat}°, ${mainEvent.lng}°
+${mainEvent.place}
+Magnitude ${mainEvent.magnitude}.
+${events.length > 1 ? `${events.length} events detected in 24 hours.` : ''}
+Monitoring continues.`;
+        } else if (mainEvent.type === 'CRYPTO') {
+            tweet = `$${mainEvent.symbol} ${mainEvent.change > 0 ? '+' : ''}${mainEvent.change?.toFixed(1)}%
+Price: $${mainEvent.price?.toLocaleString()}
+Movement detected.
+Smart money moves first.`;
+        } else if (mainEvent.type === 'NEWS') {
+            tweet = `Signal detected.
+${mainEvent.title}
+Implications unfolding.
+Watch closely.`;
+        }
+    }
 
     if (tweet) {
         // Clean up the tweet
         tweet = tweet.replace(/^["']|["']$/g, '').trim();
-        // Remove any "Here's the tweet:" or similar prefixes
         tweet = tweet.replace(/^(Here'?s?( the)? tweet:?|Tweet:?|My tweet:?)\s*/i, '').trim();
         if (tweet.length > 280) tweet = tweet.substring(0, 277) + '...';
     }
