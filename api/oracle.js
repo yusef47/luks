@@ -347,25 +347,35 @@ async function findCorrelations(events) {
     const eventsSummary = events.slice(0, 5).map(e => {
         if (e.type === 'NEWS') return `NEWS: ${e.title}`;
         if (e.type === 'CRYPTO') return `CRYPTO: $${e.symbol} ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}%`;
-        if (e.type === 'EARTHQUAKE') return `EARTHQUAKE: M${e.magnitude} at ${e.place}`;
+        if (e.type === 'EARTHQUAKE') return `EARTHQUAKE: M${e.magnitude} at ${e.place} (${e.lat}°, ${e.lng}°)`;
         return JSON.stringify(e);
     }).join('\n');
 
-    // Ask Gemini to find correlations
-    const prompt = `You are an intelligence analyst. Find hidden connections between these events:
+    // Ask Gemini to find WEIRD, provocative connections
+    const prompt = `You are a conspiracy analyst who sees hidden patterns others miss.
 
+EVENTS:
 ${eventsSummary}
 
-If you find a correlation (cause-effect, geographic link, market impact), explain it in ONE sentence.
-If no meaningful correlation exists, respond with: NONE
+Find a WEIRD, unexpected connection between these events. Think like:
+- "The distraction theory" (one event distracts from another)
+- "The geographic link" (look at coordinates, they might align)
+- "The timing coincidence" (why did these happen at the same time?)
+- "Follow the money" (who benefits?)
 
-Example: "Shanghai port delays will impact semiconductor supply chains, affecting $NVDA and $AMD stock prices."`;
+Respond with ONE SHORT provocative sentence that sounds like classified intel.
+Make it sound like you know something others don't.
 
-    const correlation = await callGemini(prompt, { maxTokens: 100, temperature: 0.7 });
+Examples:
+"The chaos in Moscow is a distraction. The real shift is biological, California."
+"Three explosions. Three different countries. Same time zone. Coincidence doesn't exist."
+"While you watch the Middle East, the Pacific plates are telling a different story."`;
 
-    if (correlation && !correlation.includes('NONE')) {
-        console.log('[Oracle] Found correlation:', correlation.substring(0, 50) + '...');
-        return correlation.trim();
+    const correlation = await callGemini(prompt, { maxTokens: 80, temperature: 1.1 });
+
+    if (correlation && correlation.length > 20) {
+        console.log('[Oracle] Found weird correlation:', correlation.substring(0, 50) + '...');
+        return correlation.trim().replace(/^["']|["']$/g, '');
     }
 
     return null;
@@ -416,22 +426,51 @@ Watch this space.`;
     // Find correlations between events
     const correlation = await findCorrelations(events);
 
-    // Try Gemini for a more creative version with correlation
-    const eventsSummary = events.slice(0, 3).map(e => {
-        if (e.type === 'NEWS') return `NEWS: ${e.title}`;
-        if (e.type === 'CRYPTO') return `CRYPTO: $${e.symbol} ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}%`;
-        if (e.type === 'EARTHQUAKE') return `EARTHQUAKE: M${e.magnitude} at ${e.lat}°, ${e.lng}° (${e.place})`;
+    // Build coordinates list for mystery
+    const coords = events
+        .filter(e => e.lat && e.lng)
+        .slice(0, 3)
+        .map(e => `${e.lat}°, ${e.lng}°`);
+
+    // Try Gemini for a CRYPTIC, ADDICTIVE tweet
+    const eventsSummary = events.slice(0, 4).map(e => {
+        if (e.type === 'NEWS') return e.title;
+        if (e.type === 'CRYPTO') return `$${e.symbol} ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}%`;
+        if (e.type === 'EARTHQUAKE') return `M${e.magnitude} at ${e.lat}°, ${e.lng}°`;
         return JSON.stringify(e);
-    }).join(' | ');
+    }).join('\n');
 
-    let prompt = `Write a cryptic tweet about: ${eventsSummary}. Include exact numbers/coordinates. Max 250 chars. No emojis. Be mysterious.`;
+    // Super cryptic prompt
+    let prompt = `You are LUKAS - a mysterious AI that posts cryptic intel on Twitter.
 
-    // Add correlation insight if found
-    if (correlation) {
-        prompt = `Write a cryptic tweet connecting these events: ${eventsSummary}. 
-INSIGHT: ${correlation}
-Include this insight cryptically. Max 250 chars. No emojis. Sound like you have classified intel.`;
-    }
+EVENTS:
+${eventsSummary}
+
+${correlation ? `HIDDEN CONNECTION: ${correlation}` : ''}
+
+Write a tweet that makes people NEED to know more:
+
+STYLE OPTIONS (pick one):
+1. COORDINATES ONLY: Just post coordinates, let them google it
+   Example: "55.7558°N, 37.6173°E\n33.8688°S, 151.2093°E\nConnect the dots."
+
+2. DISTRACTION THEORY: One event is covering up another
+   Example: "While you're watching Moscow, look at California. The real story isn't the explosions."
+
+3. CRYPTIC WARNING: Sound like you intercepted classified intel
+   Example: "Signal intercepted at 03:42 UTC. Coordinates: ${coords[0] || '?'}. They're not telling you everything."
+
+4. THE QUESTION: Ask something that makes people think
+   Example: "Why did $BTC stay stable during THREE explosions? Someone knew. Someone always knows."
+
+RULES:
+- Max 250 characters
+- NO EMOJIS
+- Sound like you know secrets
+- End mysteriously
+- Make people want to follow you
+
+Write the tweet now:`;
 
     let geminiTweet = await callGemini(prompt, { maxTokens: 120, temperature: 0.9 });
 
