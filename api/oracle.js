@@ -187,19 +187,48 @@ async function callGemini(prompt, options = {}) {
 // ═══════════════════════════════════════════════════════════════
 
 async function fetchNews() {
+    // Try NewsAPI first (free tier: 100 requests/day)
+    const NEWS_API_KEY = process.env.NEWS_API_KEY;
+
+    if (NEWS_API_KEY) {
+        try {
+            console.log('[Oracle] Fetching news from NewsAPI...');
+            const response = await fetch(
+                `https://newsapi.org/v2/top-headlines?language=en&pageSize=10&apiKey=${NEWS_API_KEY}`
+            );
+            const data = await response.json();
+
+            if (data.articles && data.articles.length > 0) {
+                console.log(`[Oracle] Got ${data.articles.length} news from NewsAPI`);
+                return data.articles.map(a => ({
+                    title: a.title,
+                    description: a.description || '',
+                    source: a.source?.name || 'Unknown',
+                    url: a.url,
+                    publishedAt: a.publishedAt
+                }));
+            }
+        } catch (e) {
+            console.error('[Oracle] NewsAPI error:', e.message);
+        }
+    }
+
+    // Fallback to Gemini with Google Search
+    console.log('[Oracle] Falling back to Gemini for news...');
     try {
         const result = await callGemini(
-            `Search for the top 5 breaking news stories from the last 6 hours.
-             Return ONLY a JSON array with format:
-             [{"title": "...", "description": "...", "source": "..."}]
-             No markdown, no explanation.`,
-            { useSearch: true, maxTokens: 500 }
+            `Search for the top 5 breaking news stories happening RIGHT NOW.
+             Focus on: politics, economics, technology, disasters, conflicts.
+             Return ONLY a JSON array: [{"title": "...", "description": "...", "source": "..."}]`,
+            { useSearch: true, maxTokens: 600 }
         );
 
         if (!result) return [];
-        return JSON.parse(result.replace(/```json?|```/g, '').trim());
+        const parsed = JSON.parse(result.replace(/```json?|```/g, '').trim());
+        console.log(`[Oracle] Got ${parsed.length} news from Gemini`);
+        return parsed;
     } catch (e) {
-        console.error('[Oracle] News error:', e.message);
+        console.error('[Oracle] Gemini news error:', e.message);
         return [];
     }
 }
@@ -283,6 +312,65 @@ function findSignificantEvents(data, forceAll = false) {
     return events;
 }
 
+// ═══════════════════════════════════════════════════════════════
+//                      CORRELATION ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+// Knowledge base for correlations
+const CORRELATIONS = {
+    // Shipping/Ports
+    'port': ['shipping costs', 'supply chain', 'commodity prices', 'delays'],
+    'shanghai': ['manufacturing', 'electronics', 'exports', 'global trade'],
+    'rotterdam': ['european imports', 'oil prices', 'natural gas'],
+    'suez': ['shipping routes', 'oil tankers', 'global trade'],
+
+    // Energy
+    'oil': ['gas prices', 'inflation', 'transportation costs', 'airlines'],
+    'opec': ['oil prices', 'production cuts', 'energy markets'],
+    'natural gas': ['heating costs', 'electricity prices', 'industrial'],
+
+    // Tech
+    'semiconductor': ['chip shortage', 'electronics prices', 'auto industry', 'nvidia'],
+    'ai': ['tech stocks', 'nvda', 'cloud computing', 'data centers'],
+
+    // Geopolitical
+    'china': ['manufacturing', 'exports', 'rare earth', 'technology'],
+    'russia': ['oil', 'gas', 'wheat', 'fertilizers'],
+    'iran': ['oil prices', 'middle east', 'sanctions'],
+    'israel': ['oil prices', 'defense stocks', 'geopolitics']
+};
+
+async function findCorrelations(events) {
+    if (events.length < 2) return null;
+
+    // Build context from all events
+    const eventsSummary = events.slice(0, 5).map(e => {
+        if (e.type === 'NEWS') return `NEWS: ${e.title}`;
+        if (e.type === 'CRYPTO') return `CRYPTO: $${e.symbol} ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}%`;
+        if (e.type === 'EARTHQUAKE') return `EARTHQUAKE: M${e.magnitude} at ${e.place}`;
+        return JSON.stringify(e);
+    }).join('\n');
+
+    // Ask Gemini to find correlations
+    const prompt = `You are an intelligence analyst. Find hidden connections between these events:
+
+${eventsSummary}
+
+If you find a correlation (cause-effect, geographic link, market impact), explain it in ONE sentence.
+If no meaningful correlation exists, respond with: NONE
+
+Example: "Shanghai port delays will impact semiconductor supply chains, affecting $NVDA and $AMD stock prices."`;
+
+    const correlation = await callGemini(prompt, { maxTokens: 100, temperature: 0.7 });
+
+    if (correlation && !correlation.includes('NONE')) {
+        console.log('[Oracle] Found correlation:', correlation.substring(0, 50) + '...');
+        return correlation.trim();
+    }
+
+    return null;
+}
+
 async function draftTweet(events) {
     if (events.length === 0) return null;
 
@@ -325,7 +413,10 @@ Watch this space.`;
         templateTweet = templateTweet.substring(0, 277) + '...';
     }
 
-    // Try Gemini for a more creative version
+    // Find correlations between events
+    const correlation = await findCorrelations(events);
+
+    // Try Gemini for a more creative version with correlation
     const eventsSummary = events.slice(0, 3).map(e => {
         if (e.type === 'NEWS') return `NEWS: ${e.title}`;
         if (e.type === 'CRYPTO') return `CRYPTO: $${e.symbol} ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}%`;
@@ -333,9 +424,16 @@ Watch this space.`;
         return JSON.stringify(e);
     }).join(' | ');
 
-    const prompt = `Write a single cryptic tweet about: ${eventsSummary}. Include exact coordinates. Max 250 chars. No emojis. Be mysterious.`;
+    let prompt = `Write a cryptic tweet about: ${eventsSummary}. Include exact numbers/coordinates. Max 250 chars. No emojis. Be mysterious.`;
 
-    let geminiTweet = await callGemini(prompt, { maxTokens: 100, temperature: 0.9 });
+    // Add correlation insight if found
+    if (correlation) {
+        prompt = `Write a cryptic tweet connecting these events: ${eventsSummary}. 
+INSIGHT: ${correlation}
+Include this insight cryptically. Max 250 chars. No emojis. Sound like you have classified intel.`;
+    }
+
+    let geminiTweet = await callGemini(prompt, { maxTokens: 120, temperature: 0.9 });
 
     // Check if Gemini tweet is complete and usable
     if (geminiTweet) {
