@@ -245,29 +245,37 @@ async function fetchEarthquakes() {
 //                      BRAIN - DECISION & DRAFT
 // ═══════════════════════════════════════════════════════════════
 
-const BREAKING_KEYWORDS = ['breaking', 'urgent', 'war', 'crash', 'hack', 'attack', 'killed', 'missile', 'crisis'];
+// More keywords for news detection
+const BREAKING_KEYWORDS = [
+    'breaking', 'urgent', 'war', 'crash', 'hack', 'attack', 'killed', 'missile', 'crisis',
+    'explosion', 'shooting', 'earthquake', 'flood', 'fire', 'trump', 'biden', 'putin',
+    'election', 'market', 'stock', 'bitcoin', 'crypto', 'arrest', 'dead', 'death',
+    'terror', 'bomb', 'nuclear', 'sanctions', 'oil', 'gas', 'inflation', 'recession'
+];
 
-function findSignificantEvents(data) {
+function findSignificantEvents(data, forceAll = false) {
     const events = [];
 
-    // Breaking news
+    // All news (if forceAll) or breaking news
     for (const article of (data.news || [])) {
         const text = `${article.title} ${article.description || ''}`.toLowerCase();
-        if (BREAKING_KEYWORDS.some(kw => text.includes(kw))) {
+        const isBreaking = BREAKING_KEYWORDS.some(kw => text.includes(kw));
+        if (forceAll || isBreaking) {
             events.push({ type: 'NEWS', title: article.title, source: article.source });
         }
     }
 
-    // Crypto moves > 3%
+    // Crypto moves > 2% (lowered from 3%)
     for (const coin of (data.crypto || [])) {
-        if (Math.abs(coin.change1h || 0) >= 3) {
+        const change = Math.abs(coin.change1h || 0);
+        if (forceAll || change >= 2) {
             events.push({ type: 'CRYPTO', symbol: coin.symbol, price: coin.price, change: coin.change1h });
         }
     }
 
-    // Earthquakes > 5.0
+    // Earthquakes > 4.5 (lowered from 5.0)
     for (const eq of (data.earthquakes || [])) {
-        if (eq.magnitude >= 5.0) {
+        if (forceAll || eq.magnitude >= 4.5) {
             events.push({ type: 'EARTHQUAKE', magnitude: eq.magnitude, place: eq.place, lat: eq.lat, lng: eq.lng });
         }
     }
@@ -388,12 +396,15 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
-        // Find significant events
-        let events = findSignificantEvents(data);
-        console.log(`[Oracle] 🔍 Found ${events.length} significant events`);
+        // For 'all' action, show all events without filtering
+        const forceAll = action === 'all';
 
-        if (action === 'analyze') {
-            return res.status(200).json({ success: true, events, data });
+        // Find significant events
+        let events = findSignificantEvents(data, forceAll);
+        console.log(`[Oracle] 🔍 Found ${events.length} significant events (forceAll: ${forceAll})`);
+
+        if (action === 'analyze' || action === 'all') {
+            return res.status(200).json({ success: true, events, data, forceAll });
         }
 
         // Filter out already posted events (deduplication)
