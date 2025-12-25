@@ -111,7 +111,11 @@ function findSignificantEvents(data) {
 
 async function draftTweet(events, data) {
     const GEMINI_KEY = process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY;
-    if (!GEMINI_KEY || events.length === 0) return null;
+    if (!GEMINI_KEY) {
+        console.log('[Oracle] No Gemini key for drafting');
+        return createFallbackTweet(events);
+    }
+    if (events.length === 0) return null;
 
     const eventsSummary = events.slice(0, 3).map((e, i) => {
         if (e.type === 'NEWS') return `${i + 1}. NEWS: ${e.title}`;
@@ -137,6 +141,7 @@ WRITE A TWEET (max 280 characters):
 RESPOND WITH ONLY THE TWEET TEXT.`;
 
     try {
+        console.log('[Oracle] Calling Gemini to draft tweet...');
         const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
             {
@@ -149,13 +154,47 @@ RESPOND WITH ONLY THE TWEET TEXT.`;
             }
         );
         const result = await response.json();
+        console.log('[Oracle] Gemini response status:', response.status);
+
         let tweet = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (tweet && tweet.length > 280) tweet = tweet.substring(0, 277) + '...';
+
+        if (!tweet) {
+            console.log('[Oracle] Gemini returned empty, using fallback');
+            return createFallbackTweet(events);
+        }
+
+        if (tweet.length > 280) tweet = tweet.substring(0, 277) + '...';
+        console.log('[Oracle] Tweet drafted:', tweet.substring(0, 50) + '...');
         return tweet;
     } catch (e) {
         console.error('[Oracle] Draft error:', e.message);
-        return null;
+        return createFallbackTweet(events);
     }
+}
+
+function createFallbackTweet(events) {
+    const event = events[0];
+    if (!event) return null;
+
+    if (event.type === 'EARTHQUAKE') {
+        return `Seismic activity detected.
+Coordinates: ${event.lat}°N, ${event.lng}°E
+Magnitude: ${event.magnitude}
+${event.place}
+The earth speaks. Few listen.`;
+    }
+    if (event.type === 'CRYPTO') {
+        return `$${event.symbol} ${event.change > 0 ? '+' : ''}${event.change?.toFixed(1)}%.
+Price: $${event.price?.toLocaleString()}
+The whales are moving.
+Are you?`;
+    }
+    if (event.type === 'NEWS') {
+        return `Signal detected.
+${event.title?.substring(0, 100)}
+Watch what happens next.`;
+    }
+    return null;
 }
 
 // ═══════════════════════════════════════════════════════════════
