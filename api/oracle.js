@@ -2,6 +2,104 @@
 // Vercel Serverless Function
 
 // ═══════════════════════════════════════════════════════════════
+//                      DEDUPLICATION SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+// Simple hash function for events
+function hashEvent(event) {
+    const str = JSON.stringify({
+        type: event.type,
+        // For earthquakes, use coordinates
+        lat: event.lat,
+        lng: event.lng,
+        magnitude: event.magnitude,
+        // For crypto, use symbol and rough price
+        symbol: event.symbol,
+        priceRange: event.price ? Math.floor(event.price / 100) * 100 : null,
+        // For news, use title
+        title: event.title?.substring(0, 50)
+    });
+    // Simple hash
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    return 'evt_' + Math.abs(hash).toString(36);
+}
+
+// Store for posted events (using Upstash Redis if available)
+async function getPostedEvents() {
+    const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+    const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+    if (!UPSTASH_URL || !UPSTASH_TOKEN) {
+        console.log('[Oracle] No Upstash configured, skipping dedup');
+        return new Set();
+    }
+
+    try {
+        const response = await fetch(`${UPSTASH_URL}/get/oracle_posted_events`, {
+            headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
+        });
+        const data = await response.json();
+        if (data.result) {
+            return new Set(JSON.parse(data.result));
+        }
+    } catch (e) {
+        console.log('[Oracle] Failed to get posted events:', e.message);
+    }
+    return new Set();
+}
+
+async function savePostedEvent(eventHash) {
+    const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+    const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+    if (!UPSTASH_URL || !UPSTASH_TOKEN) return;
+
+    try {
+        // Get current events
+        const posted = await getPostedEvents();
+        posted.add(eventHash);
+
+        // Keep only last 100 events to avoid unlimited growth
+        const eventsArray = [...posted].slice(-100);
+
+        // Save back
+        await fetch(`${UPSTASH_URL}/set/oracle_posted_events`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(eventsArray)
+        });
+        console.log('[Oracle] Saved event hash:', eventHash);
+    } catch (e) {
+        console.log('[Oracle] Failed to save posted event:', e.message);
+    }
+}
+
+async function filterNewEvents(events) {
+    const posted = await getPostedEvents();
+    const newEvents = [];
+
+    for (const event of events) {
+        const hash = hashEvent(event);
+        if (!posted.has(hash)) {
+            event._hash = hash; // Store hash for later
+            newEvents.push(event);
+        } else {
+            console.log('[Oracle] Skipping duplicate event:', hash);
+        }
+    }
+
+    return newEvents;
+}
+
+// ═══════════════════════════════════════════════════════════════
 //                      GEMINI FALLBACK SYSTEM
 // ═══════════════════════════════════════════════════════════════
 
@@ -291,19 +389,25 @@ export default async function handler(req, res) {
         }
 
         // Find significant events
-        const events = findSignificantEvents(data);
+        let events = findSignificantEvents(data);
         console.log(`[Oracle] 🔍 Found ${events.length} significant events`);
 
         if (action === 'analyze') {
             return res.status(200).json({ success: true, events, data });
         }
 
+        // Filter out already posted events (deduplication)
+        const originalCount = events.length;
+        events = await filterNewEvents(events);
+        console.log(`[Oracle] 🔄 After dedup: ${events.length} new events (skipped ${originalCount - events.length} duplicates)`);
+
         if (events.length === 0) {
-            console.log('[Oracle] 💤 No significant events. Going back to sleep.');
+            console.log('[Oracle] 💤 No new events. Going back to sleep.');
             return res.status(200).json({
                 success: true,
                 action: 'SLEEP',
-                message: 'No significant events. Oracle goes back to sleep.',
+                message: 'No new events (all already posted). Oracle goes back to sleep.',
+                skippedDuplicates: originalCount,
                 data
             });
         }
@@ -314,6 +418,11 @@ export default async function handler(req, res) {
 
         if (action === 'draft') {
             return res.status(200).json({ success: true, tweet, events });
+        }
+
+        // Save posted event hash (first event)
+        if (events[0]?._hash) {
+            await savePostedEvent(events[0]._hash);
         }
 
         // Full cycle - log the tweet
