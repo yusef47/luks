@@ -180,71 +180,81 @@ function findSignificantEvents(data) {
 async function draftTweet(events) {
     if (events.length === 0) return null;
 
-    const eventsSummary = events.slice(0, 3).map((e, i) => {
-        if (e.type === 'NEWS') return `- NEWS: ${e.title}`;
-        if (e.type === 'CRYPTO') return `- CRYPTO: $${e.symbol} ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}% (now $${e.price?.toLocaleString()})`;
-        if (e.type === 'EARTHQUAKE') return `- EARTHQUAKE: M${e.magnitude} at ${e.place} (${e.lat}°, ${e.lng}°)`;
-        return `- ${JSON.stringify(e)}`;
-    }).join('\n');
+    // Create template-based tweet first (guaranteed to be complete)
+    const mainEvent = events[0];
+    let templateTweet = '';
 
-    // Simpler, more direct prompt
-    const prompt = `You are LUKAS ORACLE - a mysterious AI on Twitter.
+    if (mainEvent.type === 'EARTHQUAKE') {
+        // For multiple earthquakes, list them all
+        const quakes = events.filter(e => e.type === 'EARTHQUAKE');
+        if (quakes.length >= 2) {
+            templateTweet = `Seismic pattern detected.
+${quakes.slice(0, 3).map(q => `${q.lat}°, ${q.lng}° - ${q.place.split(',')[0]}`).join('\n')}
+${quakes.length} tremors. ${Math.floor(Math.random() * 12) + 6} hours.
+The plates are speaking.`;
+        } else {
+            templateTweet = `Seismic event confirmed.
+Coordinates: ${mainEvent.lat}°, ${mainEvent.lng}°
+Location: ${mainEvent.place}
+Magnitude: ${mainEvent.magnitude}
+Aftershocks likely. Monitor advised.`;
+        }
+    } else if (mainEvent.type === 'CRYPTO') {
+        const direction = mainEvent.change > 0 ? 'surge' : 'drop';
+        templateTweet = `$${mainEvent.symbol} ${direction} detected.
+${mainEvent.change > 0 ? '+' : ''}${mainEvent.change?.toFixed(2)}% movement.
+Current: $${mainEvent.price?.toLocaleString()}
+Whale wallets active.
+The charts don't lie.`;
+    } else if (mainEvent.type === 'NEWS') {
+        templateTweet = `Signal intercepted.
+"${mainEvent.title.substring(0, 100)}"
+Source: ${mainEvent.source || 'classified'}
+Implications developing.
+Watch this space.`;
+    }
 
-EVENTS DETECTED:
-${eventsSummary}
+    // Ensure the template tweet is under 280 chars
+    if (templateTweet.length > 280) {
+        templateTweet = templateTweet.substring(0, 277) + '...';
+    }
 
-Write a cryptic tweet (max 280 chars) about these events:
-- Include the actual coordinates and numbers from the events
-- If earthquakes: mention all locations and a pattern
-- Sound like you have secret intelligence information
-- End with a warning or prediction
-- No emojis. No "I think".
+    // Try Gemini for a more creative version
+    const eventsSummary = events.slice(0, 3).map(e => {
+        if (e.type === 'NEWS') return `NEWS: ${e.title}`;
+        if (e.type === 'CRYPTO') return `CRYPTO: $${e.symbol} ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}%`;
+        if (e.type === 'EARTHQUAKE') return `EARTHQUAKE: M${e.magnitude} at ${e.lat}°, ${e.lng}° (${e.place})`;
+        return JSON.stringify(e);
+    }).join(' | ');
 
-Example for earthquakes:
-"Seismic pattern confirmed.
-72.13°N - Norwegian Sea
-11.78°N - Guam  
--61.13°S - Scotia Sea
-3 tremors. 3 oceans. 12 hours.
-The Ring of Fire stirs."
+    const prompt = `Write a single cryptic tweet about: ${eventsSummary}. Include exact coordinates. Max 250 chars. No emojis. Be mysterious.`;
 
-Write the tweet now:`;
+    let geminiTweet = await callGemini(prompt, { maxTokens: 100, temperature: 0.9 });
 
-    let tweet = await callGemini(prompt, { maxTokens: 300, temperature: 0.8 });
+    // Check if Gemini tweet is complete and usable
+    if (geminiTweet) {
+        geminiTweet = geminiTweet.replace(/^["']|["']$/g, '').trim();
+        geminiTweet = geminiTweet.replace(/^(Here'?s?( the)? tweet:?|Tweet:?|My tweet:?)\s*/i, '').trim();
 
-    // If Gemini failed, create a fallback tweet
-    if (!tweet || tweet.length < 20) {
-        console.log('[Oracle] Gemini failed, creating fallback tweet...');
-        const mainEvent = events[0];
+        // Check if incomplete (ends mid-sentence or too short)
+        const isIncomplete =
+            geminiTweet.length < 50 ||
+            geminiTweet.endsWith('-') ||
+            geminiTweet.endsWith('at') ||
+            geminiTweet.endsWith('the') ||
+            geminiTweet.endsWith('a') ||
+            geminiTweet.endsWith('...') && geminiTweet.length < 100 ||
+            !geminiTweet.includes('.') && !geminiTweet.includes('\n');
 
-        if (mainEvent.type === 'EARTHQUAKE') {
-            tweet = `Seismic alert.
-${mainEvent.lat}°, ${mainEvent.lng}°
-${mainEvent.place}
-Magnitude ${mainEvent.magnitude}.
-${events.length > 1 ? `${events.length} events detected in 24 hours.` : ''}
-Monitoring continues.`;
-        } else if (mainEvent.type === 'CRYPTO') {
-            tweet = `$${mainEvent.symbol} ${mainEvent.change > 0 ? '+' : ''}${mainEvent.change?.toFixed(1)}%
-Price: $${mainEvent.price?.toLocaleString()}
-Movement detected.
-Smart money moves first.`;
-        } else if (mainEvent.type === 'NEWS') {
-            tweet = `Signal detected.
-${mainEvent.title}
-Implications unfolding.
-Watch closely.`;
+        if (!isIncomplete && geminiTweet.length >= 50 && geminiTweet.length <= 280) {
+            console.log('[Oracle] Using Gemini tweet');
+            return geminiTweet;
         }
     }
 
-    if (tweet) {
-        // Clean up the tweet
-        tweet = tweet.replace(/^["']|["']$/g, '').trim();
-        tweet = tweet.replace(/^(Here'?s?( the)? tweet:?|Tweet:?|My tweet:?)\s*/i, '').trim();
-        if (tweet.length > 280) tweet = tweet.substring(0, 277) + '...';
-    }
-
-    return tweet;
+    // Use template tweet as fallback
+    console.log('[Oracle] Using template tweet');
+    return templateTweet;
 }
 
 // ═══════════════════════════════════════════════════════════════
