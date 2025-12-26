@@ -598,6 +598,57 @@ export default async function handler(req, res) {
     console.log('[Oracle] Time:', new Date().toISOString());
 
     try {
+        // DEBUG ACTION - Test Upstash connection directly
+        if (action === 'debug') {
+            const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+            const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+            const debugResult = {
+                hasUrl: !!UPSTASH_URL,
+                hasToken: !!UPSTASH_TOKEN,
+                urlPreview: UPSTASH_URL ? UPSTASH_URL.substring(0, 30) + '...' : null
+            };
+
+            if (UPSTASH_URL && UPSTASH_TOKEN) {
+                // Test SET
+                try {
+                    const setResponse = await fetch(UPSTASH_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(['SET', 'test_key', 'test_value_' + Date.now()])
+                    });
+                    debugResult.setResponse = await setResponse.json();
+                } catch (e) {
+                    debugResult.setError = e.message;
+                }
+
+                // Test GET
+                try {
+                    const getResponse = await fetch(`${UPSTASH_URL}/get/test_key`, {
+                        headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
+                    });
+                    debugResult.getResponse = await getResponse.json();
+                } catch (e) {
+                    debugResult.getError = e.message;
+                }
+
+                // Check oracle_posted_events
+                try {
+                    const eventsResponse = await fetch(`${UPSTASH_URL}/get/oracle_posted_events`, {
+                        headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
+                    });
+                    debugResult.eventsResponse = await eventsResponse.json();
+                } catch (e) {
+                    debugResult.eventsError = e.message;
+                }
+            }
+
+            return res.status(200).json({ success: true, debug: debugResult });
+        }
+
         // HISTORY ACTION - Get tweet history for dashboard
         if (action === 'history') {
             const history = await getTweetHistory();
