@@ -72,18 +72,23 @@ async function savePostedEvent(eventHash) {
         const eventsArray = [...posted].slice(-100);
         const value = JSON.stringify(eventsArray);
 
-        // Upstash REST API: POST to /set/key with value in URL
-        const encodedValue = encodeURIComponent(value);
-        const response = await fetch(`${UPSTASH_URL}/set/oracle_posted_events/${encodedValue}`, {
+        // Upstash REST API: Use pipeline format (POST body with command array)
+        const response = await fetch(UPSTASH_URL, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
+            headers: {
+                'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(['SET', 'oracle_posted_events', value])
         });
         const result = await response.json();
-        console.log('[Oracle] SET response:', JSON.stringify(result));
+        console.log('[Oracle] SET response:', JSON.stringify(result).substring(0, 100));
 
         if (result.result === 'OK') {
-            console.log('[Oracle] Saved event hash:', eventHash);
+            console.log('[Oracle] ✅ Saved event hash:', eventHash);
             return true;
+        } else {
+            console.log('[Oracle] ❌ SET failed:', result.error || 'unknown');
         }
         return false;
     } catch (e) {
@@ -121,11 +126,14 @@ async function saveTweet(tweet, events) {
         const trimmed = history.slice(0, 50);
         const value = JSON.stringify(trimmed);
 
-        // Upstash REST API: POST to /set/key/value
-        const encodedValue = encodeURIComponent(value);
-        const response = await fetch(`${UPSTASH_URL}/set/oracle_tweet_history/${encodedValue}`, {
+        // Upstash REST API: Use pipeline format (POST body with command array)
+        const response = await fetch(UPSTASH_URL, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
+            headers: {
+                'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(['SET', 'oracle_tweet_history', value])
         });
         const result = await response.json();
         console.log('[Oracle] Tweet history SET response:', result.result);
