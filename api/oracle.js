@@ -464,38 +464,86 @@ Examples:
 async function draftTweet(events) {
     if (events.length === 0) return null;
 
-    // Create template-based tweet first (guaranteed to be complete)
+    // Get event counts and data for smart templating
+    const newsEvents = events.filter(e => e.type === 'NEWS');
+    const quakeEvents = events.filter(e => e.type === 'EARTHQUAKE');
+    const cryptoEvents = events.filter(e => e.type === 'CRYPTO');
     const mainEvent = events[0];
+
+    // THE WATCHER STYLE - Mysterious, cryptic, short sentences
     let templateTweet = '';
 
-    if (mainEvent.type === 'EARTHQUAKE') {
-        // For multiple earthquakes, list them all
-        const quakes = events.filter(e => e.type === 'EARTHQUAKE');
-        if (quakes.length >= 2) {
-            templateTweet = `Seismic pattern detected.
-${quakes.slice(0, 3).map(q => `${q.lat}°, ${q.lng}° - ${q.place.split(',')[0]}`).join('\n')}
-${quakes.length} tremors. ${Math.floor(Math.random() * 12) + 6} hours.
-The plates are speaking.`;
+    // Random mysterious endings
+    const endings = [
+        'You\'re watching the wrong game.',
+        'The pieces are moving.',
+        'Coincidence doesn\'t exist.',
+        'Someone knows.',
+        'Watch closely.',
+        'This isn\'t random.',
+        'The pattern is clear.',
+        'They\'re not telling you everything.',
+        'Connect the dots.'
+    ];
+    const ending = endings[Math.floor(Math.random() * endings.length)];
+
+    // MIXED EVENTS - Most interesting!
+    if (newsEvents.length > 0 && quakeEvents.length > 0) {
+        const news = newsEvents[0];
+        const quake = quakeEvents[0];
+        // Extract key location from news
+        const location = news.title.match(/California|Russia|Moscow|China|Korea|Iran|Israel/i)?.[0] || 'Unknown';
+        templateTweet = `${location}.
+${quake.lat}°, ${quake.lng}°
+
+Two events. Same day.
+${ending}`;
+    }
+    // MULTIPLE EARTHQUAKES - Coordinates mystery
+    else if (quakeEvents.length >= 2) {
+        const coords = quakeEvents.slice(0, 3).map(q => `${q.lat}°, ${q.lng}°`);
+        templateTweet = `${coords.join('\n')}
+
+${quakeEvents.length} points. One pattern.
+The Pacific remembers.`;
+    }
+    // SINGLE EARTHQUAKE
+    else if (mainEvent.type === 'EARTHQUAKE') {
+        templateTweet = `${mainEvent.lat}°, ${mainEvent.lng}°
+M${mainEvent.magnitude}.
+
+The ground speaks.
+Are you listening?`;
+    }
+    // CRYPTO
+    else if (mainEvent.type === 'CRYPTO') {
+        const time = new Date().toISOString().substring(11, 16);
+        templateTweet = `$${mainEvent.price?.toLocaleString()}.
+
+Someone moved at ${time} UTC.
+The whales aren't sleeping.
+Neither should you.`;
+    }
+    // NEWS
+    else if (mainEvent.type === 'NEWS') {
+        // Extract key words from title
+        const title = mainEvent.title;
+        const location = title.match(/California|Russia|Moscow|China|Korea|Iran|Israel|Ukraine|Gaza|Trump|Biden/i)?.[0];
+        const shortTitle = title.split(' - ')[0].substring(0, 60);
+
+        if (location) {
+            templateTweet = `${location}.
+
+"${shortTitle}..."
+
+${ending}`;
         } else {
-            templateTweet = `Seismic event confirmed.
-Coordinates: ${mainEvent.lat}°, ${mainEvent.lng}°
-Location: ${mainEvent.place}
-Magnitude: ${mainEvent.magnitude}
-Aftershocks likely. Monitor advised.`;
+            templateTweet = `Signal intercepted.
+
+"${shortTitle}..."
+
+${ending}`;
         }
-    } else if (mainEvent.type === 'CRYPTO') {
-        const direction = mainEvent.change > 0 ? 'surge' : 'drop';
-        templateTweet = `$${mainEvent.symbol} ${direction} detected.
-${mainEvent.change > 0 ? '+' : ''}${mainEvent.change?.toFixed(2)}% movement.
-Current: $${mainEvent.price?.toLocaleString()}
-Whale wallets active.
-The charts don't lie.`;
-    } else if (mainEvent.type === 'NEWS') {
-        templateTweet = `Signal intercepted.
-"${mainEvent.title.substring(0, 100)}"
-Source: ${mainEvent.source || 'classified'}
-Implications developing.
-Watch this space.`;
     }
 
     // Ensure the template tweet is under 280 chars
@@ -515,42 +563,45 @@ Watch this space.`;
     // Try Gemini for a CRYPTIC, ADDICTIVE tweet
     const eventsSummary = events.slice(0, 4).map(e => {
         if (e.type === 'NEWS') return e.title;
-        if (e.type === 'CRYPTO') return `$${e.symbol} ${e.change > 0 ? '+' : ''}${e.change?.toFixed(1)}%`;
+        if (e.type === 'CRYPTO') return `$${e.symbol} $${e.price?.toLocaleString()}`;
         if (e.type === 'EARTHQUAKE') return `M${e.magnitude} at ${e.lat}°, ${e.lng}°`;
         return JSON.stringify(e);
     }).join('\n');
 
-    // Super cryptic prompt
-    let prompt = `You are LUKAS - a mysterious AI that posts cryptic intel on Twitter.
+    // THE WATCHER style prompt
+    let prompt = `You are THE WATCHER - a mysterious AI that sees patterns others miss.
 
 EVENTS:
 ${eventsSummary}
 
-${correlation ? `HIDDEN CONNECTION: ${correlation}` : ''}
+${correlation ? `SECRET: ${correlation}` : ''}
 
-Write a tweet that makes people NEED to know more:
+Write a CRYPTIC tweet. Rules:
 
-STYLE OPTIONS (pick one):
-1. COORDINATES ONLY: Just post coordinates, let them google it
-   Example: "55.7558°N, 37.6173°E\n33.8688°S, 151.2093°E\nConnect the dots."
+FORMAT:
+- Short sentences only (3-5 words max per line)
+- Use line breaks between ideas
+- Include exact coordinates if available
+- End with a mysterious statement
 
-2. DISTRACTION THEORY: One event is covering up another
-   Example: "While you're watching Moscow, look at California. The real story isn't the explosions."
+EXAMPLES:
+"California.
+-20.62°, -178.55°
 
-3. CRYPTIC WARNING: Sound like you intercepted classified intel
-   Example: "Signal intercepted at 03:42 UTC. Coordinates: ${coords[0] || '?'}. They're not telling you everything."
+Two events. Same day.
+Coincidence doesn't exist."
 
-4. THE QUESTION: Ask something that makes people think
-   Example: "Why did $BTC stay stable during THREE explosions? Someone knew. Someone always knows."
+"$89,118.
 
-RULES:
-- Max 250 characters
-- NO EMOJIS
-- Sound like you know secrets
-- End mysteriously
-- Make people want to follow you
+03:42 UTC.
+The whales moved.
+Neither should you."
 
-Write the tweet now:`;
+"Moscow. Pyongyang. Beijing.
+Three capitals. One week.
+You're watching the wrong game."
+
+WRITE THE TWEET NOW (max 200 chars, NO emojis, NO hashtags):`;
 
     let geminiTweet = await callGemini(prompt, { maxTokens: 120, temperature: 0.9 });
 
