@@ -598,15 +598,14 @@ export default async function handler(req, res) {
     console.log('[Oracle] Time:', new Date().toISOString());
 
     try {
-        // DEBUG ACTION - Test Upstash connection directly
+        // DEBUG ACTION - Test Upstash connection
         if (action === 'debug') {
             const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
             const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-            const debugResult = {
-                hasUrl: !!UPSTASH_URL,
-                hasToken: !!UPSTASH_TOKEN,
-                urlPreview: UPSTASH_URL ? UPSTASH_URL.substring(0, 30) + '...' : null
+            const debugInfo = {
+                upstash_url: UPSTASH_URL ? UPSTASH_URL.substring(0, 30) + '...' : 'NOT SET',
+                upstash_token: UPSTASH_TOKEN ? 'SET (length: ' + UPSTASH_TOKEN.length + ')' : 'NOT SET'
             };
 
             if (UPSTASH_URL && UPSTASH_TOKEN) {
@@ -618,35 +617,36 @@ export default async function handler(req, res) {
                             'Authorization': `Bearer ${UPSTASH_TOKEN}`,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify(['SET', 'test_key', 'test_value_' + Date.now()])
+                        body: JSON.stringify(['SET', 'oracle_test', 'hello_' + Date.now()])
                     });
-                    debugResult.setResponse = await setResponse.json();
+                    debugInfo.set_status = setResponse.status;
+                    debugInfo.set_result = await setResponse.json();
                 } catch (e) {
-                    debugResult.setError = e.message;
+                    debugInfo.set_error = e.message;
                 }
 
                 // Test GET
                 try {
-                    const getResponse = await fetch(`${UPSTASH_URL}/get/test_key`, {
+                    const getResponse = await fetch(`${UPSTASH_URL}/get/oracle_test`, {
                         headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
                     });
-                    debugResult.getResponse = await getResponse.json();
+                    debugInfo.get_status = getResponse.status;
+                    debugInfo.get_result = await getResponse.json();
                 } catch (e) {
-                    debugResult.getError = e.message;
+                    debugInfo.get_error = e.message;
                 }
 
-                // Check oracle_posted_events
+                // Get posted events
                 try {
-                    const eventsResponse = await fetch(`${UPSTASH_URL}/get/oracle_posted_events`, {
-                        headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
-                    });
-                    debugResult.eventsResponse = await eventsResponse.json();
+                    const posted = await getPostedEvents();
+                    debugInfo.posted_events_count = posted.size;
+                    debugInfo.posted_events = [...posted].slice(0, 5);
                 } catch (e) {
-                    debugResult.eventsError = e.message;
+                    debugInfo.posted_events_error = e.message;
                 }
             }
 
-            return res.status(200).json({ success: true, debug: debugResult });
+            return res.status(200).json({ success: true, debug: debugInfo });
         }
 
         // HISTORY ACTION - Get tweet history for dashboard
