@@ -753,6 +753,14 @@ export default async function handler(req, res) {
                 }
             }
 
+            // Twitter config check
+            debugInfo.twitter = {
+                username: process.env.TWITTER_USERNAME ? 'SET (' + process.env.TWITTER_USERNAME + ')' : 'NOT SET',
+                password: process.env.TWITTER_PASSWORD ? 'SET (length: ' + process.env.TWITTER_PASSWORD.length + ')' : 'NOT SET',
+                email: process.env.TWITTER_EMAIL ? 'SET' : 'NOT SET',
+                enabled: process.env.TWITTER_ENABLED || 'NOT SET'
+            };
+
             return res.status(200).json({ success: true, debug: debugInfo });
         }
 
