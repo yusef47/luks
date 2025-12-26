@@ -82,6 +82,69 @@ async function savePostedEvent(eventHash) {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+//                      TWEET HISTORY (for Dashboard)
+// ═══════════════════════════════════════════════════════════════
+
+async function saveTweet(tweet, events) {
+    const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+    const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+    if (!UPSTASH_URL || !UPSTASH_TOKEN || !tweet) return;
+
+    try {
+        // Get existing tweets
+        const history = await getTweetHistory();
+
+        // Add new tweet
+        history.unshift({
+            tweet,
+            events: events.slice(0, 3).map(e => ({
+                type: e.type,
+                title: e.title || e.place || e.symbol,
+                value: e.change || e.magnitude
+            })),
+            timestamp: new Date().toISOString()
+        });
+
+        // Keep only last 50 tweets
+        const trimmed = history.slice(0, 50);
+
+        // Save back
+        await fetch(`${UPSTASH_URL}/set/oracle_tweet_history`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(trimmed)
+        });
+        console.log('[Oracle] Tweet saved to history');
+    } catch (e) {
+        console.log('[Oracle] Failed to save tweet:', e.message);
+    }
+}
+
+async function getTweetHistory() {
+    const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+    const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+    if (!UPSTASH_URL || !UPSTASH_TOKEN) return [];
+
+    try {
+        const response = await fetch(`${UPSTASH_URL}/get/oracle_tweet_history`, {
+            headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
+        });
+        const data = await response.json();
+        if (data.result) {
+            return JSON.parse(data.result);
+        }
+    } catch (e) {
+        console.log('[Oracle] Failed to get tweet history:', e.message);
+    }
+    return [];
+}
+
 async function filterNewEvents(events) {
     const posted = await getPostedEvents();
     const newEvents = [];
@@ -518,6 +581,16 @@ export default async function handler(req, res) {
     console.log('[Oracle] Time:', new Date().toISOString());
 
     try {
+        // HISTORY ACTION - Get tweet history for dashboard
+        if (action === 'history') {
+            const history = await getTweetHistory();
+            return res.status(200).json({
+                success: true,
+                count: history.length,
+                tweets: history
+            });
+        }
+
         // Scan all sources
         console.log('[Oracle] 📡 Scanning sources...');
         const [news, crypto, earthquakes] = await Promise.all([
@@ -571,6 +644,11 @@ export default async function handler(req, res) {
         // Save posted event hash (first event)
         if (events[0]?._hash) {
             await savePostedEvent(events[0]._hash);
+        }
+
+        // Save tweet to history (for dashboard)
+        if (tweet) {
+            await saveTweet(tweet, events);
         }
 
         // Full cycle - log the tweet

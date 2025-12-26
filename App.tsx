@@ -22,6 +22,7 @@ import { TaskProgress } from './src/components/computer/TaskProgress';
 import PresentationGenerator from './src/components/presentation/PresentationGenerator';
 import AutonomousMode from './src/components/AutonomousMode';
 import DailyFeedSettings from './src/components/DailyFeedSettings';
+import { OracleDashboard } from './src/components/OracleDashboard';
 
 
 // Note: All Gemini API calls are now handled by the backend proxy
@@ -217,6 +218,7 @@ const App: React.FC = () => {
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [isAutonomousMode, setIsAutonomousMode] = useState(false);
   const [showDailyFeed, setShowDailyFeed] = useState(false);
+  const [showOracleDashboard, setShowOracleDashboard] = useState(false);
 
   // ========== CONVERSATIONS ==========
   const [conversations, setConversations] = useState<Conversation[]>(() => {
@@ -661,6 +663,7 @@ ${fileAnalysis}
         isAutonomousMode={isAutonomousMode}
         onToggleAutonomous={() => setIsAutonomousMode(!isAutonomousMode)}
         onOpenDailyFeed={() => setShowDailyFeed(true)}
+        onOpenOracle={() => setShowOracleDashboard(true)}
         t={t as any}
       />
 
@@ -732,6 +735,13 @@ ${fileAnalysis}
           onClose={() => setShowDailyFeed(false)}
           t={t as any}
         />
+      )}
+
+      {/* Oracle Dashboard Modal */}
+      {showOracleDashboard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <OracleDashboard onClose={() => setShowOracleDashboard(false)} />
+        </div>
       )}
     </div>
   );

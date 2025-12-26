@@ -25,6 +25,9 @@ interface SidebarProps {
   // Daily Feed
   onOpenDailyFeed?: () => void;
 
+  // Oracle Dashboard
+  onOpenOracle?: () => void;
+
   // Localization
   t: (key: string) => string;
 }
@@ -39,6 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isAutonomousMode,
   onToggleAutonomous,
   onOpenDailyFeed,
+  onOpenOracle,
   t
 }) => {
   return (
@@ -102,6 +106,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <span className="text-lg">⭐</span>
           <span className="text-sm font-medium">Daily Intelligence</span>
+        </button>
+
+        {/* Oracle Dashboard */}
+        <button
+          onClick={onOpenOracle}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border bg-[var(--bg-tertiary-color)] text-[var(--text-primary-color)] border-[var(--border-color)] hover:border-purple-500/50 hover:bg-purple-500/10"
+        >
+          <span className="text-lg">🔮</span>
+          <span className="text-sm font-medium">Oracle Dashboard</span>
         </button>
       </div>
 
