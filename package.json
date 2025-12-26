@@ -17,6 +17,7 @@
     "@google/genai": "^1.28.0",
     "@vercel/node": "^5.5.14",
     "@vitejs/plugin-react": "^5.0.0",
+    "agent-twitter-client": "^0.0.18",
     "ai": "^5.0.93",
     "axios": "^1.13.2",
     "better-sqlite3": "^12.4.1",

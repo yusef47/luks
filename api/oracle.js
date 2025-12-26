@@ -2,6 +2,62 @@
 // Vercel Serverless Function
 
 // ═══════════════════════════════════════════════════════════════
+//                      TWITTER INTEGRATION
+// ═══════════════════════════════════════════════════════════════
+
+let twitterClient = null;
+
+async function initTwitter() {
+    if (twitterClient) return twitterClient;
+
+    const username = process.env.TWITTER_USERNAME;
+    const password = process.env.TWITTER_PASSWORD;
+    const email = process.env.TWITTER_EMAIL;
+
+    if (!username || !password) {
+        console.log('[Oracle] Twitter credentials not configured');
+        return null;
+    }
+
+    try {
+        const { Scraper } = await import('agent-twitter-client');
+        const scraper = new Scraper();
+        await scraper.login(username, password, email);
+        console.log('[Oracle] ✅ Twitter logged in successfully!');
+        twitterClient = scraper;
+        return scraper;
+    } catch (e) {
+        console.log('[Oracle] ❌ Twitter login failed:', e.message);
+        return null;
+    }
+}
+
+async function postToTwitter(tweet) {
+    if (!tweet) return { success: false, error: 'No tweet provided' };
+
+    // Check if Twitter is enabled
+    const twitterEnabled = process.env.TWITTER_ENABLED === 'true';
+    if (!twitterEnabled) {
+        console.log('[Oracle] Twitter posting disabled (set TWITTER_ENABLED=true to enable)');
+        return { success: false, error: 'Twitter disabled', draft: tweet };
+    }
+
+    try {
+        const scraper = await initTwitter();
+        if (!scraper) {
+            return { success: false, error: 'Twitter not configured', draft: tweet };
+        }
+
+        await scraper.sendTweet(tweet);
+        console.log('[Oracle] 🐦 Tweet posted successfully!');
+        return { success: true, posted: true };
+    } catch (e) {
+        console.log('[Oracle] ❌ Failed to post tweet:', e.message);
+        return { success: false, error: e.message, draft: tweet };
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
 //                      DEDUPLICATION SYSTEM
 // ═══════════════════════════════════════════════════════════════
 
@@ -770,18 +826,22 @@ export default async function handler(req, res) {
             await saveTweet(tweet, events);
         }
 
+        // POST TO TWITTER! 🐦
+        const twitterResult = await postToTwitter(tweet);
+
         // Full cycle - log the tweet
         console.log('[Oracle] ═══════════════════════════════════════════');
-        console.log('[Oracle] 🔮 TWEET DRAFTED:');
+        console.log('[Oracle] 🔮 TWEET:', twitterResult.posted ? 'POSTED!' : 'DRAFTED');
         console.log(tweet || '(no tweet generated)');
         console.log('[Oracle] ═══════════════════════════════════════════');
 
         return res.status(200).json({
             success: true,
-            action: 'DRAFTED',
+            action: twitterResult.posted ? 'POSTED' : 'DRAFTED',
             tweet: tweet || null,
+            twitter: twitterResult,
             events,
-            message: tweet ? 'Tweet drafted successfully!' : 'Failed to draft tweet.',
+            message: twitterResult.posted ? '🐦 Tweet posted to Twitter!' : 'Tweet drafted (Twitter disabled or error).',
             timestamp: new Date().toISOString()
         });
 
