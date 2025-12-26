@@ -44,6 +44,7 @@ async function getPostedEvents() {
             headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
         });
         const data = await response.json();
+        console.log('[Oracle] GET response:', JSON.stringify(data).substring(0, 100));
         if (data.result) {
             return new Set(JSON.parse(data.result));
         }
@@ -57,7 +58,10 @@ async function savePostedEvent(eventHash) {
     const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
     const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-    if (!UPSTASH_URL || !UPSTASH_TOKEN) return;
+    if (!UPSTASH_URL || !UPSTASH_TOKEN) {
+        console.log('[Oracle] No Upstash configured, cannot save');
+        return false;
+    }
 
     try {
         // Get current events
@@ -66,19 +70,25 @@ async function savePostedEvent(eventHash) {
 
         // Keep only last 100 events to avoid unlimited growth
         const eventsArray = [...posted].slice(-100);
+        const value = JSON.stringify(eventsArray);
 
-        // Save back
-        await fetch(`${UPSTASH_URL}/set/oracle_posted_events`, {
+        // Upstash REST API: POST to /set/key with value in URL
+        const encodedValue = encodeURIComponent(value);
+        const response = await fetch(`${UPSTASH_URL}/set/oracle_posted_events/${encodedValue}`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${UPSTASH_TOKEN}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(eventsArray)
+            headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
         });
-        console.log('[Oracle] Saved event hash:', eventHash);
+        const result = await response.json();
+        console.log('[Oracle] SET response:', JSON.stringify(result));
+
+        if (result.result === 'OK') {
+            console.log('[Oracle] Saved event hash:', eventHash);
+            return true;
+        }
+        return false;
     } catch (e) {
         console.log('[Oracle] Failed to save posted event:', e.message);
+        return false;
     }
 }
 
@@ -109,17 +119,16 @@ async function saveTweet(tweet, events) {
 
         // Keep only last 50 tweets
         const trimmed = history.slice(0, 50);
+        const value = JSON.stringify(trimmed);
 
-        // Save back
-        await fetch(`${UPSTASH_URL}/set/oracle_tweet_history`, {
+        // Upstash REST API: POST to /set/key/value
+        const encodedValue = encodeURIComponent(value);
+        const response = await fetch(`${UPSTASH_URL}/set/oracle_tweet_history/${encodedValue}`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${UPSTASH_TOKEN}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(trimmed)
+            headers: { 'Authorization': `Bearer ${UPSTASH_TOKEN}` }
         });
-        console.log('[Oracle] Tweet saved to history');
+        const result = await response.json();
+        console.log('[Oracle] Tweet history SET response:', result.result);
     } catch (e) {
         console.log('[Oracle] Failed to save tweet:', e.message);
     }
