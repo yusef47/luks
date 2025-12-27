@@ -774,6 +774,55 @@ export default async function handler(req, res) {
             });
         }
 
+        // TEST TWITTER ACTION - Test Twitter login and posting
+        if (action === 'test_twitter') {
+            const testResult = {
+                twitter_config: {
+                    username: process.env.TWITTER_USERNAME || 'NOT SET',
+                    password: process.env.TWITTER_PASSWORD ? 'SET' : 'NOT SET',
+                    email: process.env.TWITTER_EMAIL ? 'SET' : 'NOT SET',
+                    enabled: process.env.TWITTER_ENABLED || 'NOT SET'
+                }
+            };
+
+            // Try to login
+            try {
+                const { Scraper } = await import('agent-twitter-client');
+                const scraper = new Scraper();
+
+                console.log('[Oracle] Testing Twitter login...');
+                await scraper.login(
+                    process.env.TWITTER_USERNAME,
+                    process.env.TWITTER_PASSWORD,
+                    process.env.TWITTER_EMAIL
+                );
+
+                testResult.login = 'SUCCESS';
+                console.log('[Oracle] ✅ Twitter login successful!');
+
+                // Try to post a test tweet
+                const testTweet = `🔮 Oracle test at ${new Date().toISOString().substring(11, 19)} UTC`;
+
+                try {
+                    await scraper.sendTweet(testTweet);
+                    testResult.post = 'SUCCESS';
+                    testResult.posted_tweet = testTweet;
+                    console.log('[Oracle] ✅ Test tweet posted!');
+                } catch (postError) {
+                    testResult.post = 'FAILED';
+                    testResult.post_error = postError.message;
+                    console.log('[Oracle] ❌ Tweet post failed:', postError.message);
+                }
+
+            } catch (loginError) {
+                testResult.login = 'FAILED';
+                testResult.login_error = loginError.message;
+                console.log('[Oracle] ❌ Twitter login failed:', loginError.message);
+            }
+
+            return res.status(200).json({ success: true, test: testResult });
+        }
+
         // Scan all sources
         console.log('[Oracle] 📡 Scanning sources...');
         const [news, crypto, earthquakes] = await Promise.all([
