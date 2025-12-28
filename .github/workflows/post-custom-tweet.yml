@@ -1,0 +1,38 @@
+name: Post Custom Tweet
+
+on:
+  workflow_dispatch:
+    inputs:
+      tweet_text:
+        description: 'Tweet text to post'
+        required: true
+        type: string
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm install playwright
+      
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+      
+      - name: Create tweet file
+        run: |
+          echo "${{ github.event.inputs.tweet_text }}" > tweet.txt
+          cat tweet.txt
+      
+      - name: Post to Twitter
+        env:
+          TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
+        run: node scripts/post-tweet.js
