@@ -28,20 +28,28 @@ jobs:
       - name: Get tweet from Oracle
         id: oracle
         run: |
+          # Fetch from Oracle API
           RESPONSE=$(curl -s "https://luks-pied.vercel.app/api/oracle?action=cycle")
-          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
           
-          # Extract tweet using jq
-          TWEET=$(echo $RESPONSE | jq -r '.tweet // empty')
-          ACTION=$(echo $RESPONSE | jq -r '.action // empty')
+          # Save full response
+          echo "$RESPONSE" > oracle_response.json
           
-          echo "tweet=$TWEET" >> $GITHUB_OUTPUT
+          # Extract action
+          ACTION=$(echo "$RESPONSE" | jq -r '.action // "NONE"')
           echo "action=$ACTION" >> $GITHUB_OUTPUT
           
-          if [ -z "$TWEET" ] || [ "$ACTION" = "SLEEP" ]; then
+          # Extract tweet and save to file (to handle special characters)
+          echo "$RESPONSE" | jq -r '.tweet // ""' > tweet.txt
+          
+          # Check if we should post
+          TWEET_LENGTH=$(cat tweet.txt | wc -c)
+          if [ "$ACTION" = "SLEEP" ] || [ "$TWEET_LENGTH" -lt 10 ]; then
             echo "should_post=false" >> $GITHUB_OUTPUT
+            echo "No tweet to post (action: $ACTION)"
           else
             echo "should_post=true" >> $GITHUB_OUTPUT
+            echo "Tweet ready to post:"
+            cat tweet.txt
           fi
       
       - name: Post to Twitter
@@ -50,5 +58,4 @@ jobs:
           TWITTER_USERNAME: ${{ secrets.TWITTER_USERNAME }}
           TWITTER_PASSWORD: ${{ secrets.TWITTER_PASSWORD }}
           TWITTER_EMAIL: ${{ secrets.TWITTER_EMAIL }}
-          TWEET_TEXT: ${{ steps.oracle.outputs.tweet }}
         run: node scripts/post-tweet.js

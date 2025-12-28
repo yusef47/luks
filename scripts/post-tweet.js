@@ -2,15 +2,27 @@
 // This script is used by GitHub Actions to post tweets to Twitter
 
 const { chromium } = require('playwright');
+const fs = require('fs');
 
 async function postTweet() {
     const username = process.env.TWITTER_USERNAME;
     const password = process.env.TWITTER_PASSWORD;
     const email = process.env.TWITTER_EMAIL;
-    const tweetText = process.env.TWEET_TEXT;
+
+    // Read tweet from file (to handle special characters properly)
+    let tweetText;
+    try {
+        tweetText = fs.readFileSync('tweet.txt', 'utf8').trim();
+    } catch (e) {
+        console.log('Could not read tweet.txt, trying env var');
+        tweetText = process.env.TWEET_TEXT;
+    }
 
     if (!username || !password || !tweetText) {
         console.log('Missing credentials or tweet text');
+        console.log('Username:', username ? 'SET' : 'MISSING');
+        console.log('Password:', password ? 'SET' : 'MISSING');
+        console.log('Tweet:', tweetText ? tweetText.substring(0, 30) + '...' : 'MISSING');
         process.exit(1);
     }
 
