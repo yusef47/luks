@@ -51,16 +51,29 @@ async function postTweet() {
     });
 
     // Convert cookies to Playwright format
-    const playwrightCookies = cookies.map(c => ({
-        name: c.name,
-        value: c.value,
-        domain: c.domain,
-        path: c.path || '/',
-        expires: c.expirationDate || -1,
-        httpOnly: c.httpOnly || false,
-        secure: c.secure || false,
-        sameSite: c.sameSite === 'no_restriction' ? 'None' : (c.sameSite || 'Lax')
-    }));
+    const playwrightCookies = cookies.map(c => {
+        // Fix sameSite value - Playwright only accepts Strict, Lax, or None
+        let sameSite = 'Lax'; // default
+        if (c.sameSite === 'no_restriction' || c.sameSite === 'None') {
+            sameSite = 'None';
+        } else if (c.sameSite === 'lax' || c.sameSite === 'Lax') {
+            sameSite = 'Lax';
+        } else if (c.sameSite === 'strict' || c.sameSite === 'Strict') {
+            sameSite = 'Strict';
+        }
+        // If sameSite is null or undefined, use Lax as default
+
+        return {
+            name: c.name,
+            value: c.value,
+            domain: c.domain,
+            path: c.path || '/',
+            expires: c.expirationDate || -1,
+            httpOnly: c.httpOnly || false,
+            secure: c.secure || false,
+            sameSite: sameSite
+        };
+    });
 
     // Add cookies to context
     await context.addCookies(playwrightCookies);
