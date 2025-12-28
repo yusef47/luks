@@ -1,0 +1,54 @@
+name: Oracle Tweet
+
+on:
+  schedule:
+    # Run every 4 hours
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  tweet:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm install playwright
+      
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+      
+      - name: Get tweet from Oracle
+        id: oracle
+        run: |
+          RESPONSE=$(curl -s "https://luks-pied.vercel.app/api/oracle?action=cycle")
+          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+          
+          # Extract tweet using jq
+          TWEET=$(echo $RESPONSE | jq -r '.tweet // empty')
+          ACTION=$(echo $RESPONSE | jq -r '.action // empty')
+          
+          echo "tweet=$TWEET" >> $GITHUB_OUTPUT
+          echo "action=$ACTION" >> $GITHUB_OUTPUT
+          
+          if [ -z "$TWEET" ] || [ "$ACTION" = "SLEEP" ]; then
+            echo "should_post=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_post=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Post to Twitter
+        if: steps.oracle.outputs.should_post == 'true'
+        env:
+          TWITTER_USERNAME: ${{ secrets.TWITTER_USERNAME }}
+          TWITTER_PASSWORD: ${{ secrets.TWITTER_PASSWORD }}
+          TWITTER_EMAIL: ${{ secrets.TWITTER_EMAIL }}
+          TWEET_TEXT: ${{ steps.oracle.outputs.tweet }}
+        run: node scripts/post-tweet.js
