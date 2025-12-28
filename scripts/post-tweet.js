@@ -1,8 +1,8 @@
 // Post tweet using Playwright
 // This script is used by GitHub Actions to post tweets to Twitter
 
-const { chromium } = require('playwright');
-const fs = require('fs');
+import { chromium } from 'playwright';
+import fs from 'fs';
 
 async function postTweet() {
     const username = process.env.TWITTER_USERNAME;
