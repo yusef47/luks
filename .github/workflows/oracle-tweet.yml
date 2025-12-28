@@ -2,8 +2,13 @@ name: Oracle Tweet
 
 on:
   schedule:
-    # Run every 4 hours
-    - cron: '0 */4 * * *'
+    # Run at 18:15 UTC (8:15 PM Cairo) and every 4 hours
+    - cron: '15 18 * * *'
+    - cron: '15 22 * * *'
+    - cron: '15 2 * * *'
+    - cron: '15 6 * * *'
+    - cron: '15 10 * * *'
+    - cron: '15 14 * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
