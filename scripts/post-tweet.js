@@ -144,10 +144,30 @@ async function postTweet() {
         // Take screenshot before posting
         await page.screenshot({ path: 'before-post.png' });
 
-        console.log('📤 Posting tweet...');
-        const postButton = await page.$('[data-testid="tweetButton"]');
+        console.log('📤 Looking for post button...');
+
+        // Try multiple selectors for the post button
+        const buttonSelectors = [
+            '[data-testid="tweetButton"]',
+            '[data-testid="tweetButtonInline"]',
+            'button[data-testid="tweetButton"]',
+            '[role="button"]:has-text("Post")',
+            '[role="button"]:has-text("post")',
+            'button:has-text("Post")'
+        ];
+
+        let postButton = null;
+        for (const selector of buttonSelectors) {
+            postButton = await page.$(selector);
+            if (postButton) {
+                console.log(`Found button with selector: ${selector}`);
+                break;
+            }
+        }
+
         if (postButton) {
             await postButton.click();
+            console.log('📤 Clicked post button!');
             await page.waitForTimeout(8000);
 
             // Take screenshot after posting
@@ -156,7 +176,12 @@ async function postTweet() {
             console.log('🎉 Tweet posted successfully!');
             console.log('🔮 Oracle has spoken.');
         } else {
-            throw new Error('Could not find post button');
+            // Last resort: try pressing Ctrl+Enter to submit
+            console.log('⌨️ Trying Ctrl+Enter to submit...');
+            await page.keyboard.press('Control+Enter');
+            await page.waitForTimeout(5000);
+            await page.screenshot({ path: 'after-ctrl-enter.png' });
+            console.log('🎉 Attempted post with Ctrl+Enter');
         }
 
     } catch (error) {
