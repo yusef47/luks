@@ -1,42 +1,47 @@
-// Post tweet using Playwright
+// Post tweet using Playwright with saved cookies
 // This script is used by GitHub Actions to post tweets to Twitter
 
 import { chromium } from 'playwright';
 import fs from 'fs';
 
 async function postTweet() {
-    const username = process.env.TWITTER_USERNAME;
-    const password = process.env.TWITTER_PASSWORD;
-    const email = process.env.TWITTER_EMAIL;
-
-    // Read tweet from file (to handle special characters properly)
+    // Read tweet from file
     let tweetText;
     try {
         tweetText = fs.readFileSync('tweet.txt', 'utf8').trim();
     } catch (e) {
-        console.log('Could not read tweet.txt, trying env var');
-        tweetText = process.env.TWEET_TEXT;
+        console.log('Could not read tweet.txt');
+        process.exit(1);
     }
 
-    if (!username || !password || !tweetText) {
-        console.log('Missing credentials or tweet text');
-        console.log('Username:', username ? 'SET' : 'MISSING');
-        console.log('Password:', password ? 'SET' : 'MISSING');
-        console.log('Tweet:', tweetText ? tweetText.substring(0, 30) + '...' : 'MISSING');
+    if (!tweetText) {
+        console.log('No tweet text found');
+        process.exit(1);
+    }
+
+    // Get cookies from environment variable
+    const cookiesJson = process.env.TWITTER_COOKIES;
+    if (!cookiesJson) {
+        console.log('❌ TWITTER_COOKIES environment variable not set');
+        process.exit(1);
+    }
+
+    let cookies;
+    try {
+        cookies = JSON.parse(cookiesJson);
+        console.log(`🍪 Loaded ${cookies.length} cookies`);
+    } catch (e) {
+        console.log('❌ Failed to parse cookies JSON:', e.message);
         process.exit(1);
     }
 
     console.log('🔮 Oracle Twitter Bot Starting...');
     console.log('Tweet to post:', tweetText.substring(0, 50) + '...');
 
-    // Launch browser with anti-detection settings
+    // Launch browser
     const browser = await chromium.launch({
         headless: true,
-        args: [
-            '--disable-blink-features=AutomationControlled',
-            '--no-sandbox',
-            '--disable-setuid-sandbox'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
     const context = await browser.newContext({
@@ -45,98 +50,69 @@ async function postTweet() {
         locale: 'en-US'
     });
 
+    // Convert cookies to Playwright format
+    const playwrightCookies = cookies.map(c => ({
+        name: c.name,
+        value: c.value,
+        domain: c.domain,
+        path: c.path || '/',
+        expires: c.expirationDate || -1,
+        httpOnly: c.httpOnly || false,
+        secure: c.secure || false,
+        sameSite: c.sameSite === 'no_restriction' ? 'None' : (c.sameSite || 'Lax')
+    }));
+
+    // Add cookies to context
+    await context.addCookies(playwrightCookies);
+    console.log('🍪 Cookies loaded into browser');
+
     const page = await context.newPage();
     page.setDefaultTimeout(60000);
 
     try {
-        // Go to Twitter login
+        // Go directly to Twitter home (should be logged in via cookies)
         console.log('📱 Opening Twitter...');
-        await page.goto('https://twitter.com/i/flow/login', {
+        await page.goto('https://x.com/home', {
             waitUntil: 'domcontentloaded',
             timeout: 60000
         });
         await page.waitForTimeout(5000);
 
-        // Step 1: Enter username
-        console.log('👤 Looking for username input...');
-        const usernameInput = await page.waitForSelector('input[autocomplete="username"]', { timeout: 30000 });
-        console.log('👤 Entering username...');
-        await usernameInput.fill(username);
-        await page.waitForTimeout(1000);
-
-        // Click Next
-        console.log('➡️ Clicking Next...');
-        await page.click('[role="button"]:has-text("Next")');
-        await page.waitForTimeout(3000);
-
-        // Step 2: Check what screen we're on
-        console.log('🔍 Checking current step...');
-
-        // Take screenshot to see current state
-        await page.screenshot({ path: 'step-check.png' });
-        console.log('📸 Screenshot saved to step-check.png');
-
-        // Check for email/phone verification
-        const emailVerification = await page.$('input[data-testid="ocfEnterTextTextInput"]');
-        if (emailVerification) {
-            console.log('📧 Email/Phone verification required...');
-            await emailVerification.fill(email);
-            await page.waitForTimeout(1000);
-            await page.click('[data-testid="ocfEnterTextNextButton"]');
-            await page.waitForTimeout(3000);
-        }
-
-        // Step 3: Enter password
-        console.log('🔑 Looking for password input...');
-
-        // Wait for password field with multiple attempts
-        let passwordInput = null;
-        for (let i = 0; i < 5; i++) {
-            passwordInput = await page.$('input[name="password"]');
-            if (passwordInput) break;
-            console.log(`   Attempt ${i + 1}: Password input not found, waiting...`);
-            await page.waitForTimeout(2000);
-        }
-
-        if (!passwordInput) {
-            // Take screenshot to debug
-            await page.screenshot({ path: 'no-password-field.png' });
-            console.log('📸 Screenshot saved to no-password-field.png');
-            throw new Error('Password input field not found after multiple attempts');
-        }
-
-        console.log('🔑 Entering password...');
-        await passwordInput.fill(password);
-        await page.waitForTimeout(1000);
-
-        // Click Log in button
-        console.log('🔓 Clicking Log in...');
-        await page.click('[data-testid="LoginForm_Login_Button"]');
-        await page.waitForTimeout(8000);
-
-        // Check if logged in
+        // Check if logged in by looking for tweet button
         console.log('🔍 Checking login status...');
         const currentUrl = page.url();
         console.log('Current URL:', currentUrl);
 
-        // Go to compose tweet
-        console.log('✍️ Going to compose tweet...');
-        await page.goto('https://twitter.com/compose/tweet', {
-            waitUntil: 'domcontentloaded',
-            timeout: 30000
-        });
-        await page.waitForTimeout(5000);
+        if (currentUrl.includes('login')) {
+            console.log('❌ Not logged in - cookies might be expired');
+            await page.screenshot({ path: 'not-logged-in.png' });
+            throw new Error('Cookies expired - need to refresh');
+        }
 
         // Find tweet input
+        console.log('✍️ Looking for tweet input...');
+        await page.waitForTimeout(3000);
+
         let tweetBox = await page.$('[data-testid="tweetTextarea_0"]');
 
         if (!tweetBox) {
-            console.log('📝 Trying home page...');
-            await page.goto('https://twitter.com/home', {
+            // Try clicking on "What is happening?!" placeholder
+            const placeholder = await page.$('[data-text="What is happening?!"]');
+            if (placeholder) {
+                await placeholder.click();
+                await page.waitForTimeout(1000);
+                tweetBox = await page.$('[data-testid="tweetTextarea_0"]');
+            }
+        }
+
+        if (!tweetBox) {
+            // Try compose URL
+            console.log('📝 Trying compose page...');
+            await page.goto('https://x.com/compose/post', {
                 waitUntil: 'domcontentloaded',
                 timeout: 30000
             });
-            await page.waitForTimeout(5000);
+            await page.waitForTimeout(3000);
             tweetBox = await page.$('[data-testid="tweetTextarea_0"]');
         }
 
@@ -152,12 +128,23 @@ async function postTweet() {
         await page.keyboard.type(tweetText, { delay: 30 });
         await page.waitForTimeout(2000);
 
-        console.log('📤 Posting tweet...');
-        await page.click('[data-testid="tweetButton"]');
-        await page.waitForTimeout(8000);
+        // Take screenshot before posting
+        await page.screenshot({ path: 'before-post.png' });
 
-        console.log('🎉 Tweet posted successfully!');
-        console.log('🔮 Oracle has spoken.');
+        console.log('📤 Posting tweet...');
+        const postButton = await page.$('[data-testid="tweetButton"]');
+        if (postButton) {
+            await postButton.click();
+            await page.waitForTimeout(8000);
+
+            // Take screenshot after posting
+            await page.screenshot({ path: 'after-post.png' });
+
+            console.log('🎉 Tweet posted successfully!');
+            console.log('🔮 Oracle has spoken.');
+        } else {
+            throw new Error('Could not find post button');
+        }
 
     } catch (error) {
         console.error('❌ Error:', error.message);
