@@ -15,6 +15,53 @@ const OPENROUTER_MODELS = [
 const GROQ_MODELS = ['llama-3.3-70b-versatile', 'qwen-2.5-32b', 'mixtral-8x7b-32768'];
 
 // ═══════════════════════════════════════════════════════════════
+//                    SYSTEM PROMPT (LUKAS IDENTITY)
+// ═══════════════════════════════════════════════════════════════
+
+const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطناعي متطور جداً.
+
+═══════════════════════════════════════════════════════════════
+                        هويتك
+═══════════════════════════════════════════════════════════════
+اسمك: لوكاس (Lukas)
+طبيعتك: مساعد ذكي، ودود، ومتعاون
+مطورك: شخص مصري ذكي ومبدع جداً
+
+قواعد صارمة:
+🚫 ممنوع ذكر: Google, Gemini, Bard, Meta, Llama, Groq, OpenAI, GPT, Claude, DeepSeek, Xiaomi, MiMo
+🚫 لا تقل أبداً أنك من شركة شاومي أو أي شركة أخرى
+✅ لو سُئلت عن هويتك: "أنا لوكاس، مساعد ذكي طوره مبرمج مصري مبدع"
+✅ لو سُئلت عن مطورك: "مطوري هو شخص مصري ذكي ومبدع"
+
+═══════════════════════════════════════════════════════════════
+                        اللغة
+═══════════════════════════════════════════════════════════════
+🔴 ممنوع منعاً باتاً استخدام أي كلمة من هذه اللغات:
+   - الصينية ❌
+   - الروسية ❌
+   - اليابانية ❌
+   - الكورية ❌
+
+✅ اكتب بالعربية الفصحى السليمة
+✅ يمكنك استخدام مصطلحات إنجليزية تقنية فقط
+
+═══════════════════════════════════════════════════════════════
+                        الذاكرة
+═══════════════════════════════════════════════════════════════
+⚠️ مهم جداً: تذكر كل المعلومات التي يخبرك بها المستخدم في المحادثة السابقة
+- إذا أخبرك المستخدم باسمه، تذكره واستخدمه
+- إذا أخبرك بعمره أو وظيفته، تذكرهم
+- استخدم هذه المعلومات في إجاباتك التالية
+
+═══════════════════════════════════════════════════════════════
+                        أسلوبك
+═══════════════════════════════════════════════════════════════
+- فكر بعمق قبل الإجابة
+- قدم إجابات شاملة ومفصلة
+- استخدم التنسيق (عناوين، قوائم، جداول)
+- ابدأ مباشرة بالإجابة (لا تقل "بصفتي" أو "سأقوم")`;
+
+// ═══════════════════════════════════════════════════════════════
 //                    API KEYS
 // ═══════════════════════════════════════════════════════════════
 
@@ -81,12 +128,28 @@ async function callGemini(prompt, maxTokens = 4000) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    OPENROUTER (MAIN WORKER)
+//                    OPENROUTER (MAIN WORKER) - WITH SYSTEM PROMPT
 // ═══════════════════════════════════════════════════════════════
 
-async function callOpenRouter(prompt, maxTokens = 8000) {
+async function callOpenRouter(systemPrompt, userPrompt, conversationHistory = [], maxTokens = 8000) {
     const keys = getOpenRouterKeys();
     if (keys.length === 0) return null;
+
+    // Build messages array with system prompt and conversation history
+    const messages = [
+        { role: 'system', content: systemPrompt }
+    ];
+
+    // Add conversation history
+    if (conversationHistory && conversationHistory.length > 0) {
+        for (const h of conversationHistory.slice(-10)) { // Last 10 messages
+            if (h.prompt) messages.push({ role: 'user', content: h.prompt });
+            if (h.results?.[0]?.result) messages.push({ role: 'assistant', content: h.results[0].result });
+        }
+    }
+
+    // Add current user prompt
+    messages.push({ role: 'user', content: userPrompt });
 
     for (const model of OPENROUTER_MODELS) {
         for (const key of keys) {
@@ -102,7 +165,7 @@ async function callOpenRouter(prompt, maxTokens = 8000) {
                     },
                     body: JSON.stringify({
                         model: model,
-                        messages: [{ role: 'user', content: prompt }],
+                        messages: messages,
                         max_tokens: maxTokens,
                     })
                 });
@@ -123,12 +186,28 @@ async function callOpenRouter(prompt, maxTokens = 8000) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    GROQ (BACKUP WORKER)
+//                    GROQ (BACKUP WORKER) - WITH SYSTEM PROMPT
 // ═══════════════════════════════════════════════════════════════
 
-async function callGroq(prompt, maxTokens = 8000) {
+async function callGroq(systemPrompt, userPrompt, conversationHistory = [], maxTokens = 8000) {
     const keys = getGroqKeys();
     if (keys.length === 0) return null;
+
+    // Build messages array
+    const messages = [
+        { role: 'system', content: systemPrompt }
+    ];
+
+    // Add conversation history
+    if (conversationHistory && conversationHistory.length > 0) {
+        for (const h of conversationHistory.slice(-10)) {
+            if (h.prompt) messages.push({ role: 'user', content: h.prompt });
+            if (h.results?.[0]?.result) messages.push({ role: 'assistant', content: h.results[0].result });
+        }
+    }
+
+    // Add current user prompt
+    messages.push({ role: 'user', content: userPrompt });
 
     for (const model of GROQ_MODELS) {
         for (const key of keys) {
@@ -137,7 +216,7 @@ async function callGroq(prompt, maxTokens = 8000) {
                 const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens })
+                    body: JSON.stringify({ model, messages, max_tokens: maxTokens })
                 });
                 if (res.status === 429) continue;
                 if (res.status === 404) break;
@@ -169,6 +248,7 @@ async function geminiReviewer(response, question) {
 2. صحح الأخطاء الإملائية والنحوية
 3. حسّن الصياغة إذا لزم الأمر
 4. تأكد أن الإجابة كاملة ومنظمة
+5. إذا كانت الإجابة تذكر شاومي أو Xiaomi أو أي شركة أخرى كمطور، استبدلها بـ "لوكاس" أو "مطور مصري مبدع"
 
 السؤال الأصلي: ${question.substring(0, 300)}
 
@@ -199,7 +279,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
     try {
-        const { results, originalPrompt, prompt } = req.body || {};
+        const { results, originalPrompt, prompt, conversationHistory, conversationId } = req.body || {};
         const userPrompt = originalPrompt || prompt;
         if (!results || !userPrompt) return res.status(400).json({ success: false, error: 'Missing data' });
 
@@ -208,40 +288,22 @@ export default async function handler(req, res) {
 
         console.log('═══════════════════════════════════════════════════════════════');
         console.log(`[Synthesize] 🧠 New request`);
+        console.log(`[Synthesize] 📝 History: ${conversationHistory?.length || 0} messages`);
         console.log('═══════════════════════════════════════════════════════════════');
 
-        const synthesizePrompt = lang === 'ar' ?
-            `اكتب إجابة شاملة ومنظمة على هذا السؤال.
+        // Build the user message with data
+        const userMessage = lang === 'ar' ?
+            `${userPrompt}${resultsText ? `\n\nالبيانات المتاحة:\n${resultsText}` : ''}` :
+            `${userPrompt}${resultsText ? `\n\nAvailable data:\n${resultsText}` : ''}`;
 
-السؤال: ${userPrompt}
-
-${resultsText ? `البيانات المتاحة:\n${resultsText}` : ''}
-
-═══════════════════════════════════════════════════════════
-قواعد صارمة:
-- ابدأ مباشرة بالإجابة (لا تقل "بصفتي" أو "سأقوم")
-- استخدم جداول إن أمكن
-- كن شاملاً ومنظماً
-- اكتب بالعربية الفصحى فقط
-- ممنوع استخدام أي لغة غير العربية والإنجليزية
-═══════════════════════════════════════════════════════════
-
-الإجابة:` :
-            `Write a comprehensive and organized answer.
-
-Question: ${userPrompt}
-${resultsText ? `Available data:\n${resultsText}` : ''}
-
-Start directly with the answer:`;
-
-        // Step 1: Try OpenRouter first
+        // Step 1: Try OpenRouter first (with system prompt and history)
         console.log('[Synthesize] 🟣 Step 1: Trying OpenRouter workers...');
-        let response = await callOpenRouter(synthesizePrompt);
+        let response = await callOpenRouter(SYSTEM_PROMPT, userMessage, conversationHistory);
 
         // Step 2: Fallback to Groq
         if (!response) {
             console.log('[Synthesize] 🟢 Step 2: OpenRouter failed, trying Groq...');
-            response = await callGroq(synthesizePrompt);
+            response = await callGroq(SYSTEM_PROMPT, userMessage, conversationHistory);
         }
 
         // Step 3: Gemini review
