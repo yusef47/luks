@@ -1,17 +1,22 @@
-// Synthesize API - With Gemini Reviewer
-// Groq draft → Gemini review
+// Synthesize API - OpenRouter/Groq Workers + Gemini Reviewer
+// OpenRouter/Groq = الإجابة الفعلية
+// Gemini = مراجعة وتنظيف فقط
 
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-const GROQ_MODELS = ['qwen-2.5-32b', 'gpt-oss-120b', 'gemma2-9b-it', 'llama-3.3-70b-versatile'];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
 
-function getGroqKeys() {
-    const keys = [];
-    for (let i = 1; i <= 10; i++) {
-        const key = process.env[`GROQ_API_KEY_${i}`];
-        if (key && key.trim()) keys.push(key.trim());
-    }
-    return keys;
-}
+const OPENROUTER_MODELS = [
+    'xiaomi/mimo-v2-flash:free',
+    'google/gemma-3-27b-it:free',
+    'deepseek/deepseek-r1-0528:free',
+    'openai/gpt-oss-120b:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+];
+
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'qwen-2.5-32b', 'mixtral-8x7b-32768'];
+
+// ═══════════════════════════════════════════════════════════════
+//                    API KEYS
+// ═══════════════════════════════════════════════════════════════
 
 function getGeminiKeys() {
     const keys = [];
@@ -23,70 +28,167 @@ function getGeminiKeys() {
     return keys.sort(() => Math.random() - 0.5);
 }
 
-let geminiIdx = 0, groqIdx = 0;
+function getOpenRouterKeys() {
+    const keys = [];
+    for (let i = 1; i <= 10; i++) {
+        const key = process.env[`OPENROUTER_API_KEY_${i}`];
+        if (key && key.trim()) keys.push(key.trim());
+    }
+    if (process.env.OPENROUTER_API_KEY) keys.push(process.env.OPENROUTER_API_KEY.trim());
+    return keys;
+}
 
-async function callGemini(prompt) {
+function getGroqKeys() {
+    const keys = [];
+    for (let i = 1; i <= 10; i++) {
+        const key = process.env[`GROQ_API_KEY_${i}`];
+        if (key && key.trim()) keys.push(key.trim());
+    }
+    if (process.env.GROQ_API_KEY) keys.push(process.env.GROQ_API_KEY.trim());
+    return keys;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    GEMINI (REVIEWER ONLY)
+// ═══════════════════════════════════════════════════════════════
+
+async function callGemini(prompt, maxTokens = 4000) {
     const keys = getGeminiKeys();
     if (keys.length === 0) return null;
 
     for (const model of GEMINI_MODELS) {
-        for (let i = 0; i < 3; i++) {
+        for (const key of keys.slice(0, 5)) {
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[geminiIdx++ % keys.length] },
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
                     body: JSON.stringify({
                         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 8000 }
+                        generationConfig: { maxOutputTokens: maxTokens }
                     })
                 });
+                if (res.status === 429) continue;
+                if (res.status === 404) break;
                 if (res.ok) {
                     const d = await res.json();
                     const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (text) return text;
                 }
-            } catch (e) { }
+            } catch (e) { continue; }
         }
     }
     return null;
 }
 
-async function callGroq(prompt) {
+// ═══════════════════════════════════════════════════════════════
+//                    OPENROUTER (MAIN WORKER)
+// ═══════════════════════════════════════════════════════════════
+
+async function callOpenRouter(prompt, maxTokens = 8000) {
+    const keys = getOpenRouterKeys();
+    if (keys.length === 0) return null;
+
+    for (const model of OPENROUTER_MODELS) {
+        for (const key of keys) {
+            try {
+                console.log(`[Synthesize] 🟣 Trying OpenRouter: ${model.split('/')[1]?.split(':')[0]}`);
+                const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'https://luks-pied.vercel.app',
+                        'X-Title': 'Lukas AI'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [{ role: 'user', content: prompt }],
+                        max_tokens: maxTokens,
+                    })
+                });
+                if (res.status === 429) continue;
+                if (res.status === 404) break;
+                if (res.ok) {
+                    const d = await res.json();
+                    const text = d.choices?.[0]?.message?.content;
+                    if (text) {
+                        console.log(`[Synthesize] ✅ OpenRouter success: ${model.split('/')[1]?.split(':')[0]}`);
+                        return text;
+                    }
+                }
+            } catch (e) { continue; }
+        }
+    }
+    return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    GROQ (BACKUP WORKER)
+// ═══════════════════════════════════════════════════════════════
+
+async function callGroq(prompt, maxTokens = 8000) {
     const keys = getGroqKeys();
     if (keys.length === 0) return null;
 
     for (const model of GROQ_MODELS) {
-        for (let i = 0; i < 2; i++) {
+        for (const key of keys) {
             try {
+                console.log(`[Synthesize] 🟢 Trying Groq: ${model}`);
                 const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${keys[groqIdx++ % keys.length]}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 4000 })
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens })
                 });
+                if (res.status === 429) continue;
+                if (res.status === 404) break;
                 if (res.ok) {
                     const d = await res.json();
-                    if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
+                    const text = d.choices?.[0]?.message?.content;
+                    if (text) {
+                        console.log(`[Synthesize] ✅ Groq success: ${model}`);
+                        return text;
+                    }
                 }
-            } catch (e) { }
+            } catch (e) { continue; }
         }
     }
     return null;
 }
 
+// ═══════════════════════════════════════════════════════════════
+//                    GEMINI REVIEWER
+// ═══════════════════════════════════════════════════════════════
+
 async function geminiReviewer(response, question) {
-    const reviewPrompt = `راجع وحسّن هذه الإجابة:
-- احذف الكلمات الغريبة
-- صحح الأخطاء
-- حسّن الصياغة
+    console.log('[Synthesize] 🔍 Gemini reviewing response...');
 
-السؤال: ${question.substring(0, 200)}
-الإجابة: ${response}
+    const reviewPrompt = `أنت مراجع لغوي متخصص. راجع هذه الإجابة:
 
-قدم الإجابة المحسّنة فقط:`;
+⚠️ المطلوب:
+1. احذف أي حروف أو كلمات غير عربية (صينية، روسية، يابانية، إلخ)
+2. صحح الأخطاء الإملائية والنحوية
+3. حسّن الصياغة إذا لزم الأمر
+4. تأكد أن الإجابة كاملة ومنظمة
 
-    const reviewed = await callGemini(reviewPrompt);
-    return reviewed || response;
+السؤال الأصلي: ${question.substring(0, 300)}
+
+الإجابة المطلوب مراجعتها:
+${response}
+
+قدم الإجابة المُحسّنة فقط بدون أي تعليقات.`;
+
+    const reviewed = await callGemini(reviewPrompt, 8000);
+    if (reviewed) {
+        console.log('[Synthesize] ✅ Review complete');
+        return reviewed;
+    }
+    console.log('[Synthesize] ⚠️ Review failed, returning original');
+    return response;
 }
+
+// ═══════════════════════════════════════════════════════════════
+//                    HANDLER
+// ═══════════════════════════════════════════════════════════════
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -98,11 +200,15 @@ export default async function handler(req, res) {
 
     try {
         const { results, originalPrompt, prompt } = req.body || {};
-        const userPrompt = originalPrompt || prompt; // Accept both names for compatibility
+        const userPrompt = originalPrompt || prompt;
         if (!results || !userPrompt) return res.status(400).json({ success: false, error: 'Missing data' });
 
         const lang = /[\u0600-\u06FF]/.test(userPrompt) ? 'ar' : 'en';
         const resultsText = results.map((r, i) => `[${i + 1}] ${r.result || ''}`).join('\n\n');
+
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log(`[Synthesize] 🧠 New request`);
+        console.log('═══════════════════════════════════════════════════════════════');
 
         const synthesizePrompt = lang === 'ar' ?
             `اكتب إجابة شاملة ومنظمة على هذا السؤال.
@@ -115,7 +221,9 @@ ${resultsText ? `البيانات المتاحة:\n${resultsText}` : ''}
 قواعد صارمة:
 - ابدأ مباشرة بالإجابة (لا تقل "بصفتي" أو "سأقوم")
 - استخدم جداول إن أمكن
-- كن مختصراً ومنظماً
+- كن شاملاً ومنظماً
+- اكتب بالعربية الفصحى فقط
+- ممنوع استخدام أي لغة غير العربية والإنجليزية
 ═══════════════════════════════════════════════════════════
 
 الإجابة:` :
@@ -126,25 +234,32 @@ ${resultsText ? `Available data:\n${resultsText}` : ''}
 
 Start directly with the answer:`;
 
-        console.log('[Synthesize] 🧠 Trying Gemini...');
-        let response = await callGemini(synthesizePrompt);
+        // Step 1: Try OpenRouter first
+        console.log('[Synthesize] 🟣 Step 1: Trying OpenRouter workers...');
+        let response = await callOpenRouter(synthesizePrompt);
 
+        // Step 2: Fallback to Groq
         if (!response) {
-            console.log('[Synthesize] ⚡ Trying Groq...');
+            console.log('[Synthesize] 🟢 Step 2: OpenRouter failed, trying Groq...');
             response = await callGroq(synthesizePrompt);
-            if (response) {
-                console.log('[Synthesize] 🔍 Reviewing with Gemini...');
-                response = await geminiReviewer(response, userPrompt);
-            }
+        }
+
+        // Step 3: Gemini review
+        if (response) {
+            console.log('[Synthesize] 🔵 Step 3: Gemini reviewing response...');
+            response = await geminiReviewer(response, userPrompt);
         }
 
         if (!response) {
             response = lang === 'ar' ? 'عذراً، حدث خطأ في معالجة الطلب.' : 'Sorry, an error occurred.';
         }
 
+        console.log(`[Synthesize] ✅ Response ready (${response.length} chars)`);
+        console.log('═══════════════════════════════════════════════════════════════');
+
         res.status(200).json({ success: true, data: response });
     } catch (error) {
-        console.error('[Synthesize] Error:', error.message);
+        console.error('[Synthesize] ❌ Error:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 }

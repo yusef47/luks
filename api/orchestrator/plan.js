@@ -1,22 +1,22 @@
-// Plan API - ADVANCED AGI-STYLE THINKING
-// تفكير عميق + مراجعة ذاتية + تصحيح الأخطاء
+// Plan API - GEMINI ROUTER + OPENROUTER/GROQ WORKERS
+// Gemini = فهم السؤال + مراجعة الرد
+// OpenRouter/Groq = الإجابة الفعلية
 
 // ═══════════════════════════════════════════════════════════════
 //                    MODELS
 // ═══════════════════════════════════════════════════════════════
 
-const GEMINI_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash'
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
+
+const OPENROUTER_MODELS = [
+    'xiaomi/mimo-v2-flash:free',
+    'google/gemma-3-27b-it:free',
+    'deepseek/deepseek-r1-0528:free',
+    'openai/gpt-oss-120b:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
 ];
 
-const GROQ_MODELS = [
-    'qwen-2.5-32b',
-    'gpt-oss-120b',
-    'gemma2-9b-it',
-    'llama-3.3-70b-versatile'
-];
+const GROQ_MODELS = ['llama-3.3-70b-versatile', 'qwen-2.5-32b', 'mixtral-8x7b-32768'];
 
 // ═══════════════════════════════════════════════════════════════
 //                    API KEYS
@@ -32,73 +32,180 @@ function getGeminiKeys() {
     return keys.sort(() => Math.random() - 0.5);
 }
 
+function getOpenRouterKeys() {
+    const keys = [];
+    for (let i = 1; i <= 10; i++) {
+        const key = process.env[`OPENROUTER_API_KEY_${i}`];
+        if (key && key.trim()) keys.push(key.trim());
+    }
+    if (process.env.OPENROUTER_API_KEY) keys.push(process.env.OPENROUTER_API_KEY.trim());
+    return keys;
+}
+
 function getGroqKeys() {
     const keys = [];
     for (let i = 1; i <= 10; i++) {
         const key = process.env[`GROQ_API_KEY_${i}`];
         if (key && key.trim()) keys.push(key.trim());
     }
+    if (process.env.GROQ_API_KEY) keys.push(process.env.GROQ_API_KEY.trim());
     return keys;
 }
 
-let geminiIdx = 0, groqIdx = 0;
-
 // ═══════════════════════════════════════════════════════════════
-//                    GEMINI API
+//                    GEMINI (ANALYZER + REVIEWER ONLY)
 // ═══════════════════════════════════════════════════════════════
 
-async function callGemini(prompt) {
+async function callGemini(prompt, maxTokens = 2000) {
     const keys = getGeminiKeys();
     if (keys.length === 0) return null;
 
     for (const model of GEMINI_MODELS) {
-        for (let i = 0; i < 3; i++) {
+        for (const key of keys.slice(0, 5)) {
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[geminiIdx++ % keys.length] },
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
                     body: JSON.stringify({
                         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                        generationConfig: { maxOutputTokens: 4000 }
+                        generationConfig: { maxOutputTokens: maxTokens }
                     })
                 });
+                if (res.status === 429) continue;
+                if (res.status === 404) break;
                 if (res.ok) {
                     const d = await res.json();
                     const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (text) return text;
                 }
-            } catch (e) { }
+            } catch (e) { continue; }
         }
     }
     return null;
 }
 
-async function callGroq(prompt) {
+// ═══════════════════════════════════════════════════════════════
+//                    OPENROUTER (MAIN WORKER)
+// ═══════════════════════════════════════════════════════════════
+
+async function callOpenRouter(prompt, maxTokens = 4000) {
+    const keys = getOpenRouterKeys();
+    if (keys.length === 0) return null;
+
+    for (const model of OPENROUTER_MODELS) {
+        for (const key of keys) {
+            try {
+                console.log(`[Plan] 🟣 Trying OpenRouter: ${model.split('/')[1]?.split(':')[0]}`);
+                const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'https://luks-pied.vercel.app',
+                        'X-Title': 'Lukas AI'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [{ role: 'user', content: prompt }],
+                        max_tokens: maxTokens,
+                    })
+                });
+                if (res.status === 429) continue;
+                if (res.status === 404) break;
+                if (res.ok) {
+                    const d = await res.json();
+                    const text = d.choices?.[0]?.message?.content;
+                    if (text) {
+                        console.log(`[Plan] ✅ OpenRouter success: ${model.split('/')[1]?.split(':')[0]}`);
+                        return text;
+                    }
+                }
+            } catch (e) { continue; }
+        }
+    }
+    return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    GROQ (BACKUP WORKER)
+// ═══════════════════════════════════════════════════════════════
+
+async function callGroq(prompt, maxTokens = 4000) {
     const keys = getGroqKeys();
     if (keys.length === 0) return null;
 
     for (const model of GROQ_MODELS) {
-        for (let i = 0; i < 2; i++) {
+        for (const key of keys) {
             try {
+                console.log(`[Plan] 🟢 Trying Groq: ${model}`);
                 const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${keys[groqIdx++ % keys.length]}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: 2000 })
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], max_tokens: maxTokens })
                 });
+                if (res.status === 429) continue;
+                if (res.status === 404) break;
                 if (res.ok) {
                     const d = await res.json();
-                    if (d.choices?.[0]?.message?.content) return d.choices[0].message.content;
+                    const text = d.choices?.[0]?.message?.content;
+                    if (text) {
+                        console.log(`[Plan] ✅ Groq success: ${model}`);
+                        return text;
+                    }
                 }
-            } catch (e) { }
+            } catch (e) { continue; }
         }
     }
     return null;
 }
 
-async function callAPI(prompt) {
-    let result = await callGemini(prompt);
-    if (result) return result;
-    return await callGroq(prompt);
+// ═══════════════════════════════════════════════════════════════
+//                    GEMINI REVIEWER
+// ═══════════════════════════════════════════════════════════════
+
+async function geminiReviewer(text, originalPrompt) {
+    console.log('[Plan] 🔍 Gemini reviewing response...');
+
+    const reviewPrompt = `أنت مراجع لغوي متخصص. راجع هذه الإجابة:
+
+⚠️ المطلوب:
+1. احذف أي حروف أو كلمات غير عربية (صينية، روسية، يابانية، إلخ)
+2. صحح الأخطاء الإملائية والنحوية
+3. حسّن الصياغة إذا لزم الأمر
+4. تأكد أن الإجابة كاملة ومنظمة
+
+السؤال الأصلي: ${originalPrompt.substring(0, 500)}
+
+الإجابة المطلوب مراجعتها:
+${text}
+
+قدم الإجابة المُحسّنة فقط بدون أي تعليقات.`;
+
+    const result = await callGemini(reviewPrompt, 4000);
+    if (result) {
+        console.log('[Plan] ✅ Review complete');
+        return result;
+    }
+    console.log('[Plan] ⚠️ Review failed, returning original');
+    return text;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    MAIN WORKER (OpenRouter → Groq)
+// ═══════════════════════════════════════════════════════════════
+
+async function callWorker(prompt) {
+    // Try OpenRouter first
+    console.log('[Plan] 🟣 Trying OpenRouter workers...');
+    let result = await callOpenRouter(prompt);
+
+    // Fallback to Groq
+    if (!result) {
+        console.log('[Plan] 🟢 OpenRouter failed, trying Groq...');
+        result = await callGroq(prompt);
+    }
+
+    return result;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -111,33 +218,12 @@ function detectLanguage(text) {
 
 function analyzeComplexity(prompt) {
     let score = 0;
-
-    // Length
     if (prompt.length > 200) score += 1;
     if (prompt.length > 500) score += 2;
-    if (prompt.length > 1000) score += 2;
-
-    // Question marks
     const questionMarks = (prompt.match(/\?|؟/g) || []).length;
     if (questionMarks >= 2) score += 2;
-    if (questionMarks >= 5) score += 2;
-
-    // Complex keywords
-    const complexKeywords = [
-        'تخيل', 'افترض', 'سيناريو', 'حلل', 'خطة', 'استراتيجية',
-        'قارن', 'اشرح', 'نموذج', 'رياضي', 'كيف', 'لماذا',
-        'imagine', 'scenario', 'analyze', 'plan', 'strategy', 'compare'
-    ];
-    for (const kw of complexKeywords) {
-        if (prompt.includes(kw)) score += 1;
-    }
-
-    // Lists/numbers
-    if (/[1-9]\.|[١-٩]\./.test(prompt)) score += 2;
-
-    // Multi-line
-    if (prompt.split('\n').length > 5) score += 2;
-
+    const complexKeywords = ['تخيل', 'افترض', 'حلل', 'خطة', 'استراتيجية', 'قارن', 'اشرح', 'كيف', 'لماذا'];
+    for (const kw of complexKeywords) if (prompt.includes(kw)) score += 1;
     return Math.min(score, 10);
 }
 
@@ -160,85 +246,56 @@ export default async function handler(req, res) {
         const lang = detectLanguage(prompt);
         const complexity = analyzeComplexity(prompt);
 
-        console.log(`[Plan] 🧠 Complexity: ${complexity}/10`);
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log(`[Plan] 🧠 New request | Complexity: ${complexity}/10`);
+        console.log('═══════════════════════════════════════════════════════════════');
 
-        // Calculate steps based on complexity
-        let minSteps, maxSteps;
-        if (complexity >= 7) {
-            minSteps = 8; maxSteps = 12;
-        } else if (complexity >= 4) {
-            minSteps = 5; maxSteps = 8;
-        } else {
-            minSteps = 3; maxSteps = 5;
-        }
+        // Step 1: Gemini analyzes the question (light usage)
+        console.log('[Plan] 🔵 Step 1: Gemini analyzing question...');
 
-        const planPrompt = lang === 'ar' ? `أنت مخطط ذكي متقدم يفكر بأسلوب AGI (ذكاء اصطناعي عام).
+        let minSteps = complexity >= 7 ? 8 : complexity >= 4 ? 5 : 3;
+        let maxSteps = complexity >= 7 ? 12 : complexity >= 4 ? 8 : 5;
 
-═══════════════════════════════════════════════════════════════
-                    أسلوب التفكير
-═══════════════════════════════════════════════════════════════
+        const analyzePrompt = lang === 'ar'
+            ? `حلل هذا السؤال بإيجاز وحدد نوعه (بحث/تحليل/كود/شرح/رياضيات):
+"${prompt.substring(0, 300)}"
+أجب بجملة واحدة فقط.`
+            : `Briefly analyze this question and identify its type (research/analysis/code/explanation/math):
+"${prompt.substring(0, 300)}"
+Answer in one sentence only.`;
 
-أنت تفكر بعمق مثل الإنسان:
-- تحلل المشكلة من جميع الجوانب
-- تبحث عن المعلومات المطلوبة
-- تراجع أفكارك وتصححها إذا وجدت خطأ
-- تتأكد من صحة استنتاجاتك
-- تحسن إجابتك قبل تقديمها
+        const analysis = await callGemini(analyzePrompt, 200);
+        console.log(`[Plan] 📊 Analysis: ${analysis?.substring(0, 100) || 'default'}`);
 
-═══════════════════════════════════════════════════════════════
-                    وكلاء التفكير المتاحين
-═══════════════════════════════════════════════════════════════
+        // Step 2: OpenRouter/Groq creates the plan
+        console.log('[Plan] 🟣 Step 2: OpenRouter/Groq creating plan...');
 
-🔍 SearchAgent: البحث عن معلومات ومصادر
-📊 Analyzer: تحليل البيانات والمعلومات
-✅ Validator: التحقق من صحة المعلومات
-🔴 Critic: مراجعة ونقد الإجابة وإيجاد الأخطاء والفجوات
-✨ Refiner: تحسين الإجابة وإضافة التفاصيل الناقصة
-🧠 DeepThinker: التفكير العميق في السيناريوهات المعقدة
-📐 Calculator: الحسابات والنماذج الرياضية
-🔄 SelfCorrector: مراجعة المنطق وتصحيح الأخطاء في التفكير
-🎯 Orchestrator: دمج كل النتائج وتقديم الإجابة النهائية
+        const planPrompt = lang === 'ar' ? `أنت مخطط ذكي متقدم.
 
-═══════════════════════════════════════════════════════════════
-                    التعليمات
-═══════════════════════════════════════════════════════════════
+أنشئ خطة تفكير مفصلة من ${minSteps} إلى ${maxSteps} خطوات للسؤال التالي.
 
-أنشئ خطة تفكير مفصلة من ${minSteps} إلى ${maxSteps} خطوات.
+الوكلاء المتاحون:
+🔍 SearchAgent: البحث عن معلومات
+📊 Analyzer: تحليل البيانات
+🧠 DeepThinker: التفكير العميق
+✅ Validator: التحقق من الصحة
+✨ Refiner: تحسين الإجابة
+🎯 Orchestrator: الإجابة النهائية
 
-يجب أن تشمل الخطة:
-1. خطوة بحث واحدة على الأقل (SearchAgent)
-2. خطوة تحليل (Analyzer)
-3. خطوة نقد ذاتي (Critic) - مهم جداً!
-4. خطوة تصحيح (SelfCorrector) إذا وُجدت أخطاء
-5. خطوة تحسين (Refiner)
-6. خطوة دمج نهائية (Orchestrator)
+السؤال: "${prompt.substring(0, 1000)}"
 
-═══════════════════════════════════════════════════════════════
-                    السؤال
-═══════════════════════════════════════════════════════════════
-
-"${prompt.substring(0, 1000)}"
-
-═══════════════════════════════════════════════════════════════
-                    الإخراج المطلوب (JSON فقط)
-═══════════════════════════════════════════════════════════════
-
+أجب بـ JSON فقط:
 {
-  "complexity_assessment": "وصف مختصر لمدى تعقيد السؤال",
-  "thinking_approach": "كيف سأفكر في هذا السؤال",
+  "complexity_assessment": "وصف مختصر",
+  "thinking_approach": "طريقة التفكير",
   "plan": [
-    {"step": 1, "agent": "SearchAgent", "task": "وصف المهمة", "reasoning": "لماذا هذه الخطوة مهمة"},
-    {"step": 2, "agent": "Analyzer", "task": "...", "reasoning": "..."},
-    {"step": 3, "agent": "Critic", "task": "مراجعة ما توصلنا إليه والبحث عن أخطاء", "reasoning": "للتأكد من صحة تفكيرنا"},
-    ...
+    {"step": 1, "agent": "SearchAgent", "task": "المهمة", "reasoning": "السبب"}
   ]
-}` : `You are an advanced AGI-style thinking planner.
+}` : `You are an advanced planner.
 
-Create a detailed thinking plan with ${minSteps} to ${maxSteps} steps.
+Create a thinking plan with ${minSteps} to ${maxSteps} steps.
 
 Question: "${prompt.substring(0, 1000)}"
-
-Include: SearchAgent, Analyzer, Critic (self-review), SelfCorrector, Refiner, Orchestrator
 
 Return JSON only:
 {
@@ -247,72 +304,61 @@ Return JSON only:
   "plan": [{"step": 1, "agent": "...", "task": "...", "reasoning": "..."}]
 }`;
 
-        console.log(`[Plan] Generating ${minSteps}-${maxSteps} step AGI plan...`);
-        const response = await callAPI(planPrompt);
+        let response = await callWorker(planPrompt);
 
+        // Step 3: Gemini reviews the response
+        if (response) {
+            console.log('[Plan] 🔵 Step 3: Gemini reviewing response...');
+            response = await geminiReviewer(response, prompt);
+        }
+
+        // Parse response
         let planData;
         try {
             planData = JSON.parse(response);
         } catch {
             const match = response?.match(/\{[\s\S]*\}/);
             if (match) {
-                try {
-                    planData = JSON.parse(match[0]);
-                } catch {
-                    planData = null;
-                }
+                try { planData = JSON.parse(match[0]); } catch { planData = null; }
             }
         }
 
-        // Fallback plan if parsing failed
+        // Fallback plan
         if (!planData || !planData.plan) {
             planData = {
                 complexity_assessment: lang === 'ar' ? "سؤال يتطلب تحليل" : "Question requires analysis",
-                thinking_approach: lang === 'ar' ? "تفكير منهجي ومراجعة ذاتية" : "Systematic thinking with self-review",
+                thinking_approach: lang === 'ar' ? "تفكير منهجي" : "Systematic thinking",
                 plan: [
-                    { step: 1, agent: "SearchAgent", task: lang === 'ar' ? "البحث عن المعلومات المطلوبة" : "Search for required information", reasoning: lang === 'ar' ? "نحتاج معلومات أساسية" : "We need basic information" },
-                    { step: 2, agent: "Analyzer", task: lang === 'ar' ? "تحليل المعلومات" : "Analyze information", reasoning: lang === 'ar' ? "لفهم البيانات" : "To understand data" },
-                    { step: 3, agent: "DeepThinker", task: lang === 'ar' ? "التفكير العميق في الحل" : "Deep thinking about solution", reasoning: lang === 'ar' ? "للوصول لأفضل إجابة" : "To reach best answer" },
-                    { step: 4, agent: "Critic", task: lang === 'ar' ? "مراجعة ونقد التفكير" : "Review and critique thinking", reasoning: lang === 'ar' ? "للتأكد من الصحة" : "To verify correctness" },
-                    { step: 5, agent: "SelfCorrector", task: lang === 'ar' ? "تصحيح أي أخطاء في المنطق" : "Correct any logic errors", reasoning: lang === 'ar' ? "لضمان الجودة" : "To ensure quality" },
-                    { step: 6, agent: "Refiner", task: lang === 'ar' ? "تحسين الإجابة" : "Improve answer", reasoning: lang === 'ar' ? "لتقديم أفضل نتيجة" : "To deliver best result" },
-                    { step: 7, agent: "Orchestrator", task: lang === 'ar' ? "تقديم الإجابة النهائية الشاملة" : "Deliver final comprehensive answer", reasoning: lang === 'ar' ? "دمج كل النتائج" : "Combine all results" }
+                    { step: 1, agent: "SearchAgent", task: lang === 'ar' ? "البحث عن المعلومات" : "Search for information", reasoning: "Initial research" },
+                    { step: 2, agent: "Analyzer", task: lang === 'ar' ? "تحليل المعلومات" : "Analyze information", reasoning: "Understanding" },
+                    { step: 3, agent: "DeepThinker", task: lang === 'ar' ? "التفكير العميق" : "Deep thinking", reasoning: "Best answer" },
+                    { step: 4, agent: "Refiner", task: lang === 'ar' ? "تحسين الإجابة" : "Improve answer", reasoning: "Quality" },
+                    { step: 5, agent: "Orchestrator", task: lang === 'ar' ? "الإجابة النهائية" : "Final answer", reasoning: "Combine results" }
                 ]
             };
         }
 
         // Ensure minimum steps
         while (planData.plan.length < minSteps) {
-            const defaultSteps = [
-                { agent: "Analyzer", task: lang === 'ar' ? "تحليل إضافي" : "Additional analysis", reasoning: "More depth" },
-                { agent: "Critic", task: lang === 'ar' ? "مراجعة إضافية" : "Additional review", reasoning: "Quality check" }
-            ];
-            const step = defaultSteps[planData.plan.length % defaultSteps.length];
-            planData.plan.push({ step: planData.plan.length + 1, ...step });
+            planData.plan.push({ step: planData.plan.length + 1, agent: "Analyzer", task: lang === 'ar' ? "تحليل إضافي" : "Additional analysis", reasoning: "More depth" });
         }
-
-        // Re-number steps
         planData.plan = planData.plan.map((s, i) => ({ ...s, step: i + 1 }));
 
-        console.log(`[Plan] ✅ Created AGI plan with ${planData.plan.length} steps`);
+        console.log(`[Plan] ✅ Created plan with ${planData.plan.length} steps`);
+        console.log('═══════════════════════════════════════════════════════════════');
 
-        res.status(200).json({
-            success: true,
-            data: planData
-        });
+        res.status(200).json({ success: true, data: planData });
 
     } catch (error) {
         console.error('[Plan] ❌ Error:', error.message);
-
-        // Return a default plan even on error
         const lang = /[\u0600-\u06FF]/.test(req.body?.prompt || '') ? 'ar' : 'en';
         res.status(200).json({
             success: true,
             data: {
                 complexity_assessment: lang === 'ar' ? "تحليل السؤال" : "Analyzing question",
-                thinking_approach: lang === 'ar' ? "منهجية تفكير متقدمة" : "Advanced thinking methodology",
+                thinking_approach: lang === 'ar' ? "منهجية تفكير متقدمة" : "Advanced thinking",
                 plan: [
-                    { step: 1, agent: "SearchAgent", task: lang === 'ar' ? "البحث" : "Search", reasoning: "Initial research" },
+                    { step: 1, agent: "SearchAgent", task: lang === 'ar' ? "البحث" : "Search", reasoning: "Research" },
                     { step: 2, agent: "Analyzer", task: lang === 'ar' ? "التحليل" : "Analyze", reasoning: "Understanding" },
                     { step: 3, agent: "Orchestrator", task: lang === 'ar' ? "الإجابة" : "Answer", reasoning: "Final response" }
                 ]
