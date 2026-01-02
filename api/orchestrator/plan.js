@@ -253,8 +253,9 @@ export default async function handler(req, res) {
         // Step 1: Gemini analyzes the question (light usage)
         console.log('[Plan] 🔵 Step 1: Gemini analyzing question...');
 
-        let minSteps = complexity >= 7 ? 8 : complexity >= 4 ? 5 : 3;
-        let maxSteps = complexity >= 7 ? 12 : complexity >= 4 ? 8 : 5;
+        // SIMPLIFIED: Max 3 steps to prevent repetition
+        let minSteps = 1;
+        let maxSteps = 3;
 
         const analyzePrompt = lang === 'ar'
             ? `حلل هذا السؤال بإيجاز وحدد نوعه (بحث/تحليل/كود/شرح/رياضيات):
@@ -323,26 +324,20 @@ Return JSON only:
             }
         }
 
-        // Fallback plan
+        // Fallback plan - SIMPLIFIED to 2 steps
         if (!planData || !planData.plan) {
             planData = {
-                complexity_assessment: lang === 'ar' ? "سؤال يتطلب تحليل" : "Question requires analysis",
-                thinking_approach: lang === 'ar' ? "تفكير منهجي" : "Systematic thinking",
+                complexity_assessment: lang === 'ar' ? "سؤال" : "Question",
+                thinking_approach: lang === 'ar' ? "تفكير مباشر" : "Direct thinking",
                 plan: [
-                    { step: 1, agent: "SearchAgent", task: lang === 'ar' ? "البحث عن المعلومات" : "Search for information", reasoning: "Initial research" },
-                    { step: 2, agent: "Analyzer", task: lang === 'ar' ? "تحليل المعلومات" : "Analyze information", reasoning: "Understanding" },
-                    { step: 3, agent: "DeepThinker", task: lang === 'ar' ? "التفكير العميق" : "Deep thinking", reasoning: "Best answer" },
-                    { step: 4, agent: "Refiner", task: lang === 'ar' ? "تحسين الإجابة" : "Improve answer", reasoning: "Quality" },
-                    { step: 5, agent: "Orchestrator", task: lang === 'ar' ? "الإجابة النهائية" : "Final answer", reasoning: "Combine results" }
+                    { step: 1, agent: "SearchAgent", task: lang === 'ar' ? "البحث عن المعلومات" : "Search for information", reasoning: "Research" },
+                    { step: 2, agent: "Orchestrator", task: lang === 'ar' ? "الإجابة النهائية" : "Final answer", reasoning: "Final response" }
                 ]
             };
         }
 
-        // Ensure minimum steps
-        while (planData.plan.length < minSteps) {
-            planData.plan.push({ step: planData.plan.length + 1, agent: "Analyzer", task: lang === 'ar' ? "تحليل إضافي" : "Additional analysis", reasoning: "More depth" });
-        }
-        planData.plan = planData.plan.map((s, i) => ({ ...s, step: i + 1 }));
+        // Renumber steps
+        planData.plan = planData.plan.slice(0, 3).map((s, i) => ({ ...s, step: i + 1 }));
 
         console.log(`[Plan] ✅ Created plan with ${planData.plan.length} steps`);
         console.log('═══════════════════════════════════════════════════════════════');
@@ -355,12 +350,11 @@ Return JSON only:
         res.status(200).json({
             success: true,
             data: {
-                complexity_assessment: lang === 'ar' ? "تحليل السؤال" : "Analyzing question",
-                thinking_approach: lang === 'ar' ? "منهجية تفكير متقدمة" : "Advanced thinking",
+                complexity_assessment: lang === 'ar' ? "سؤال" : "Question",
+                thinking_approach: lang === 'ar' ? "تفكير مباشر" : "Direct thinking",
                 plan: [
                     { step: 1, agent: "SearchAgent", task: lang === 'ar' ? "البحث" : "Search", reasoning: "Research" },
-                    { step: 2, agent: "Analyzer", task: lang === 'ar' ? "التحليل" : "Analyze", reasoning: "Understanding" },
-                    { step: 3, agent: "Orchestrator", task: lang === 'ar' ? "الإجابة" : "Answer", reasoning: "Final response" }
+                    { step: 2, agent: "Orchestrator", task: lang === 'ar' ? "الإجابة" : "Answer", reasoning: "Final response" }
                 ]
             }
         });
