@@ -135,6 +135,9 @@ async function callOpenRouter(systemPrompt, userPrompt, conversationHistory = []
     const keys = getOpenRouterKeys();
     if (keys.length === 0) return null;
 
+    // Shuffle keys randomly for better distribution
+    const shuffledKeys = [...keys].sort(() => Math.random() - 0.5);
+
     // Build messages array with system prompt and conversation history
     const messages = [
         { role: 'system', content: systemPrompt }
@@ -152,9 +155,10 @@ async function callOpenRouter(systemPrompt, userPrompt, conversationHistory = []
     messages.push({ role: 'user', content: userPrompt });
 
     for (const model of OPENROUTER_MODELS) {
-        for (const key of keys) {
+        for (let keyIndex = 0; keyIndex < shuffledKeys.length; keyIndex++) {
+            const key = shuffledKeys[keyIndex];
             try {
-                console.log(`[Synthesize] 🟣 Trying OpenRouter: ${model.split('/')[1]?.split(':')[0]}`);
+                console.log(`[Synthesize] 🟣 Trying OpenRouter: ${model.split('/')[1]?.split(':')[0]} (Key ${keyIndex + 1}/${shuffledKeys.length})`);
                 const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -169,17 +173,27 @@ async function callOpenRouter(systemPrompt, userPrompt, conversationHistory = []
                         max_tokens: maxTokens,
                     })
                 });
-                if (res.status === 429) continue;
-                if (res.status === 404) break;
+
+                if (res.status === 429) {
+                    console.log(`[Synthesize] ⚠️ Key ${keyIndex + 1} rate limited, trying next key...`);
+                    continue;
+                }
+                if (res.status === 404) {
+                    console.log(`[Synthesize] ❌ Model not found: ${model}`);
+                    break; // Skip to next model
+                }
                 if (res.ok) {
                     const d = await res.json();
                     const text = d.choices?.[0]?.message?.content;
                     if (text) {
-                        console.log(`[Synthesize] ✅ OpenRouter success: ${model.split('/')[1]?.split(':')[0]}`);
+                        console.log(`[Synthesize] ✅ OpenRouter success: ${model.split('/')[1]?.split(':')[0]} (Key ${keyIndex + 1})`);
                         return text;
                     }
                 }
-            } catch (e) { continue; }
+            } catch (e) {
+                console.error(`[Synthesize] ❌ Error with OpenRouter model ${model} and key ${keyIndex + 1}:`, e);
+                continue;
+            }
         }
     }
     return null;
