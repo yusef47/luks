@@ -1,10 +1,26 @@
-// Synthesize API - OpenRouter/Groq Workers + Gemini Reviewer
+// Synthesize API - Smart Router with MiMo Analyzer
+// MiMo = تحليل السؤال وتوجيهه
 // OpenRouter/Groq = الإجابة الفعلية
-// Gemini = مراجعة وتنظيف فقط
+// Gemini = مراجعة وتنظيف
+
+// ═══════════════════════════════════════════════════════════════
+//                    MODELS CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
 
 const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
 
-const OPENROUTER_MODELS = [
+// Models by capability
+const MODELS = {
+    ANALYZER: 'xiaomi/mimo-v2-flash:free',      // Fast analyzer
+    SIMPLE: 'xiaomi/mimo-v2-flash:free',        // Simple questions
+    MATH: 'deepseek/deepseek-r1-0528:free',     // Math & thinking
+    CODE: 'openai/gpt-oss-120b:free',           // Code questions
+    RESEARCH: 'google/gemma-3-27b-it:free',     // Research & analysis
+    HEAVY: 'meta-llama/llama-3.3-70b-instruct:free', // Heavy lifting
+};
+
+// Fallback order
+const FALLBACK_MODELS = [
     'xiaomi/mimo-v2-flash:free',
     'google/gemma-3-27b-it:free',
     'deepseek/deepseek-r1-0528:free',
@@ -37,10 +53,7 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
                         اللغة
 ═══════════════════════════════════════════════════════════════
 🔴 ممنوع منعاً باتاً استخدام أي كلمة من هذه اللغات:
-   - الصينية ❌
-   - الروسية ❌
-   - اليابانية ❌
-   - الكورية ❌
+   - الصينية ❌ - الروسية ❌ - اليابانية ❌ - الكورية ❌
 
 ✅ اكتب بالعربية الفصحى السليمة
 ✅ يمكنك استخدام مصطلحات إنجليزية تقنية فقط
@@ -48,10 +61,9 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 ═══════════════════════════════════════════════════════════════
                         الذاكرة
 ═══════════════════════════════════════════════════════════════
-⚠️ مهم جداً: تذكر كل المعلومات التي يخبرك بها المستخدم في المحادثة السابقة
+⚠️ مهم جداً: تذكر كل المعلومات من المحادثة السابقة
 - إذا أخبرك المستخدم باسمه، تذكره واستخدمه
-- إذا أخبرك بعمره أو وظيفته، تذكرهم
-- استخدم هذه المعلومات في إجاباتك التالية
+- استخدم هذه المعلومات في إجاباتك
 
 ═══════════════════════════════════════════════════════════════
                         أسلوبك
@@ -59,7 +71,7 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 - فكر بعمق قبل الإجابة
 - قدم إجابات شاملة ومفصلة
 - استخدم التنسيق (عناوين، قوائم، جداول)
-- ابدأ مباشرة بالإجابة (لا تقل "بصفتي" أو "سأقوم")`;
+- ابدأ مباشرة بالإجابة`;
 
 // ═══════════════════════════════════════════════════════════════
 //                    API KEYS
@@ -82,7 +94,7 @@ function getOpenRouterKeys() {
         if (key && key.trim()) keys.push(key.trim());
     }
     if (process.env.OPENROUTER_API_KEY) keys.push(process.env.OPENROUTER_API_KEY.trim());
-    return keys;
+    return keys.sort(() => Math.random() - 0.5);
 }
 
 function getGroqKeys() {
@@ -128,37 +140,136 @@ async function callGemini(prompt, maxTokens = 4000) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    OPENROUTER (MAIN WORKER) - WITH SYSTEM PROMPT
+//                    MIMO ANALYZER - تحليل السؤال
 // ═══════════════════════════════════════════════════════════════
 
-async function callOpenRouter(systemPrompt, userPrompt, conversationHistory = [], maxTokens = 8000) {
+async function analyzeQuestion(question) {
+    const keys = getOpenRouterKeys();
+    if (keys.length === 0) return 'simple';
+
+    const analyzerPrompt = `أنت محلل أسئلة ذكي. حلل السؤال التالي وحدد نوعه.
+
+السؤال: "${question.substring(0, 500)}"
+
+أجب بكلمة واحدة فقط من هذه الخيارات:
+- simple (تحية، سؤال بسيط، معلومة عامة)
+- math (رياضيات، حسابات، معادلات، أرقام، إثبات)
+- code (برمجة، كود، خوارزميات، API)
+- research (بحث، تحليل، مقارنة، دراسة)
+- heavy (معقد، تفكير عميق، فلسفة، خطة شاملة)
+
+الإجابة (كلمة واحدة فقط):`;
+
+    for (const key of keys.slice(0, 2)) {
+        try {
+            console.log('[Analyzer] 🔍 MiMo analyzing question...');
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': 'https://luks-pied.vercel.app',
+                    'X-Title': 'Lukas AI'
+                },
+                body: JSON.stringify({
+                    model: MODELS.ANALYZER,
+                    messages: [{ role: 'user', content: analyzerPrompt }],
+                    max_tokens: 20,
+                })
+            });
+
+            if (res.ok) {
+                const d = await res.json();
+                const text = d.choices?.[0]?.message?.content?.toLowerCase().trim();
+                const validTypes = ['simple', 'math', 'code', 'research', 'heavy'];
+
+                for (const type of validTypes) {
+                    if (text?.includes(type)) {
+                        console.log(`[Analyzer] ✅ Question type: ${type}`);
+                        return type;
+                    }
+                }
+            }
+        } catch (e) { continue; }
+    }
+
+    console.log('[Analyzer] ⚠️ Default to simple');
+    return 'simple';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    SMART MODEL SELECTOR
+// ═══════════════════════════════════════════════════════════════
+
+function selectModel(questionType) {
+    const modelMap = {
+        simple: MODELS.SIMPLE,
+        math: MODELS.MATH,
+        code: MODELS.CODE,
+        research: MODELS.RESEARCH,
+        heavy: MODELS.HEAVY,
+    };
+    return modelMap[questionType] || MODELS.SIMPLE;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    OPENROUTER - SPECIFIC MODEL
+// ═══════════════════════════════════════════════════════════════
+
+async function callOpenRouterModel(model, systemPrompt, userPrompt, conversationHistory = [], maxTokens = 8000) {
     const keys = getOpenRouterKeys();
     if (keys.length === 0) return null;
 
-    // Shuffle keys randomly for better distribution
-    const shuffledKeys = [...keys].sort(() => Math.random() - 0.5);
+    const messages = [{ role: 'system', content: systemPrompt }];
 
-    // Build messages array with system prompt and conversation history
-    const messages = [
-        { role: 'system', content: systemPrompt }
-    ];
-
-    // Add conversation history
     if (conversationHistory && conversationHistory.length > 0) {
-        for (const h of conversationHistory.slice(-10)) { // Last 10 messages
+        for (const h of conversationHistory.slice(-10)) {
             if (h.prompt) messages.push({ role: 'user', content: h.prompt });
             if (h.results?.[0]?.result) messages.push({ role: 'assistant', content: h.results[0].result });
         }
     }
 
-    // Add current user prompt
     messages.push({ role: 'user', content: userPrompt });
 
-    for (const model of OPENROUTER_MODELS) {
-        for (let keyIndex = 0; keyIndex < shuffledKeys.length; keyIndex++) {
-            const key = shuffledKeys[keyIndex];
+    // Try selected model with all keys
+    for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
+        const key = keys[keyIndex];
+        try {
+            console.log(`[Worker] 🟣 Trying ${model.split('/')[1]?.split(':')[0]} (Key ${keyIndex + 1}/${keys.length})`);
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': 'https://luks-pied.vercel.app',
+                    'X-Title': 'Lukas AI'
+                },
+                body: JSON.stringify({ model, messages, max_tokens: maxTokens })
+            });
+
+            if (res.status === 429) {
+                console.log(`[Worker] ⚠️ Key ${keyIndex + 1} rate limited`);
+                continue;
+            }
+            if (res.ok) {
+                const d = await res.json();
+                const text = d.choices?.[0]?.message?.content;
+                if (text) {
+                    console.log(`[Worker] ✅ Success: ${model.split('/')[1]?.split(':')[0]}`);
+                    return text;
+                }
+            }
+        } catch (e) { continue; }
+    }
+
+    // Fallback to other models
+    console.log('[Worker] ⚠️ Primary model failed, trying fallbacks...');
+    for (const fallbackModel of FALLBACK_MODELS) {
+        if (fallbackModel === model) continue; // Skip already tried
+
+        for (const key of keys.slice(0, 2)) {
             try {
-                console.log(`[Synthesize] 🟣 Trying OpenRouter: ${model.split('/')[1]?.split(':')[0]} (Key ${keyIndex + 1}/${shuffledKeys.length})`);
+                console.log(`[Worker] 🔄 Fallback: ${fallbackModel.split('/')[1]?.split(':')[0]}`);
                 const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -167,52 +278,34 @@ async function callOpenRouter(systemPrompt, userPrompt, conversationHistory = []
                         'HTTP-Referer': 'https://luks-pied.vercel.app',
                         'X-Title': 'Lukas AI'
                     },
-                    body: JSON.stringify({
-                        model: model,
-                        messages: messages,
-                        max_tokens: maxTokens,
-                    })
+                    body: JSON.stringify({ model: fallbackModel, messages, max_tokens: maxTokens })
                 });
 
-                if (res.status === 429) {
-                    console.log(`[Synthesize] ⚠️ Key ${keyIndex + 1} rate limited, trying next key...`);
-                    continue;
-                }
-                if (res.status === 404) {
-                    console.log(`[Synthesize] ❌ Model not found: ${model}`);
-                    break; // Skip to next model
-                }
                 if (res.ok) {
                     const d = await res.json();
                     const text = d.choices?.[0]?.message?.content;
                     if (text) {
-                        console.log(`[Synthesize] ✅ OpenRouter success: ${model.split('/')[1]?.split(':')[0]} (Key ${keyIndex + 1})`);
+                        console.log(`[Worker] ✅ Fallback success: ${fallbackModel.split('/')[1]?.split(':')[0]}`);
                         return text;
                     }
                 }
-            } catch (e) {
-                console.error(`[Synthesize] ❌ Error with OpenRouter model ${model} and key ${keyIndex + 1}:`, e);
-                continue;
-            }
+            } catch (e) { continue; }
         }
     }
+
     return null;
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    GROQ (BACKUP WORKER) - WITH SYSTEM PROMPT
+//                    GROQ FALLBACK
 // ═══════════════════════════════════════════════════════════════
 
 async function callGroq(systemPrompt, userPrompt, conversationHistory = [], maxTokens = 8000) {
     const keys = getGroqKeys();
     if (keys.length === 0) return null;
 
-    // Build messages array
-    const messages = [
-        { role: 'system', content: systemPrompt }
-    ];
+    const messages = [{ role: 'system', content: systemPrompt }];
 
-    // Add conversation history
     if (conversationHistory && conversationHistory.length > 0) {
         for (const h of conversationHistory.slice(-10)) {
             if (h.prompt) messages.push({ role: 'user', content: h.prompt });
@@ -220,25 +313,23 @@ async function callGroq(systemPrompt, userPrompt, conversationHistory = [], maxT
         }
     }
 
-    // Add current user prompt
     messages.push({ role: 'user', content: userPrompt });
 
     for (const model of GROQ_MODELS) {
         for (const key of keys) {
             try {
-                console.log(`[Synthesize] 🟢 Trying Groq: ${model}`);
+                console.log(`[Worker] 🟢 Trying Groq: ${model}`);
                 const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ model, messages, max_tokens: maxTokens })
                 });
                 if (res.status === 429) continue;
-                if (res.status === 404) break;
                 if (res.ok) {
                     const d = await res.json();
                     const text = d.choices?.[0]?.message?.content;
                     if (text) {
-                        console.log(`[Synthesize] ✅ Groq success: ${model}`);
+                        console.log(`[Worker] ✅ Groq success: ${model}`);
                         return text;
                     }
                 }
@@ -253,35 +344,32 @@ async function callGroq(systemPrompt, userPrompt, conversationHistory = [], maxT
 // ═══════════════════════════════════════════════════════════════
 
 async function geminiReviewer(response, question) {
-    console.log('[Synthesize] 🔍 Gemini reviewing response...');
+    console.log('[Reviewer] 🔍 Gemini reviewing...');
 
-    const reviewPrompt = `أنت مراجع لغوي متخصص. راجع هذه الإجابة:
+    const reviewPrompt = `أنت مراجع لغوي. راجع هذه الإجابة بسرعة:
 
-⚠️ المطلوب:
-1. احذف أي حروف أو كلمات غير عربية (صينية، روسية، يابانية، إلخ)
-2. صحح الأخطاء الإملائية والنحوية
-3. حسّن الصياغة إذا لزم الأمر
-4. تأكد أن الإجابة كاملة ومنظمة
-5. إذا كانت الإجابة تذكر شاومي أو Xiaomi أو أي شركة أخرى كمطور، استبدلها بـ "لوكاس" أو "مطور مصري مبدع"
+المطلوب:
+1. احذف أي حروف غير عربية (صينية، روسية، إلخ)
+2. صحح الأخطاء
+3. استبدل أي ذكر لشاومي/Xiaomi بـ "لوكاس"
 
-السؤال الأصلي: ${question.substring(0, 300)}
+السؤال: ${question.substring(0, 200)}
 
-الإجابة المطلوب مراجعتها:
+الإجابة:
 ${response}
 
-قدم الإجابة المُحسّنة فقط بدون أي تعليقات.`;
+قدم الإجابة المحسّنة فقط:`;
 
     const reviewed = await callGemini(reviewPrompt, 8000);
     if (reviewed) {
-        console.log('[Synthesize] ✅ Review complete');
+        console.log('[Reviewer] ✅ Review complete');
         return reviewed;
     }
-    console.log('[Synthesize] ⚠️ Review failed, returning original');
     return response;
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    HANDLER
+//                    MAIN HANDLER
 // ═══════════════════════════════════════════════════════════════
 
 export default async function handler(req, res) {
@@ -293,7 +381,7 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' });
 
     try {
-        const { results, originalPrompt, prompt, conversationHistory, conversationId } = req.body || {};
+        const { results, originalPrompt, prompt, conversationHistory } = req.body || {};
         const userPrompt = originalPrompt || prompt;
         if (!results || !userPrompt) return res.status(400).json({ success: false, error: 'Missing data' });
 
@@ -302,27 +390,31 @@ export default async function handler(req, res) {
 
         console.log('═══════════════════════════════════════════════════════════════');
         console.log(`[Synthesize] 🧠 New request`);
-        console.log(`[Synthesize] 📝 History: ${conversationHistory?.length || 0} messages`);
         console.log('═══════════════════════════════════════════════════════════════');
 
-        // Build the user message with data
-        const userMessage = lang === 'ar' ?
-            `${userPrompt}${resultsText ? `\n\nالبيانات المتاحة:\n${resultsText}` : ''}` :
-            `${userPrompt}${resultsText ? `\n\nAvailable data:\n${resultsText}` : ''}`;
+        // Step 1: Analyze question with MiMo
+        console.log('[Synthesize] 📊 Step 1: Analyzing question...');
+        const questionType = await analyzeQuestion(userPrompt);
 
-        // Step 1: Try OpenRouter first (with system prompt and history)
-        console.log('[Synthesize] 🟣 Step 1: Trying OpenRouter workers...');
-        let response = await callOpenRouter(SYSTEM_PROMPT, userMessage, conversationHistory);
+        // Step 2: Select best model
+        const selectedModel = selectModel(questionType);
+        console.log(`[Synthesize] 🎯 Step 2: Selected model: ${selectedModel.split('/')[1]?.split(':')[0]} for type: ${questionType}`);
 
-        // Step 2: Fallback to Groq
+        // Step 3: Get response from selected model
+        const userMessage = `${userPrompt}${resultsText ? `\n\nالبيانات المتاحة:\n${resultsText}` : ''}`;
+
+        console.log('[Synthesize] 🟣 Step 3: Getting response...');
+        let response = await callOpenRouterModel(selectedModel, SYSTEM_PROMPT, userMessage, conversationHistory);
+
+        // Step 4: Fallback to Groq
         if (!response) {
-            console.log('[Synthesize] 🟢 Step 2: OpenRouter failed, trying Groq...');
+            console.log('[Synthesize] 🟢 Step 4: OpenRouter failed, trying Groq...');
             response = await callGroq(SYSTEM_PROMPT, userMessage, conversationHistory);
         }
 
-        // Step 3: Gemini review
+        // Step 5: Gemini review
         if (response) {
-            console.log('[Synthesize] 🔵 Step 3: Gemini reviewing response...');
+            console.log('[Synthesize] 🔵 Step 5: Gemini reviewing...');
             response = await geminiReviewer(response, userPrompt);
         }
 
@@ -330,10 +422,14 @@ export default async function handler(req, res) {
             response = lang === 'ar' ? 'عذراً، حدث خطأ في معالجة الطلب.' : 'Sorry, an error occurred.';
         }
 
-        console.log(`[Synthesize] ✅ Response ready (${response.length} chars)`);
+        console.log(`[Synthesize] ✅ Done! (${response.length} chars)`);
         console.log('═══════════════════════════════════════════════════════════════');
 
-        res.status(200).json({ success: true, data: response });
+        res.status(200).json({
+            success: true,
+            data: response,
+            meta: { questionType, model: selectedModel.split('/')[1]?.split(':')[0] }
+        });
     } catch (error) {
         console.error('[Synthesize] ❌ Error:', error.message);
         res.status(500).json({ success: false, error: error.message });
