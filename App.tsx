@@ -603,8 +603,10 @@ ${fileAnalysis}
 
           if (step.step < plan.length) await new Promise(r => setTimeout(r, 1000));
         } catch (e: any) {
-          updateStepResult(convoId, exchangeId, step.step, { status: 'error', result: e.message });
-          throw e;
+          console.error(`[App] Step ${step.step} failed:`, e.message);
+          updateStepResult(convoId, exchangeId, step.step, { status: 'error', result: `⚠️ ${e.message}` });
+          // Continue to next step instead of stopping the entire execution
+          outputs.push({ ...step, result: `⚠️ خطأ: ${e.message}`, status: 'error' });
         }
       }
 
