@@ -195,7 +195,7 @@ const executeImageGeneration = async (task: string, onChunk: (chunk: string) => 
 const App: React.FC = () => {
   // ========== THEME & LANGUAGE ==========
   const [lang, setLang] = useState<Lang>('ar');
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   // ========== UI STATE ==========
   const [showComputer, setShowComputer] = useState(true);
@@ -262,8 +262,10 @@ const App: React.FC = () => {
 
   // Theme
   useEffect(() => {
-    const saved = localStorage.getItem('lukas_theme') as 'light' | 'dark';
-    if (saved) setTheme(saved);
+    // Force light theme for Manus redesign
+    // const saved = localStorage.getItem('lukas_theme') as 'light' | 'dark';
+    // if (saved) setTheme(saved);
+    setTheme('light');
   }, []);
 
   useEffect(() => {
