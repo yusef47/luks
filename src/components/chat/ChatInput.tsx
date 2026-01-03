@@ -199,7 +199,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <button
             onClick={onSubmit}
             disabled={isLoading || !prompt.trim()}
-            className="p-2 rounded-xl bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white transition-all h-10 w-10 flex items-center justify-center flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2 rounded-xl bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-[var(--accent-text)] transition-all h-10 w-10 flex items-center justify-center flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             title="Send"
           >
             {isLoading ? (

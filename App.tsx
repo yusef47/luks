@@ -708,20 +708,15 @@ ${fileAnalysis}
               t={t as any}
             />
 
-            {/* Computer */}
+            {/* Computer & Task Progress - Hidden when Thinking UI is active, or kept for detailed debug view */}
             {showComputer && (
-              <div className="flex flex-col h-full min-h-0">
-                <VirtualComputer
-                  viewedStep={viewedStep}
-                  t={t as any}
-                />
-                <TaskProgress
-                  plan={activeExchange?.plan || null}
-                  results={activeExchange?.results || []}
-                  onStepSelect={setViewedStep}
-                  viewedStep={viewedStep}
-                  t={t as any}
-                />
+              <div className="flex flex-col h-full min-h-0 border-l border-[var(--border-color)] bg-[var(--bg-secondary-color)]">
+                <div className="flex-1 p-4 overflow-hidden">
+                  <VirtualComputer
+                    viewedStep={viewedStep}
+                    t={t as any}
+                  />
+                </div>
               </div>
             )}
           </div>

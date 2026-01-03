@@ -9,6 +9,7 @@ import { ComputerIcon, OrchestratorIcon, LoadingSpinnerIcon } from '../../../com
 import { ChatMessage } from '../ChatMessage';
 import { ClarificationRequest } from '../ClarificationRequest';
 import { StreamingMarkdownRenderer } from '../StreamingMarkdownRenderer';
+import { ThinkingAccordion } from './ThinkingAccordion';
 import { ChatInput } from './ChatInput';
 
 interface TutorMessage {
@@ -175,6 +176,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const activeExchange = activeConversation?.exchanges[activeConversation.exchanges.length - 1];
 
+  const renderThinking = () => {
+    if (!activeExchange || activeExchange.status === 'planning' || activeExchange.status === 'clarification_needed' || activeExchange.results.length === 0) return null;
+
+    const steps = activeExchange.results.map(r => ({
+      id: r.step.toString(),
+      label: r.task,
+      status: r.status as 'pending' | 'active' | 'completed',
+      detail: r.result ? (r.result.length > 100 ? r.result.substring(0, 100) + '...' : r.result) : undefined
+    }));
+
+    // Only show if we have steps
+    if (steps.length === 0) return null;
+
+    return (
+      <div className="max-w-3xl w-full mx-auto px-4 mt-4">
+        <ThinkingAccordion steps={steps} isExpanded={isLoading} />
+      </div>
+    );
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 w-full">
       <div className="flex flex-col h-full overflow-hidden relative bg-[var(--bg-color)]">
@@ -299,6 +320,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               <div ref={chatEndRef} />
             </>
           )}
+          {/* Active Exchange Thinking Process */}
+          {activeConversation && activeConversation.exchanges[activeConversation.exchanges.length - 1].id === activeExchange?.id && renderThinking()}
         </main>
 
         {/* Input */}

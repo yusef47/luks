@@ -41,7 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-[var(--accent-color)] rounded-xl flex items-center justify-center">
-            <span className="font-bold text-white text-lg" style={{ fontFamily: 'var(--font-serif)' }}>L</span>
+            <span className="font-bold text-[var(--accent-text)] text-lg" style={{ fontFamily: 'var(--font-serif)' }}>L</span>
           </div>
           <span className="font-semibold text-xl tracking-tight" style={{ fontFamily: 'var(--font-serif)' }}>Lukas</span>
         </div>
@@ -128,7 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* User Account - Minimal */}
       <div className="p-4 border-t border-[var(--border-color)]">
         <div className="flex items-center gap-3 px-2">
-          <div className="w-8 h-8 rounded-full bg-[var(--accent-color)] flex items-center justify-center text-white font-medium text-sm">
+          <div className="w-8 h-8 rounded-full bg-[var(--accent-color)] flex items-center justify-center text-[var(--accent-text)] font-medium text-sm">
             U
           </div>
           <div className="flex-grow text-left rtl:text-right">
