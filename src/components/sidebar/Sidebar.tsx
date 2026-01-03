@@ -16,6 +16,8 @@ interface SidebarProps {
   isAutonomousMode?: boolean;
   onToggleAutonomous?: () => void;
   onOpenDailyFeed?: () => void;
+  theme: 'light' | 'dark';
+  onToggleTheme: () => void;
   t: (key: string) => string;
 }
 
@@ -29,6 +31,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isAutonomousMode,
   onToggleAutonomous,
   onOpenDailyFeed,
+  theme,
+  onToggleTheme,
   t
 }) => {
   return (
@@ -131,6 +135,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="text-sm font-medium text-[var(--text-color)]">User</div>
           </div>
         </div>
+      </div>
+
+      {/* Theme Toggle - NEW */}
+      <div className="px-4 pb-4">
+        <button
+          onClick={onToggleTheme}
+          className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)] transition-all"
+        >
+          <span className="flex items-center gap-3">
+            {theme === 'light' ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5" />
+                <path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
+            <span>{theme === 'light' ? 'Light Mode' : 'Dark Mode'}</span>
+          </span>
+
+          {/* Toggle Switch UI */}
+          <div className={`w-8 h-4 rounded-full relative transition-colors ${theme === 'dark' ? 'bg-[var(--accent-color)]' : 'bg-gray-300'}`}>
+            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all shadow-sm ${theme === 'dark' ? 'left-[18px]' : 'left-[2px]'}`} />
+          </div>
+        </button>
       </div>
     </div>
   );

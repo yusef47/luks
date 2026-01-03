@@ -262,10 +262,13 @@ const App: React.FC = () => {
 
   // Theme
   useEffect(() => {
-    // Force light theme for Manus redesign
-    // const saved = localStorage.getItem('lukas_theme') as 'light' | 'dark';
-    // if (saved) setTheme(saved);
-    setTheme('light');
+    // Force light theme initially, then respect local storage
+    const saved = localStorage.getItem('lukas_theme') as 'light' | 'dark';
+    if (saved) {
+      setTheme(saved);
+    } else {
+      setTheme('light');
+    }
   }, []);
 
   useEffect(() => {
@@ -665,6 +668,8 @@ ${fileAnalysis}
         isAutonomousMode={isAutonomousMode}
         onToggleAutonomous={() => setIsAutonomousMode(!isAutonomousMode)}
         onOpenDailyFeed={() => setShowDailyFeed(true)}
+        theme={theme}
+        onToggleTheme={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
         t={t as any}
       />
 
