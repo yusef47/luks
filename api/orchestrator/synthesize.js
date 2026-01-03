@@ -200,10 +200,15 @@ async function fetchRealtimeData(question) {
 أعطني البيانات الخام فقط بدون تحليل.`;
 
     console.log('[Synthesize] 🔍 Fetching real-time data with Google Search...');
+    console.log(`[Synthesize] 🔑 Available keys: ${keys.length}`);
 
+    let attempts = 0;
     for (const model of GEMINI_MODELS) {
-        for (const key of keys.slice(0, 5)) {
+        for (const key of keys.slice(0, 8)) {
+            attempts++;
             try {
+                console.log(`[Synthesize] 📡 Attempt ${attempts}: ${model} with key ...${key.slice(-6)}`);
+
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
@@ -214,8 +219,16 @@ async function fetchRealtimeData(question) {
                     })
                 });
 
-                if (res.status === 429) continue;
-                if (res.status === 404) break;
+                console.log(`[Synthesize] 📊 Response status: ${res.status}`);
+
+                if (res.status === 429) {
+                    console.log(`[Synthesize] ⚠️ Rate limited, trying next key...`);
+                    continue;
+                }
+                if (res.status === 404) {
+                    console.log(`[Synthesize] ⚠️ Model ${model} not found, trying next model...`);
+                    break;
+                }
 
                 if (res.ok) {
                     const d = await res.json();
@@ -223,16 +236,22 @@ async function fetchRealtimeData(question) {
                     if (text) {
                         console.log(`[Synthesize] ✅ Real-time data fetched (${text.length} chars)`);
                         return text;
+                    } else {
+                        console.log(`[Synthesize] ⚠️ Empty response from ${model}`);
+                        console.log(`[Synthesize] 📦 Response: ${JSON.stringify(d).substring(0, 200)}`);
                     }
+                } else {
+                    const errText = await res.text();
+                    console.log(`[Synthesize] ❌ Error ${res.status}: ${errText.substring(0, 200)}`);
                 }
             } catch (e) {
-                console.log(`[Synthesize] ⚠️ Google Search error: ${e.message}`);
+                console.log(`[Synthesize] ⚠️ Exception: ${e.message}`);
                 continue;
             }
         }
     }
 
-    console.log('[Synthesize] ⚠️ Could not fetch real-time data');
+    console.log(`[Synthesize] ⚠️ Could not fetch real-time data after ${attempts} attempts`);
     return null;
 }
 
