@@ -2,7 +2,7 @@
 // Handles: subscribe, unsubscribe, generate report, send email
 
 const MODELS = {
-    PRIMARY: 'gemini-3-flash',
+    PRIMARY: 'gemini-1.5-flash',
     FALLBACK_1: 'gemini-2.5-flash',
     FALLBACK_2: 'gemini-2.5-flash-lite',
     FALLBACK_3: 'gemini-robotics-er-1.5-preview'

@@ -7,7 +7,7 @@
 //                    MODELS CONFIGURATION
 // ═══════════════════════════════════════════════════════════════
 
-const GEMINI_MODELS = ['gemini-3-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
+const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
 
 // Models by capability
 const MODELS = {
