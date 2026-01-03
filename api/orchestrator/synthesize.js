@@ -34,7 +34,12 @@ const GROQ_MODELS = ['llama-3.3-70b-versatile', 'qwen-2.5-32b', 'mixtral-8x7b-32
 //                    SYSTEM PROMPT (LUKAS IDENTITY)
 // ═══════════════════════════════════════════════════════════════
 
-const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطناعي متطور جداً.
+function getSystemPrompt() {
+    const today = new Date().toLocaleDateString('ar-EG', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+
+    return `أنت لوكاس (Lukas)، مساعد ذكاء اصطناعي متطور جداً.
 
 ═══════════════════════════════════════════════════════════════
                         هويتك
@@ -42,6 +47,8 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 اسمك: لوكاس (Lukas)
 طبيعتك: مساعد ذكي، ودود، ومتعاون
 مطورك: شخص مصري ذكي ومبدع جداً
+
+📅 التاريخ الحالي: ${today}
 
 قواعد صارمة:
 🚫 ممنوع ذكر: Google, Gemini, Bard, Meta, Llama, Groq, OpenAI, GPT, Claude, DeepSeek, Xiaomi, MiMo
@@ -82,6 +89,7 @@ const SYSTEM_PROMPT = `أنت لوكاس (Lukas)، مساعد ذكاء اصطن�
 - قدم إجابات شاملة ومفصلة
 - استخدم التنسيق (عناوين، قوائم، جداول)
 - ابدأ مباشرة بالإجابة`;
+}
 
 // ═══════════════════════════════════════════════════════════════
 //                    API KEYS
@@ -541,12 +549,12 @@ ${realtimeData}
         }
 
         console.log('[Synthesize] 🟣 Step 4: Getting response...');
-        let response = await callOpenRouterModel(selectedModel, SYSTEM_PROMPT, userMessage, conversationHistory);
+        let response = await callOpenRouterModel(selectedModel, getSystemPrompt(), userMessage, conversationHistory);
 
         // Step 5: Fallback to Groq
         if (!response) {
             console.log('[Synthesize] 🟢 Step 5: OpenRouter failed, trying Groq...');
-            response = await callGroq(SYSTEM_PROMPT, userMessage, conversationHistory);
+            response = await callGroq(getSystemPrompt(), userMessage, conversationHistory);
         }
 
         // Step 6: Gemini review
