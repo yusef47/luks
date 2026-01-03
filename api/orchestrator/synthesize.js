@@ -200,58 +200,55 @@ async function fetchRealtimeData(question) {
 أعطني البيانات الخام فقط بدون تحليل.`;
 
     console.log('[Synthesize] 🔍 Fetching real-time data with Google Search...');
-    console.log(`[Synthesize] 🔑 Available keys: ${keys.length}`);
 
-    let attempts = 0;
-    for (const model of GEMINI_MODELS) {
-        for (const key of keys.slice(0, 8)) {
-            attempts++;
-            try {
-                console.log(`[Synthesize] 📡 Attempt ${attempts}: ${model} with key ...${key.slice(-6)}`);
+    // Smart approach: Only try 3 times with delay to avoid rate limiting
+    const MAX_ATTEMPTS = 3;
+    const shuffledKeys = keys.sort(() => Math.random() - 0.5);
 
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-                    body: JSON.stringify({
-                        contents: [{ role: 'user', parts: [{ text: searchPrompt }] }],
-                        tools: [{ googleSearch: {} }],
-                        generationConfig: { maxOutputTokens: 4000 }
-                    })
-                });
+    for (let i = 0; i < MAX_ATTEMPTS && i < shuffledKeys.length; i++) {
+        const key = shuffledKeys[i];
+        const model = GEMINI_MODELS[i % GEMINI_MODELS.length];
 
-                console.log(`[Synthesize] 📊 Response status: ${res.status}`);
+        try {
+            console.log(`[Synthesize] 📡 Attempt ${i + 1}/${MAX_ATTEMPTS}: ${model}`);
 
-                if (res.status === 429) {
-                    console.log(`[Synthesize] ⚠️ Rate limited, trying next key...`);
-                    continue;
-                }
-                if (res.status === 404) {
-                    console.log(`[Synthesize] ⚠️ Model ${model} not found, trying next model...`);
-                    break;
-                }
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts: [{ text: searchPrompt }] }],
+                    tools: [{ googleSearch: {} }],
+                    generationConfig: { maxOutputTokens: 4000 }
+                })
+            });
 
-                if (res.ok) {
-                    const d = await res.json();
-                    const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (text) {
-                        console.log(`[Synthesize] ✅ Real-time data fetched (${text.length} chars)`);
-                        return text;
-                    } else {
-                        console.log(`[Synthesize] ⚠️ Empty response from ${model}`);
-                        console.log(`[Synthesize] 📦 Response: ${JSON.stringify(d).substring(0, 200)}`);
-                    }
-                } else {
-                    const errText = await res.text();
-                    console.log(`[Synthesize] ❌ Error ${res.status}: ${errText.substring(0, 200)}`);
-                }
-            } catch (e) {
-                console.log(`[Synthesize] ⚠️ Exception: ${e.message}`);
+            if (res.status === 429) {
+                console.log(`[Synthesize] ⚠️ Rate limited, waiting 1s...`);
+                await new Promise(r => setTimeout(r, 1000)); // Wait 1 second
                 continue;
             }
+
+            if (res.ok) {
+                const d = await res.json();
+                const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                    console.log(`[Synthesize] ✅ Real-time data fetched (${text.length} chars)`);
+                    return text;
+                }
+            } else {
+                console.log(`[Synthesize] ⚠️ Error ${res.status}`);
+            }
+
+            // Wait between attempts
+            if (i < MAX_ATTEMPTS - 1) {
+                await new Promise(r => setTimeout(r, 500));
+            }
+        } catch (e) {
+            console.log(`[Synthesize] ⚠️ Exception: ${e.message}`);
         }
     }
 
-    console.log(`[Synthesize] ⚠️ Could not fetch real-time data after ${attempts} attempts`);
+    console.log('[Synthesize] ⚠️ Could not fetch real-time data, continuing without it');
     return null;
 }
 
