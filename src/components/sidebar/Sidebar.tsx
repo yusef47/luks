@@ -1,31 +1,21 @@
 /**
- * Sidebar Component
+ * Sidebar Component - Manus Style
  * الـ Sidebar الرئيسي للتطبيق
  */
 
 import React from 'react';
 import { Conversation } from '../../../types';
-import { SettingsIcon } from '../../../components/icons';
 
 interface SidebarProps {
-  // Conversations
   conversations: Conversation[];
   activeConversationId: string | null;
   onSelectConversation: (id: string) => void;
   onNewChat: () => void;
-
-  // Presentation
   isPresentationMode: boolean;
   onTogglePresentation: () => void;
-
-  // Autonomous Mode
   isAutonomousMode?: boolean;
   onToggleAutonomous?: () => void;
-
-  // Daily Feed
   onOpenDailyFeed?: () => void;
-
-  // Localization
   t: (key: string) => string;
 }
 
@@ -42,71 +32,73 @@ export const Sidebar: React.FC<SidebarProps> = ({
   t
 }) => {
   return (
-    <div className="flex-shrink-0 w-[280px] bg-[var(--bg-secondary-color)] border-r border-[var(--border-color)] flex flex-col z-20">
-      {/* Header */}
-      <div className="p-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-            <span className="font-bold text-black text-lg">L</span>
+    <div className="flex-shrink-0 w-[300px] bg-[var(--bg-secondary-color)] border-r border-[var(--border-color)] flex flex-col z-20">
+      {/* Header - Manus Style */}
+      <div className="p-5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-[var(--accent-color)] rounded-xl flex items-center justify-center">
+            <span className="font-bold text-white text-lg" style={{ fontFamily: 'var(--font-serif)' }}>L</span>
           </div>
-          <span className="font-bold text-lg tracking-tight">Lukas</span>
+          <span className="font-semibold text-xl tracking-tight" style={{ fontFamily: 'var(--font-serif)' }}>Lukas</span>
         </div>
+      </div>
+
+      {/* New Task Button */}
+      <div className="px-4 py-2 space-y-2">
         <button
           onClick={onNewChat}
-          className="p-2 hover:bg-[var(--hover-bg-color)] rounded-lg transition-colors"
-          title="New Chat"
+          className="w-full flex items-center gap-3 px-4 py-3 btn-primary rounded-xl transition-all group"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 5v14M5 12h14" />
           </svg>
+          <span className="text-sm font-medium">New task</span>
         </button>
       </div>
 
-      {/* New Project Button */}
-      <div className="px-3 py-2 space-y-2">
-        <button
-          onClick={onNewChat}
-          className="w-full flex items-center gap-3 px-3 py-2.5 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white rounded-xl transition-all shadow-lg shadow-indigo-500/20 group"
-        >
-          <span className="text-sm font-medium">New Project</span>
-        </button>
-
-        {/* Presentation Mode Toggle */}
-        <button
-          onClick={onTogglePresentation}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border ${isPresentationMode
-            ? 'bg-purple-600 text-white border-purple-500 shadow-lg shadow-purple-500/20'
-            : 'bg-[var(--bg-tertiary-color)] text-[var(--text-primary-color)] border-[var(--border-color)] hover:border-purple-500/50'
-            }`}
-        >
-          <span className="text-lg">📊</span>
-          <span className="text-sm font-medium">Presentation Mode</span>
-        </button>
-
-        {/* Autonomous Mode Toggle */}
-        <button
-          onClick={onToggleAutonomous}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border ${isAutonomousMode
-            ? 'bg-amber-600 text-white border-amber-500 shadow-lg shadow-amber-500/20'
-            : 'bg-[var(--bg-tertiary-color)] text-[var(--text-primary-color)] border-[var(--border-color)] hover:border-amber-500/50'
-            }`}
-        >
-          <span className="text-lg">🧠</span>
-          <span className="text-sm font-medium">Autonomous Mode</span>
-        </button>
-
-        {/* Daily Feed Toggle */}
+      {/* Navigation */}
+      <div className="px-4 py-3 space-y-1">
         <button
           onClick={onOpenDailyFeed}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border bg-[var(--bg-tertiary-color)] text-[var(--text-primary-color)] border-[var(--border-color)] hover:border-indigo-500/50 hover:bg-indigo-500/10"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]"
         >
-          <span className="text-lg">⭐</span>
-          <span className="text-sm font-medium">Daily Intelligence</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+          <span className="text-sm">Search</span>
+        </button>
+
+        <button
+          onClick={onTogglePresentation}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isPresentationMode
+            ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)]'
+            : 'text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]'
+            }`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M9 17V7l7 5-7 5z" />
+          </svg>
+          <span className="text-sm">Presentations</span>
+        </button>
+
+        <button
+          onClick={onToggleAutonomous}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isAutonomousMode
+            ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)]'
+            : 'text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]'
+            }`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+          </svg>
+          <span className="text-sm">Autonomous</span>
         </button>
       </div>
 
-      {/* Conversations List */}
-      <div className="flex-grow overflow-y-auto px-3 py-2 space-y-1 custom-scrollbar">
+      {/* Recents Section */}
+      <div className="flex-grow overflow-y-auto px-4 py-2 space-y-1">
         <div className="text-xs font-medium text-[var(--text-secondary-color)] px-3 py-2 uppercase tracking-wider">
           Recents
         </div>
@@ -114,7 +106,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             key={convo.id}
             onClick={() => onSelectConversation(convo.id)}
-            className={`w-full text-left rtl:text-right px-3 py-2 rounded-lg text-sm truncate transition-all ${activeConversationId === convo.id
+            className={`w-full text-left rtl:text-right px-3 py-2.5 rounded-lg text-sm truncate transition-all ${activeConversationId === convo.id
               ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)] font-medium'
               : 'text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]'
               }`}
@@ -129,18 +121,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* User Account */}
-      <div className="p-3 border-t border-[var(--border-color)]">
-        <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--hover-bg-color)] transition-colors text-[var(--text-secondary-color)] hover:text-[var(--text-color)]">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
+      {/* User Account - Minimal */}
+      <div className="p-4 border-t border-[var(--border-color)]">
+        <div className="flex items-center gap-3 px-2">
+          <div className="w-8 h-8 rounded-full bg-[var(--accent-color)] flex items-center justify-center text-white font-medium text-sm">
             U
           </div>
           <div className="flex-grow text-left rtl:text-right">
-            <div className="text-sm font-medium">User Account</div>
-            <div className="text-xs opacity-60">Pro Plan</div>
+            <div className="text-sm font-medium text-[var(--text-color)]">User</div>
           </div>
-          <SettingsIcon className="w-4 h-4" />
-        </button>
+        </div>
       </div>
     </div>
   );

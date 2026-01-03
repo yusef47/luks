@@ -176,14 +176,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const activeExchange = activeConversation?.exchanges[activeConversation.exchanges.length - 1];
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 p-4 pb-0 w-full">
-      <div className="glass-panel flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl shadow-black/50 ring-1 ring-white/10 relative">
-        {/* Header */}
-        <header className="flex items-center justify-between px-4 py-3 bg-black/40 border-b border-[var(--border-color)] backdrop-blur-md flex-shrink-0">
+    <div className="flex-1 flex flex-col h-full min-h-0 w-full">
+      <div className="flex flex-col h-full overflow-hidden relative bg-[var(--bg-color)]">
+        {/* Header - Manus Style */}
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] flex-shrink-0">
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${isTutorMode ? 'bg-emerald-500' : 'bg-blue-500'}/50`} />
-            <span className="text-xs font-mono font-medium text-[var(--text-secondary-color)] tracking-wide">
-              {isTutorMode ? 'ENGLISH_TUTOR' : 'ORCHESTRATOR_LINK'}
+            <span className="text-sm font-medium text-[var(--text-secondary-color)]">
+              {isTutorMode ? 'English Tutor' : 'Lukas'}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -205,10 +204,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           {!activeConversation ? (
             // Welcome Screen
             <div className="w-full h-full flex flex-col items-center justify-center text-center p-4">
-              <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 flex items-center justify-center mb-6 border border-white/10">
-                <OrchestratorIcon className="w-10 h-10 text-[var(--accent-color)]" />
+              <div className="w-16 h-16 rounded-2xl bg-[var(--bg-tertiary-color)] flex items-center justify-center mb-6">
+                <span className="text-3xl" style={{ fontFamily: 'var(--font-serif)' }}>L</span>
               </div>
-              <h2 className="text-2xl font-bold mb-2 tracking-tight">
+              <h2 className="text-3xl font-semibold mb-3" style={{ fontFamily: 'var(--font-serif)' }}>
                 {isTutorMode ? "Ready to practice English?" : "How can I help you?"}
               </h2>
               <p className="text-[var(--text-secondary-color)] max-w-md mx-auto">
@@ -223,14 +222,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8 w-full max-w-2xl">
                   <button
                     onClick={() => setPrompt("Research the latest developments in quantum computing")}
-                    className="p-4 rounded-xl bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] border border-[var(--border-color)] text-left transition-all hover:scale-[1.02]"
+                    className="p-4 rounded-2xl bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] text-left transition-all"
                   >
                     <span className="text-sm font-medium block mb-1">Quantum Computing</span>
                     <span className="text-xs text-[var(--text-secondary-color)]">Research latest developments</span>
                   </button>
                   <button
                     onClick={() => setPrompt("Create a marketing plan for a new coffee brand")}
-                    className="p-4 rounded-xl bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] border border-[var(--border-color)] text-left transition-all hover:scale-[1.02]"
+                    className="p-4 rounded-2xl bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] text-left transition-all"
                   >
                     <span className="text-sm font-medium block mb-1">Marketing Plan</span>
                     <span className="text-xs text-[var(--text-secondary-color)]">Launch a coffee brand</span>

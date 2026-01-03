@@ -1,6 +1,10 @@
+/**
+ * ChatMessage Component - Manus Style
+ * Clean, document-like message styling
+ */
+
 import React from 'react';
 import { Agent, GroundingSource } from '../../types';
-import { UserIcon, OrchestratorIcon, AgentIcon } from '../../components/icons';
 
 interface ChatMessageProps {
     agent: Agent;
@@ -13,20 +17,36 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ agent, content, source
 
     return (
         <div className={`group flex items-start gap-4 ${isUser ? 'flex-row-reverse' : 'flex-row'} animate-fade-in`}>
-            <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${isUser ? 'bg-[var(--accent-color)] text-white' : 'bg-[var(--bg-tertiary-color)] text-[var(--text-color)]'}`}>
-                {isUser ? <UserIcon className="w-5 h-5" /> : <OrchestratorIcon className="w-5 h-5" />}
-            </div>
+            {/* Avatar - Only for AI */}
+            {!isUser && (
+                <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-[var(--accent-color)] flex items-center justify-center text-white text-sm font-medium" style={{ fontFamily: 'var(--font-serif)' }}>
+                    L
+                </div>
+            )}
+
             <div className={`relative w-full max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
-                <div className={`prose prose-invert max-w-none ${isUser ? 'ml-auto bg-[var(--bg-tertiary-color)] p-3 rounded-2xl rounded-tr-sm inline-block text-left rtl:text-right' : ''}`}>
+                {/* Message Content */}
+                <div className={`prose max-w-none ${isUser ? 'ml-auto bg-[var(--bg-tertiary-color)] px-4 py-3 rounded-2xl rounded-tr-sm inline-block text-left rtl:text-right' : ''}`}>
                     {typeof content === 'string' ? <p className="whitespace-pre-wrap mb-0">{content}</p> : content}
                 </div>
 
+                {/* Sources */}
                 {sources && sources.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-4 flex flex-wrap gap-2">
                         {sources.map((source, index) => (
-                            <a key={index} href={source.uri} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-2 py-1 bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] border border-[var(--border-color)] rounded-md text-xs text-[var(--text-secondary-color)] hover:text-[var(--text-color)] transition-colors no-underline">
-                                <AgentIcon agent={source.agent} className="w-3 h-3" />
-                                <span className="truncate max-w-[150px]">{source.title}</span>
+                            <a
+                                key={index}
+                                href={source.uri}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] rounded-lg text-xs text-[var(--text-secondary-color)] hover:text-[var(--text-color)] transition-colors no-underline"
+                            >
+                                <span className="truncate max-w-[200px]">{source.title}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                    <polyline points="15 3 21 3 21 9" />
+                                    <line x1="10" y1="14" x2="21" y2="3" />
+                                </svg>
                             </a>
                         ))}
                     </div>

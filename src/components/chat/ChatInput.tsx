@@ -74,7 +74,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <footer className="flex-shrink-0 p-4 relative z-10 bg-gradient-to-t from-black/80 to-transparent">
+    <footer className="flex-shrink-0 p-4 relative z-10">
       <div className="max-w-3xl mx-auto w-full relative">
         {/* Settings Popover */}
         <SettingsPopover
@@ -133,8 +133,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </div>
         )}
 
-        {/* Input Container */}
-        <div className="glass-panel p-2 flex items-end gap-2 rounded-2xl shadow-2xl shadow-black/50 ring-1 ring-white/10 bg-black/40 backdrop-blur-xl">
+        {/* Input Container - Manus Pill Style */}
+        <div className="pill-input p-3 flex items-end gap-2">
           {/* File Input (hidden) */}
           <input
             type="file"
@@ -199,7 +199,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <button
             onClick={onSubmit}
             disabled={isLoading || !prompt.trim()}
-            className="p-2 rounded-xl bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white transition-all h-10 w-10 flex items-center justify-center flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20"
+            className="p-2 rounded-xl bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] text-white transition-all h-10 w-10 flex items-center justify-center flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Send"
           >
             {isLoading ? (
