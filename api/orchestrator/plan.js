@@ -268,81 +268,23 @@ Answer in one sentence only.`;
         const analysis = await callGemini(analyzePrompt, 200);
         console.log(`[Plan] 📊 Analysis: ${analysis?.substring(0, 100) || 'default'}`);
 
-        // Step 2: OpenRouter/Groq creates the plan
-        console.log('[Plan] 🟣 Step 2: OpenRouter/Groq creating plan...');
+        // Step 2: SIMPLIFIED - Always use SearchAgent + Orchestrator
+        console.log('[Plan] 🟣 Step 2: Creating simple plan...');
 
-        const planPrompt = lang === 'ar' ? `أنت مخطط ذكي متقدم.
+        // Simple plan that ALWAYS works
+        const simplePlan = {
+            complexity_assessment: lang === 'ar' ? "سؤال" : "Question",
+            thinking_approach: lang === 'ar' ? "بحث وإجابة" : "Search and answer",
+            plan: [
+                { step: 1, agent: "SearchAgent", task: prompt, reasoning: lang === 'ar' ? "البحث عن المعلومات" : "Search for info" },
+                { step: 2, agent: "Orchestrator", task: lang === 'ar' ? "تقديم الإجابة النهائية" : "Provide final answer", reasoning: lang === 'ar' ? "الإجابة" : "Answer" }
+            ]
+        };
 
-أنشئ خطة تفكير مفصلة من ${minSteps} إلى ${maxSteps} خطوات للسؤال التالي.
-
-الوكلاء المتاحون:
-🔍 SearchAgent: البحث عن معلومات
-📊 Analyzer: تحليل البيانات
-🧠 DeepThinker: التفكير العميق
-✅ Validator: التحقق من الصحة
-✨ Refiner: تحسين الإجابة
-🎯 Orchestrator: الإجابة النهائية
-
-السؤال: "${prompt.substring(0, 1000)}"
-
-أجب بـ JSON فقط:
-{
-  "complexity_assessment": "وصف مختصر",
-  "thinking_approach": "طريقة التفكير",
-  "plan": [
-    {"step": 1, "agent": "SearchAgent", "task": "المهمة", "reasoning": "السبب"}
-  ]
-}` : `You are an advanced planner.
-
-Create a thinking plan with ${minSteps} to ${maxSteps} steps.
-
-Question: "${prompt.substring(0, 1000)}"
-
-Return JSON only:
-{
-  "complexity_assessment": "...",
-  "thinking_approach": "...",
-  "plan": [{"step": 1, "agent": "...", "task": "...", "reasoning": "..."}]
-}`;
-
-        let response = await callWorker(planPrompt);
-
-        // Step 3: Gemini reviews the response
-        if (response) {
-            console.log('[Plan] 🔵 Step 3: Gemini reviewing response...');
-            response = await geminiReviewer(response, prompt);
-        }
-
-        // Parse response
-        let planData;
-        try {
-            planData = JSON.parse(response);
-        } catch {
-            const match = response?.match(/\{[\s\S]*\}/);
-            if (match) {
-                try { planData = JSON.parse(match[0]); } catch { planData = null; }
-            }
-        }
-
-        // Fallback plan - SIMPLIFIED to 2 steps
-        if (!planData || !planData.plan) {
-            planData = {
-                complexity_assessment: lang === 'ar' ? "سؤال" : "Question",
-                thinking_approach: lang === 'ar' ? "تفكير مباشر" : "Direct thinking",
-                plan: [
-                    { step: 1, agent: "SearchAgent", task: lang === 'ar' ? "البحث عن المعلومات" : "Search for information", reasoning: "Research" },
-                    { step: 2, agent: "Orchestrator", task: lang === 'ar' ? "الإجابة النهائية" : "Final answer", reasoning: "Final response" }
-                ]
-            };
-        }
-
-        // Renumber steps
-        planData.plan = planData.plan.slice(0, 3).map((s, i) => ({ ...s, step: i + 1 }));
-
-        console.log(`[Plan] ✅ Created plan with ${planData.plan.length} steps`);
+        console.log('[Plan] ✅ Created simple 2-step plan');
         console.log('═══════════════════════════════════════════════════════════════');
 
-        res.status(200).json({ success: true, data: planData });
+        return res.status(200).json({ success: true, data: simplePlan });
 
     } catch (error) {
         console.error('[Plan] ❌ Error:', error.message);
