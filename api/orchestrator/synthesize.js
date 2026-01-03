@@ -150,6 +150,93 @@ async function callGemini(prompt, maxTokens = 4000) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//                    GEMINI + GOOGLE SEARCH (REAL-TIME DATA)
+// ═══════════════════════════════════════════════════════════════
+
+// Keywords that indicate need for real-time data
+const REALTIME_KEYWORDS = [
+    // Prices
+    'سعر', 'أسعار', 'price', 'prices', 'cost',
+    // Stocks
+    'سهم', 'أسهم', 'stock', 'stocks', 'AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN',
+    // Crypto
+    'بيتكوين', 'bitcoin', 'btc', 'ethereum', 'crypto',
+    // Currency
+    'دولار', 'dollar', 'يورو', 'euro', 'جنيه', 'ريال',
+    // Gold
+    'ذهب', 'gold', 'silver', 'فضة',
+    // News
+    'أخبار', 'news', 'اليوم', 'today', 'حاليا', 'currently', 'الآن', 'now',
+    // Analysis
+    'حلل', 'تحليل', 'analyze', 'analysis',
+    // Current events
+    'آخر', 'latest', 'جديد', 'new', 'مستجدات', 'updates',
+];
+
+function needsRealtimeData(question) {
+    const lowerQuestion = question.toLowerCase();
+    for (const keyword of REALTIME_KEYWORDS) {
+        if (lowerQuestion.includes(keyword.toLowerCase())) {
+            console.log(`[Synthesize] 🌐 Real-time data needed: keyword "${keyword}" found`);
+            return true;
+        }
+    }
+    return false;
+}
+
+async function fetchRealtimeData(question) {
+    const keys = getGeminiKeys();
+    if (keys.length === 0) return null;
+
+    const searchPrompt = `ابحث عن أحدث المعلومات والبيانات الحقيقية عن:
+"${question}"
+
+المطلوب:
+- أحدث الأرقام والأسعار الحقيقية
+- آخر الأخبار والتحديثات
+- بيانات من آخر 24-48 ساعة
+- اذكر المصادر والتواريخ
+
+أعطني البيانات الخام فقط بدون تحليل.`;
+
+    console.log('[Synthesize] 🔍 Fetching real-time data with Google Search...');
+
+    for (const model of GEMINI_MODELS) {
+        for (const key of keys.slice(0, 5)) {
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: [{ text: searchPrompt }] }],
+                        tools: [{ googleSearch: {} }],
+                        generationConfig: { maxOutputTokens: 4000 }
+                    })
+                });
+
+                if (res.status === 429) continue;
+                if (res.status === 404) break;
+
+                if (res.ok) {
+                    const d = await res.json();
+                    const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (text) {
+                        console.log(`[Synthesize] ✅ Real-time data fetched (${text.length} chars)`);
+                        return text;
+                    }
+                }
+            } catch (e) {
+                console.log(`[Synthesize] ⚠️ Google Search error: ${e.message}`);
+                continue;
+            }
+        }
+    }
+
+    console.log('[Synthesize] ⚠️ Could not fetch real-time data');
+    return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
 //                    MIMO ANALYZER - تحليل السؤال
 // ═══════════════════════════════════════════════════════════════
 
@@ -402,29 +489,53 @@ export default async function handler(req, res) {
         console.log(`[Synthesize] 🧠 New request`);
         console.log('═══════════════════════════════════════════════════════════════');
 
-        // Step 1: Analyze question with MiMo
-        console.log('[Synthesize] 📊 Step 1: Analyzing question...');
+        // Step 1: Check if question needs real-time data
+        let realtimeData = null;
+        if (needsRealtimeData(userPrompt)) {
+            console.log('[Synthesize] 🌐 Step 1: Fetching real-time data...');
+            realtimeData = await fetchRealtimeData(userPrompt);
+        } else {
+            console.log('[Synthesize] 📊 Step 1: No real-time data needed');
+        }
+
+        // Step 2: Analyze question with MiMo
+        console.log('[Synthesize] 📊 Step 2: Analyzing question...');
         const questionType = await analyzeQuestion(userPrompt);
 
-        // Step 2: Select best model
+        // Step 3: Select best model
         const selectedModel = selectModel(questionType);
-        console.log(`[Synthesize] 🎯 Step 2: Selected model: ${selectedModel.split('/')[1]?.split(':')[0]} for type: ${questionType}`);
+        console.log(`[Synthesize] 🎯 Step 3: Selected model: ${selectedModel.split('/')[1]?.split(':')[0]} for type: ${questionType}`);
 
-        // Step 3: Get response from selected model
-        const userMessage = `${userPrompt}${resultsText ? `\n\nالبيانات المتاحة:\n${resultsText}` : ''}`;
+        // Step 4: Build message with real-time data if available
+        let userMessage = userPrompt;
+        if (realtimeData) {
+            userMessage = `${userPrompt}
 
-        console.log('[Synthesize] 🟣 Step 3: Getting response...');
+═══════════════════════════════════════════════════════════════
+📊 بيانات حية من الإنترنت (${new Date().toLocaleDateString('ar-EG')}):
+═══════════════════════════════════════════════════════════════
+${realtimeData}
+═══════════════════════════════════════════════════════════════
+
+استخدم هذه البيانات الحقيقية لتقديم إجابة شاملة ومحدثة.`;
+            console.log('[Synthesize] 📦 Real-time data injected into prompt');
+        }
+        if (resultsText) {
+            userMessage += `\n\nالبيانات المتاحة:\n${resultsText}`;
+        }
+
+        console.log('[Synthesize] 🟣 Step 4: Getting response...');
         let response = await callOpenRouterModel(selectedModel, SYSTEM_PROMPT, userMessage, conversationHistory);
 
-        // Step 4: Fallback to Groq
+        // Step 5: Fallback to Groq
         if (!response) {
-            console.log('[Synthesize] 🟢 Step 4: OpenRouter failed, trying Groq...');
+            console.log('[Synthesize] 🟢 Step 5: OpenRouter failed, trying Groq...');
             response = await callGroq(SYSTEM_PROMPT, userMessage, conversationHistory);
         }
 
-        // Step 5: Gemini review
+        // Step 6: Gemini review
         if (response) {
-            console.log('[Synthesize] 🔵 Step 5: Gemini reviewing...');
+            console.log('[Synthesize] 🔵 Step 6: Gemini reviewing...');
             response = await geminiReviewer(response, userPrompt);
         }
 
