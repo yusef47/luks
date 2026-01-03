@@ -2,12 +2,13 @@
 // Handles: subscribe, unsubscribe, generate report, send email
 
 const MODELS = {
-    PRIMARY: 'gemini-2.5-flash',
-    FALLBACK_1: 'gemini-2.5-flash-lite',
-    FALLBACK_2: 'gemini-robotics-er-1.5-preview'
+    PRIMARY: 'gemini-3-flash',
+    FALLBACK_1: 'gemini-2.5-flash',
+    FALLBACK_2: 'gemini-2.5-flash-lite',
+    FALLBACK_3: 'gemini-robotics-er-1.5-preview'
 };
 
-const ALL_MODELS = [MODELS.PRIMARY, MODELS.FALLBACK_1, MODELS.FALLBACK_2];
+const ALL_MODELS = [MODELS.PRIMARY, MODELS.FALLBACK_1, MODELS.FALLBACK_2, MODELS.FALLBACK_3];
 
 function getAPIKeys() {
     const keys = [];
