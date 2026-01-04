@@ -51,53 +51,64 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="px-4 py-2 space-y-2">
         <button
           onClick={onNewChat}
-          className="w-full flex items-center gap-3 px-4 py-3 btn-primary rounded-xl transition-all group"
+          className="w-full bg-[#f3f3f3] hover:bg-[#eaeaea] dark:bg-[#27272a] dark:hover:bg-[#3f3f46] text-[var(--text-color)] rounded-xl py-2.5 px-4 flex items-center gap-3 transition-colors mb-2"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 5v14M5 12h14" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500 dark:text-gray-400">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
-          <span className="text-sm font-medium">New task</span>
+          <span className="font-medium text-[15px]">{t('newChat')}</span>
         </button>
       </div>
 
       {/* Navigation */}
-      <div className="px-4 py-3 space-y-1">
+      {/* Navigation */}
+      <div className="px-4 space-y-[2px]">
         <button
           onClick={onOpenDailyFeed}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
-          <span className="text-sm">Search</span>
+          <span className="text-[15px]">Search</span>
         </button>
 
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 19l7-7 3 3-7 7-3-3z" />
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+            <path d="M2 2l7.586 7.586" />
+            <circle cx="11" cy="11" r="2" />
+          </svg>
+          <span className="text-[15px]">Library</span>
+        </button>
+      </div>
+
+      <div className="px-4 mt-6 mb-2">
+        <div className="flex items-center justify-between text-xs font-medium text-[var(--text-secondary-color)] px-3 mb-1">
+          <span>Projects</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="cursor-pointer hover:text-[var(--text-color)]">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
         <button
           onClick={onTogglePresentation}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isPresentationMode
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${isPresentationMode
             ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)]'
             : 'text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]'
             }`}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <path d="M9 17V7l7 5-7 5z" />
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" />
+            <path d="M12 11h4" />
+            <path d="M14 9v4" />
           </svg>
-          <span className="text-sm">Presentations</span>
-        </button>
-
-        <button
-          onClick={onToggleAutonomous}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${isAutonomousMode
-            ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)]'
-            : 'text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]'
-            }`}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
-          </svg>
-          <span className="text-sm">Autonomous</span>
+          <span className="text-[15px]">New project</span>
         </button>
       </div>
 
