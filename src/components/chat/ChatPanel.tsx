@@ -238,22 +238,53 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 }
               </p>
 
-              {/* Example Prompts (only show in normal mode) */}
+              {/* Center Input (Manus Style) */}
+              <div className="w-full max-w-2xl mt-8">
+                <ChatInput
+                  prompt={prompt}
+                  setPrompt={setPrompt}
+                  onSubmit={onSubmit}
+                  isLoading={isLoading}
+                  previewUrl={previewUrl}
+                  fileName={fileName}
+                  fileType={fileType}
+                  onFileSelect={onFileSelect}
+                  onClearAttachment={onClearAttachment}
+                  isListening={isListening}
+                  onToggleListening={onToggleListening}
+                  isTutorMode={isTutorMode}
+                  isSettingsOpen={isSettingsOpen}
+                  onToggleSettings={onToggleSettings}
+                  cycleCount={cycleCount}
+                  setCycleCount={setCycleCount}
+                  t={t}
+                  variant="center"
+                />
+              </div>
+
+              {/* Example Prompts (only show in normal mode) - Moved below input */}
               {!isTutorMode && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8 w-full max-w-2xl">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-8 w-full max-w-2xl px-2">
                   <button
                     onClick={() => setPrompt("Research the latest developments in quantum computing")}
-                    className="p-4 rounded-2xl bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] text-left transition-all"
+                    className="p-3 rounded-xl bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] text-left transition-all group"
                   >
-                    <span className="text-sm font-medium block mb-1">Quantum Computing</span>
-                    <span className="text-xs text-[var(--text-secondary-color)]">Research latest developments</span>
+                    <span className="text-sm font-medium block mb-1 group-hover:text-[var(--accent-color)]">Quantum Computing</span>
+                    <span className="text-[11px] text-[var(--text-secondary-color)]">Research developments</span>
                   </button>
                   <button
                     onClick={() => setPrompt("Create a marketing plan for a new coffee brand")}
-                    className="p-4 rounded-2xl bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] text-left transition-all"
+                    className="p-3 rounded-xl bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] text-left transition-all group"
                   >
-                    <span className="text-sm font-medium block mb-1">Marketing Plan</span>
-                    <span className="text-xs text-[var(--text-secondary-color)]">Launch a coffee brand</span>
+                    <span className="text-sm font-medium block mb-1 group-hover:text-[var(--accent-color)]">Marketing Plan</span>
+                    <span className="text-[11px] text-[var(--text-secondary-color)]">Launch a coffee brand</span>
+                  </button>
+                  <button
+                    onClick={() => setPrompt("Analyze Apple (AAPL) stock performance")}
+                    className="p-3 rounded-xl bg-[var(--bg-tertiary-color)] hover:bg-[var(--hover-bg-color)] text-left transition-all group"
+                  >
+                    <span className="text-sm font-medium block mb-1 group-hover:text-[var(--accent-color)]">Stock Analysis</span>
+                    <span className="text-[11px] text-[var(--text-secondary-color)]">Analyze AAPL</span>
                   </button>
                 </div>
               )}
@@ -325,25 +356,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         </main>
 
         {/* Input */}
-        <ChatInput
-          prompt={prompt}
-          setPrompt={setPrompt}
-          onSubmit={onSubmit}
-          isLoading={isLoading}
-          previewUrl={previewUrl}
-          fileName={fileName}
-          fileType={fileType}
-          onFileSelect={onFileSelect}
-          onClearAttachment={onClearAttachment}
-          isListening={isListening}
-          onToggleListening={onToggleListening}
-          isTutorMode={isTutorMode}
-          isSettingsOpen={isSettingsOpen}
-          onToggleSettings={onToggleSettings}
-          cycleCount={cycleCount}
-          setCycleCount={setCycleCount}
-          t={t}
-        />
+        {/* Input (Bottom) - Only show if conversation is active */}
+        {activeConversation && (
+          <ChatInput
+            prompt={prompt}
+            setPrompt={setPrompt}
+            onSubmit={onSubmit}
+            isLoading={isLoading}
+            previewUrl={previewUrl}
+            fileName={fileName}
+            fileType={fileType}
+            onFileSelect={onFileSelect}
+            onClearAttachment={onClearAttachment}
+            isListening={isListening}
+            onToggleListening={onToggleListening}
+            isTutorMode={isTutorMode}
+            isSettingsOpen={isSettingsOpen}
+            onToggleSettings={onToggleSettings}
+            cycleCount={cycleCount}
+            setCycleCount={setCycleCount}
+            t={t}
+            variant="bottom"
+          />
+        )}
       </div>
     </div>
   );
