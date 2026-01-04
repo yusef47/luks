@@ -20,32 +20,15 @@
       --bg-tertiary-color: #f5f5f5;
       --text-color: rgb(52, 50, 45);
 
-      /* Dark Mode Overrides */
-      html.dark {
-        --bg-color: #0d0d0c;
-        --bg-secondary-color: #1a1a19;
-        --bg-tertiary-color: #262626;
-        --text-color: #ffffff;
-        --text-secondary-color: #a1a1aa;
-        --border-color: rgba(255, 255, 255, 0.1);
-        --hover-bg-color: rgba(255, 255, 255, 0.1);
-        --accent-color: #ffffff;
-        --accent-hover: #e5e5e5;
-        --accent-text: #000000;
-        /* New variable for text on accent */
-        --glass-bg: rgba(0, 0, 0, 0.9);
-        --glass-border: rgba(255, 255, 255, 0.1);
-        --scrollbar-track-bg: #1a1a19;
-        --scrollbar-thumb-bg: #404040;
-        --shadow-soft: 0px 12px 32px rgba(0, 0, 0, 0.4);
-      }
+      /* (Removed duplicate html.dark to avoid conflicts) */
 
       /* Base Styles */
       --text-secondary-color: #5e5e5b;
       --border-color: rgba(0, 0, 0, 0.06);
       --hover-bg-color: rgba(0, 0, 0, 0.04);
       --accent-color: #1a1a19;
-      /* Black buttons */
+      --accent-text: #ffffff;
+      /* Base Logic: Light Mode -> Black Bg, White Text */
       --accent-hover: #333333;
       --glass-bg: rgba(255, 255, 255, 0.9);
       --glass-border: rgba(0, 0, 0, 0.08);
@@ -56,32 +39,34 @@
       --radius-pill: 22px;
       --radius-card: 16px;
       --font-serif: 'Libre Baskerville',
-      Georgia,
-      serif;
+        Georgia,
+        serif;
       --font-sans: 'Inter',
-      -apple-system,
-      BlinkMacSystemFont,
-      'Segoe UI',
-      sans-serif;
+        -apple-system,
+        BlinkMacSystemFont,
+        'Segoe UI',
+        sans-serif;
     }
 
-    /* Dark theme override (optional fallback) */
+    /* Dark Mode Overrides - Consolidated */
     html.dark {
-      --bg-color: #09090b;
-      --bg-secondary-color: #18181b;
-      --bg-tertiary-color: #27272a;
-      --text-color: #fafafa;
+      --bg-color: #0d0d0c;
+      --bg-secondary-color: #1a1a19;
+      --bg-tertiary-color: #262626;
+      --text-color: #ffffff;
       --text-secondary-color: #a1a1aa;
-      --border-color: #27272a;
-      --hover-bg-color: #27272a;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --hover-bg-color: rgba(255, 255, 255, 0.1);
       --accent-color: #ffffff;
-      --accent-hover: #e4e4e7;
-      --glass-bg: rgba(24, 24, 27, 0.7);
-      --glass-border: rgba(255, 255, 255, 0.08);
-      --scrollbar-track-bg: #09090b;
-      --scrollbar-thumb-bg: #3f3f46;
-      --shadow-soft: 0px 12px 32px rgba(0, 0, 0, 0.3);
-      --shadow-button: 0px 1px 2px -0.5px rgba(0, 0, 0, 0.5);
+      --accent-hover: #e5e5e5;
+      --accent-text: #000000;
+      /* Text on accent buttons */
+      --glass-bg: rgba(0, 0, 0, 0.9);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --scrollbar-track-bg: #1a1a19;
+      --scrollbar-thumb-bg: #404040;
+      --shadow-soft: 0px 12px 32px rgba(0, 0, 0, 0.4);
+      --shadow-button: 0px 1px 2px -0.5px rgba(0, 0, 0, 0.7);
     }
 
     body {
@@ -216,7 +201,8 @@
 
     .btn-primary {
       background-color: var(--accent-color);
-      color: white;
+      color: var(--accent-text, #ffffff);
+      /* Use accent-text variable with white fallback */
       border-radius: 9999px;
       padding: 0.5rem 1.25rem;
       font-weight: 500;
