@@ -198,7 +198,7 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   // ========== UI STATE ==========
-  const [showComputer, setShowComputer] = useState(true);
+  const [showComputer, setShowComputer] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [viewedStep, setViewedStep] = useState<StepResult | null>(null);
@@ -298,12 +298,12 @@ const App: React.FC = () => {
     }
   }, [activeExchange]);
 
-  // Auto-show computer
-  useEffect(() => {
-    if (activeExchange && activeExchange.status !== 'planning' && activeExchange.status !== 'clarification_needed') {
-      setShowComputer(true);
-    }
-  }, [activeExchange?.status]);
+  // Auto-show computer - Disabled to keep UI clean
+  // useEffect(() => {
+  //   if (activeExchange && activeExchange.status !== 'planning' && activeExchange.status !== 'clarification_needed') {
+  //     setShowComputer(true);
+  //   }
+  // }, [activeExchange?.status]);
 
   // ========== CONVERSATION HELPERS ==========
 
