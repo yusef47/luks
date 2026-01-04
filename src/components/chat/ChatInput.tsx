@@ -74,8 +74,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <footer className="flex-shrink-0 p-4 relative z-10">
-      <div className="max-w-3xl mx-auto w-full relative">
+    <footer className="flex-shrink-0 p-6 relative z-10 flex justify-center w-full bg-gradient-to-t from-[var(--bg-color)] via-[var(--bg-color)] to-transparent pt-10">
+      <div className="w-full max-w-3xl relative">
         {/* Settings Popover */}
         <SettingsPopover
           isOpen={isSettingsOpen}
