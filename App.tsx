@@ -656,7 +656,7 @@ ${fileAnalysis}
   // ========== RENDER ==========
 
   return (
-    <div className="fixed inset-0 flex bg-[var(--bg-color)] overflow-hidden">
+    <div className={`fixed inset-0 flex bg-[var(--bg-color)] overflow-hidden ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
       {/* Sidebar */}
       <Sidebar
         conversations={conversations}
