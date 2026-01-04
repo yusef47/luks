@@ -62,7 +62,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation */}
-      {/* Navigation */}
       <div className="px-4 space-y-[2px]">
         <button
           onClick={onOpenDailyFeed}
@@ -72,30 +71,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
-          <span className="text-[15px]">Search</span>
+          <span className="text-[15px]">{t('search')}</span>
         </button>
 
-        <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 19l7-7 3 3-7 7-3-3z" />
-            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-            <path d="M2 2l7.586 7.586" />
-            <circle cx="11" cy="11" r="2" />
-          </svg>
-          <span className="text-[15px]">Library</span>
-        </button>
-      </div>
-
-      <div className="px-4 mt-6 mb-2">
-        <div className="flex items-center justify-between text-xs font-medium text-[var(--text-secondary-color)] px-3 mb-1">
-          <span>Projects</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="cursor-pointer hover:text-[var(--text-color)]">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </div>
         <button
           onClick={onTogglePresentation}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${isPresentationMode
@@ -104,11 +82,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }`}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" />
-            <path d="M12 11h4" />
-            <path d="M14 9v4" />
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M9 17V7l7 5-7 5z" />
           </svg>
-          <span className="text-[15px]">New project</span>
+          <span className="text-[15px]">{t('presentations')}</span>
+        </button>
+
+        <button
+          onClick={onToggleAutonomous}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${isAutonomousMode
+            ? 'bg-[var(--hover-bg-color)] text-[var(--text-color)]'
+            : 'text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)]'
+            }`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a10 10 0 1 0 10 10H12V2z" />
+          </svg>
+          <span className="text-[15px]">{t('autonomousMode')}</span>
         </button>
       </div>
 
