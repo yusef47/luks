@@ -3,8 +3,8 @@
  * Displays live stream from the Lukas Worker (Browser Automation)
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Monitor, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Monitor, Wifi, WifiOff, Loader2, CheckCircle2, ExternalLink } from 'lucide-react';
 
 interface BrowserStreamProps {
     isActive: boolean;
@@ -13,69 +13,46 @@ interface BrowserStreamProps {
 
 export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatusChange }) => {
     const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
-    const [currentFrame, setCurrentFrame] = useState<string | null>(null);
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const eventSourceRef = useRef<EventSource | null>(null);
+    const [workerInfo, setWorkerInfo] = useState<any>(null);
 
     useEffect(() => {
         if (!isActive) {
-            // Cleanup when not active
-            if (eventSourceRef.current) {
-                eventSourceRef.current.close();
-                eventSourceRef.current = null;
-            }
             setStatus('disconnected');
-            setCurrentFrame(null);
             return;
         }
 
-        // Start SSE connection to stream endpoint
-        setStatus('connecting');
-        onStatusChange?.('connecting');
+        // Check worker status via bridge API
+        const checkWorker = async () => {
+            setStatus('connecting');
+            onStatusChange?.('connecting');
 
-        const eventSource = new EventSource('/api/browser-stream');
-        eventSourceRef.current = eventSource;
-
-        eventSource.onmessage = (event) => {
             try {
-                const data = JSON.parse(event.data);
+                const res = await fetch('/api/browser-bridge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'status' })
+                });
 
-                switch (data.type) {
-                    case 'connected':
-                        setStatus('connected');
-                        onStatusChange?.('connected');
-                        break;
+                const data = await res.json();
 
-                    case 'frame':
-                        setCurrentFrame(data.image);
-                        break;
-
-                    case 'error':
-                        setStatus('error');
-                        setErrorMessage(data.message);
-                        onStatusChange?.('error');
-                        break;
-
-                    case 'disconnected':
-                        setStatus('disconnected');
-                        onStatusChange?.('disconnected');
-                        break;
+                if (data.success && data.connected) {
+                    setStatus('connected');
+                    setWorkerInfo(data);
+                    onStatusChange?.('connected');
+                } else {
+                    setStatus('disconnected');
+                    onStatusChange?.('disconnected');
                 }
-            } catch (e) {
-                console.error('[BrowserStream] Parse error:', e);
+            } catch (error) {
+                setStatus('error');
+                onStatusChange?.('error');
             }
         };
 
-        eventSource.onerror = () => {
-            setStatus('error');
-            setErrorMessage('فقدان الاتصال بالسيرفر');
-            onStatusChange?.('error');
-        };
+        checkWorker();
+        const interval = setInterval(checkWorker, 30000); // Check every 30 seconds
 
-        return () => {
-            eventSource.close();
-            eventSourceRef.current = null;
-        };
+        return () => clearInterval(interval);
     }, [isActive, onStatusChange]);
 
     return (
@@ -84,7 +61,7 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
             <div className="flex items-center justify-between px-3 py-2 bg-gray-900 border-b border-gray-700">
                 <div className="flex items-center gap-2">
                     <Monitor className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-400">Lukas Browser</span>
+                    <span className="text-xs text-gray-400">Lukas Browser Worker</span>
                 </div>
                 <div className="flex items-center gap-2">
                     {status === 'connected' ? (
@@ -95,7 +72,7 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
                     ) : status === 'connecting' ? (
                         <>
                             <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
-                            <span className="text-xs text-yellow-500">جاري الاتصال...</span>
+                            <span className="text-xs text-yellow-500">جاري الفحص...</span>
                         </>
                     ) : (
                         <>
@@ -106,29 +83,48 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
                 </div>
             </div>
 
-            {/* Stream Display */}
+            {/* Content */}
             <div className="flex-1 flex items-center justify-center bg-gray-950 relative">
-                {currentFrame ? (
-                    <img
-                        src={`data:image/jpeg;base64,${currentFrame}`}
-                        alt="Live Browser Stream"
-                        className="max-w-full max-h-full object-contain"
-                    />
+                {status === 'connected' ? (
+                    <div className="flex flex-col items-center gap-4 text-center p-6">
+                        <CheckCircle2 className="w-16 h-16 text-green-500" />
+                        <div>
+                            <h3 className="text-lg font-semibold text-white mb-2">العضلات جاهزة! 🦾</h3>
+                            <p className="text-sm text-gray-400 mb-4">
+                                الـ Browser Worker متصل وجاهز لتنفيذ مهام التصفح
+                            </p>
+                        </div>
+                        <a
+                            href="https://yusef75-lukas-worker.hf.space"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors"
+                        >
+                            <ExternalLink className="w-4 h-4" />
+                            فتح Worker Dashboard
+                        </a>
+                    </div>
                 ) : status === 'connecting' ? (
                     <div className="flex flex-col items-center gap-3 text-gray-500">
                         <Loader2 className="w-10 h-10 animate-spin" />
-                        <span>جاري الاتصال بالمتصفح...</span>
-                    </div>
-                ) : status === 'error' ? (
-                    <div className="flex flex-col items-center gap-3 text-red-400">
-                        <WifiOff className="w-10 h-10" />
-                        <span>{errorMessage || 'خطأ في الاتصال'}</span>
+                        <span>جاري فحص الاتصال...</span>
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center gap-3 text-gray-600">
+                    <div className="flex flex-col items-center gap-3 text-gray-600 p-6 text-center">
                         <Monitor className="w-12 h-12" />
-                        <span>المتصفح غير نشط</span>
-                        <span className="text-xs text-gray-700">سيظهر هنا البث المباشر عندما يبدأ لوكاس بتصفح الإنترنت</span>
+                        <span>الـ Worker غير متصل</span>
+                        <span className="text-xs text-gray-700">
+                            تأكد من أن Worker على Hugging Face شغال
+                        </span>
+                        <a
+                            href="https://yusef75-lukas-worker.hf.space"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs transition-colors mt-2"
+                        >
+                            <ExternalLink className="w-3 h-3" />
+                            فحص الـ Worker
+                        </a>
                     </div>
                 )}
             </div>
@@ -137,3 +133,4 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
 };
 
 export default BrowserStream;
+
