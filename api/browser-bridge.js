@@ -112,7 +112,11 @@ export default async function handler(req, res) {
                 break;
 
             case 'click':
-                result = await emitAsync(socket, 'browser:click', { selector: params.selector });
+                result = await emitAsync(socket, 'browser:click', {
+                    selector: params.selector,
+                    x: params.x,
+                    y: params.y
+                });
                 break;
 
             case 'type':
