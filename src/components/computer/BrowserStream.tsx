@@ -91,12 +91,26 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
         }
     };
 
-    // Navigate to URL
-    const navigateToUrl = async (url: string) => {
-        // Add https if not present
-        let finalUrl = url;
-        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-            finalUrl = 'https://' + url;
+    // Navigate to URL or search
+    const navigateToUrl = async (input: string) => {
+        let finalUrl = input.trim();
+
+        // Check if it's a valid URL pattern
+        const urlPattern = /^(https?:\/\/|www\.)/i;
+        const domainPattern = /^[\w-]+\.(com|net|org|io|app|dev|co|gov|edu|info|biz|me)/i;
+
+        if (urlPattern.test(finalUrl)) {
+            // Already a URL with protocol
+            if (finalUrl.startsWith('www.')) {
+                finalUrl = 'https://' + finalUrl;
+            }
+        } else if (domainPattern.test(finalUrl)) {
+            // Looks like a domain
+            finalUrl = 'https://' + finalUrl;
+        } else {
+            // It's a search query - convert to Google search
+            finalUrl = `https://www.google.com/search?q=${encodeURIComponent(finalUrl)}&hl=ar`;
+            setLastAction(`🔍 جاري البحث عن: ${input}`);
         }
         await executeAction('goto', { url: finalUrl });
     };
