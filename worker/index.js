@@ -179,10 +179,20 @@ io.on('connection', async (socket) => {
 
     socket.on('browser:click', async (data, callback) => {
         try {
-            const { selector } = data;
-            console.log(`🖱️ Clicking: ${selector}`);
+            const { selector, x, y } = data;
 
-            await activePage.click(selector, { timeout: 10000 });
+            if (x !== undefined && y !== undefined) {
+                // Click by coordinates
+                console.log(`🖱️ Clicking at coordinates: (${x}, ${y})`);
+                await activePage.mouse.click(x, y);
+            } else if (selector) {
+                // Click by selector
+                console.log(`🖱️ Clicking selector: ${selector}`);
+                await activePage.click(selector, { timeout: 10000 });
+            } else {
+                throw new Error('Either selector or x,y coordinates required');
+            }
+
             callback({ success: true });
         } catch (error) {
             console.error('❌ Click error:', error.message);
@@ -192,10 +202,18 @@ io.on('connection', async (socket) => {
 
     socket.on('browser:type', async (data, callback) => {
         try {
-            const { selector, text, delay = 50 } = data;
-            console.log(`⌨️ Typing in: ${selector}`);
+            const { selector, text } = data;
 
-            await activePage.fill(selector, text);
+            if (selector) {
+                // Type into specific element
+                console.log(`⌨️ Typing in selector: ${selector}`);
+                await activePage.fill(selector, text);
+            } else {
+                // Type using keyboard (to focused element)
+                console.log(`⌨️ Typing text: ${text.substring(0, 20)}...`);
+                await activePage.keyboard.type(text, { delay: 30 });
+            }
+
             callback({ success: true });
         } catch (error) {
             console.error('❌ Type error:', error.message);
