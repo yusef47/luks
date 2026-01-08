@@ -40,6 +40,7 @@
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.0",
     "rettiwt-api": "^6.0.8",
+    "socket.io-client": "^4.7.2",
     "sqlite3": "^5.1.6",
     "typescript": "~5.8.2",
     "uuid": "^9.0.0",
