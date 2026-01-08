@@ -1,10 +1,15 @@
 /**
  * BrowserStream Component
  * Displays live stream from the Lukas Worker (Browser Automation)
+ * With interactive controls: click, scroll, type, navigation
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Monitor, Wifi, WifiOff, Loader2, CheckCircle2, ExternalLink, Play, RefreshCw, Globe } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+    Monitor, Wifi, WifiOff, Loader2, CheckCircle2, ExternalLink,
+    Play, RefreshCw, Globe, ArrowLeft, ArrowRight, RotateCcw,
+    ArrowUp, ArrowDown, MousePointer, Type, X, Home
+} from 'lucide-react';
 
 interface BrowserStreamProps {
     isActive: boolean;
@@ -17,6 +22,10 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
     const [isLoading, setIsLoading] = useState(false);
     const [lastAction, setLastAction] = useState<string>('');
     const [testUrl, setTestUrl] = useState('https://www.google.com');
+    const [clickMode, setClickMode] = useState(false);
+    const [typeText, setTypeText] = useState('');
+    const [showTypeInput, setShowTypeInput] = useState(false);
+    const imageRef = useRef<HTMLImageElement>(null);
 
     // Check worker status
     const checkWorker = useCallback(async () => {
@@ -53,63 +62,93 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
         checkWorker();
     }, [isActive, checkWorker]);
 
-    // Navigate to URL and take screenshot
-    const navigateAndCapture = async (url: string) => {
+    // Execute browser action
+    const executeAction = async (action: string, params: any = {}) => {
         setIsLoading(true);
-        setLastAction(`جاري الذهاب إلى ${url}...`);
+        setLastAction(`جاري تنفيذ: ${action}...`);
 
         try {
-            const gotoRes = await fetch('/api/browser-bridge', {
+            const res = await fetch('/api/browser-bridge', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'goto', params: { url } })
+                body: JSON.stringify({ action, params })
             });
-            const gotoData = await gotoRes.json();
+            const data = await res.json();
 
-            if (gotoData.success) {
-                setLastAction(`تم فتح: ${gotoData.title || url}`);
-
-                const ssRes = await fetch('/api/browser-bridge', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'screenshot', params: {} })
-                });
-                const ssData = await ssRes.json();
-
-                if (ssData.success && ssData.image) {
-                    setScreenshot(ssData.image);
-                }
+            if (data.success) {
+                setLastAction(`تم: ${action}`);
+                // Refresh screenshot after action
+                await refreshScreenshot();
             } else {
-                setLastAction(`خطأ: ${gotoData.error}`);
+                setLastAction(`خطأ: ${data.error}`);
             }
+            return data;
         } catch (error: any) {
             setLastAction(`خطأ: ${error.message}`);
+            return { success: false, error: error.message };
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // Navigate to URL
+    const navigateToUrl = async (url: string) => {
+        // Add https if not present
+        let finalUrl = url;
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            finalUrl = 'https://' + url;
+        }
+        await executeAction('goto', { url: finalUrl });
     };
 
     // Refresh screenshot
     const refreshScreenshot = async () => {
-        setIsLoading(true);
         try {
-            const ssRes = await fetch('/api/browser-bridge', {
+            const res = await fetch('/api/browser-bridge', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'screenshot', params: {} })
             });
-            const ssData = await ssRes.json();
+            const data = await res.json();
 
-            if (ssData.success && ssData.image) {
-                setScreenshot(ssData.image);
-                setLastAction('تم تحديث الصورة');
+            if (data.success && data.image) {
+                setScreenshot(data.image);
             }
-        } catch (error: any) {
-            setLastAction(`خطأ: ${error.message}`);
-        } finally {
-            setIsLoading(false);
+        } catch (error) {
+            console.error('Screenshot error:', error);
         }
     };
+
+    // Handle click on image
+    const handleImageClick = async (e: React.MouseEvent<HTMLImageElement>) => {
+        if (!clickMode || !imageRef.current) return;
+
+        const rect = imageRef.current.getBoundingClientRect();
+        const x = Math.round((e.clientX - rect.left) / rect.width * 1920);
+        const y = Math.round((e.clientY - rect.top) / rect.height * 1080);
+
+        setClickMode(false);
+        await executeAction('click', { x, y });
+    };
+
+    // Scroll
+    const scroll = async (direction: 'up' | 'down') => {
+        const delta = direction === 'down' ? 500 : -500;
+        await executeAction('scroll', { deltaY: delta });
+    };
+
+    // Type text
+    const typeTextAction = async () => {
+        if (!typeText.trim()) return;
+        await executeAction('type', { text: typeText });
+        setTypeText('');
+        setShowTypeInput(false);
+    };
+
+    // Navigation
+    const goBack = () => executeAction('execute', { method: 'goBack', args: [] });
+    const goForward = () => executeAction('execute', { method: 'goForward', args: [] });
+    const goHome = () => navigateToUrl('https://www.google.com');
 
     return (
         <div className="w-full h-full flex flex-col bg-black rounded-lg overflow-hidden">
@@ -139,35 +178,113 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
                 </div>
             </div>
 
-            {/* URL Input Bar */}
+            {/* URL Bar + Controls */}
             {status === 'connected' && (
                 <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 border-b border-gray-700">
-                    <Globe className="w-4 h-4 text-gray-400" />
-                    <input
-                        type="text"
-                        value={testUrl}
-                        onChange={(e) => setTestUrl(e.target.value)}
-                        placeholder="أدخل رابط..."
-                        className="flex-1 bg-gray-700 text-white text-sm px-2 py-1 rounded border border-gray-600 focus:border-blue-500 outline-none"
-                        onKeyDown={(e) => e.key === 'Enter' && navigateAndCapture(testUrl)}
-                    />
+                    {/* Navigation Buttons */}
+                    <button onClick={goBack} disabled={isLoading} className="p-1.5 hover:bg-gray-700 rounded transition-colors" title="رجوع">
+                        <ArrowLeft className="w-4 h-4 text-gray-400" />
+                    </button>
+                    <button onClick={goForward} disabled={isLoading} className="p-1.5 hover:bg-gray-700 rounded transition-colors" title="تقدم">
+                        <ArrowRight className="w-4 h-4 text-gray-400" />
+                    </button>
+                    <button onClick={() => refreshScreenshot()} disabled={isLoading} className="p-1.5 hover:bg-gray-700 rounded transition-colors" title="تحديث">
+                        <RotateCcw className={`w-4 h-4 text-gray-400 ${isLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                    <button onClick={goHome} disabled={isLoading} className="p-1.5 hover:bg-gray-700 rounded transition-colors" title="الرئيسية">
+                        <Home className="w-4 h-4 text-gray-400" />
+                    </button>
+
+                    {/* URL Input */}
+                    <div className="flex-1 flex items-center gap-1 bg-gray-700 rounded px-2">
+                        <Globe className="w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            value={testUrl}
+                            onChange={(e) => setTestUrl(e.target.value)}
+                            placeholder="أدخل رابط..."
+                            className="flex-1 bg-transparent text-white text-sm py-1 outline-none"
+                            onKeyDown={(e) => e.key === 'Enter' && navigateToUrl(testUrl)}
+                        />
+                    </div>
                     <button
-                        onClick={() => navigateAndCapture(testUrl)}
+                        onClick={() => navigateToUrl(testUrl)}
                         disabled={isLoading}
                         className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-sm rounded transition-colors"
                     >
                         {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                         اذهب
                     </button>
-                    {screenshot && (
+                </div>
+            )}
+
+            {/* Interactive Controls Bar */}
+            {status === 'connected' && screenshot && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-850 border-b border-gray-700 bg-opacity-50" style={{ backgroundColor: 'rgb(30, 30, 35)' }}>
+                    <span className="text-xs text-gray-500 ml-2">أدوات:</span>
+
+                    {/* Click Mode */}
+                    <button
+                        onClick={() => setClickMode(!clickMode)}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${clickMode ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                        title="اضغط ثم انقر على الشاشة"
+                    >
+                        <MousePointer className="w-3 h-3" />
+                        نقر
+                    </button>
+
+                    {/* Scroll Buttons */}
+                    <button
+                        onClick={() => scroll('up')}
+                        disabled={isLoading}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-700 text-gray-300 hover:bg-gray-600 rounded transition-colors"
+                        title="تمرير للأعلى"
+                    >
+                        <ArrowUp className="w-3 h-3" />
+                        ↑
+                    </button>
+                    <button
+                        onClick={() => scroll('down')}
+                        disabled={isLoading}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-700 text-gray-300 hover:bg-gray-600 rounded transition-colors"
+                        title="تمرير للأسفل"
+                    >
+                        <ArrowDown className="w-3 h-3" />
+                        ↓
+                    </button>
+
+                    {/* Type Text */}
+                    {!showTypeInput ? (
                         <button
-                            onClick={refreshScreenshot}
-                            disabled={isLoading}
-                            className="p-1 text-gray-400 hover:text-white transition-colors"
-                            title="تحديث"
+                            onClick={() => setShowTypeInput(true)}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-700 text-gray-300 hover:bg-gray-600 rounded transition-colors"
+                            title="كتابة نص"
                         >
-                            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            <Type className="w-3 h-3" />
+                            كتابة
                         </button>
+                    ) : (
+                        <div className="flex items-center gap-1">
+                            <input
+                                type="text"
+                                value={typeText}
+                                onChange={(e) => setTypeText(e.target.value)}
+                                placeholder="اكتب هنا..."
+                                className="w-32 bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 outline-none"
+                                onKeyDown={(e) => e.key === 'Enter' && typeTextAction()}
+                                autoFocus
+                            />
+                            <button onClick={typeTextAction} className="p-1 bg-blue-600 hover:bg-blue-700 text-white rounded">
+                                <Play className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => setShowTypeInput(false)} className="p-1 hover:bg-gray-600 text-gray-400 rounded">
+                                <X className="w-3 h-3" />
+                            </button>
+                        </div>
+                    )}
+
+                    {clickMode && (
+                        <span className="text-xs text-blue-400 mr-auto">👆 انقر على الشاشة</span>
                     )}
                 </div>
             )}
@@ -176,9 +293,11 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
             <div className="flex-1 flex items-center justify-center bg-gray-950 relative overflow-auto">
                 {screenshot ? (
                     <img
+                        ref={imageRef}
                         src={`data:image/png;base64,${screenshot}`}
                         alt="Browser Screenshot"
-                        className="max-w-full max-h-full object-contain"
+                        className={`max-w-full max-h-full object-contain ${clickMode ? 'cursor-crosshair' : ''}`}
+                        onClick={handleImageClick}
                     />
                 ) : status === 'connected' ? (
                     <div className="flex flex-col items-center gap-4 text-center p-6">
