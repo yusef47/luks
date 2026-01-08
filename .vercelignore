@@ -27,3 +27,5 @@ start-server.sh
 *.final.tsx
 worker/
 api/browser-stream.js
+api/browser-agent.js
+

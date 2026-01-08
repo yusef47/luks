@@ -113,13 +113,49 @@ async function executeBrowserResearch(query) {
             ? `https://${process.env.VERCEL_URL}`
             : 'http://localhost:3000';
 
-        const response = await fetch(`${baseUrl}/api/browser-agent`, {
+        const bridgeUrl = `${baseUrl}/api/browser-bridge`;
+
+        // Step 1: Navigate to Google search
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=ar`;
+        const gotoRes = await fetch(bridgeUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query })
+            body: JSON.stringify({ action: 'goto', params: { url: searchUrl } })
         });
+        const gotoData = await gotoRes.json();
 
-        return await response.json();
+        if (!gotoData.success) {
+            return { success: false, error: gotoData.error };
+        }
+
+        // Wait a bit for page to load
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Step 2: Get page content
+        const contentRes = await fetch(bridgeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getContent', params: {} })
+        });
+        const contentData = await contentRes.json();
+
+        // Step 3: Take screenshot
+        const ssRes = await fetch(bridgeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'screenshot', params: {} })
+        });
+        const ssData = await ssRes.json();
+
+        return {
+            success: true,
+            results: {
+                title: contentData.title || 'نتائج البحث',
+                url: contentData.url || searchUrl,
+                content: contentData.textContent?.substring(0, 3000) || '',
+                screenshot: ssData.image || null
+            }
+        };
     } catch (error) {
         console.error('[Browser Research] Error:', error);
         return { success: false, error: error.message };
