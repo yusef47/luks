@@ -86,6 +86,46 @@ function analyzeQuestion(prompt) {
     return 'balanced';
 }
 
+// ═══════════════════════════════════════════════════════════════
+//                    BROWSER NEEDS DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+function needsBrowser(prompt) {
+    const lowerPrompt = prompt.toLowerCase();
+    const browserTriggers = [
+        // Arabic
+        'ابحث لي', 'ابحث عن', 'جيب لي', 'هات لي', 'روح جيب',
+        'أسعار الذهب', 'أسعار الدهب', 'اخبار', 'أخبار',
+        'افتح موقع', 'افتح صفحة', 'شوف لي',
+        'أحدث', 'آخر الاخبار', 'النهاردة', 'اليوم',
+        // English
+        'search for', 'find', 'look up', 'browse',
+        'latest news', 'current price', 'today\'s',
+        'open website', 'go to', 'check online'
+    ];
+
+    return browserTriggers.some(trigger => lowerPrompt.includes(trigger));
+}
+
+async function executeBrowserResearch(query) {
+    try {
+        const baseUrl = process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : 'http://localhost:3000';
+
+        const response = await fetch(`${baseUrl}/api/browser-agent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+        });
+
+        return await response.json();
+    } catch (error) {
+        console.error('[Browser Research] Error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 function selectModel(questionType) {
     const routing = {
         greeting: { provider: 'groq', model: GROQ_MODELS.FAST },
@@ -339,6 +379,23 @@ export default async function handler(req, res) {
         console.log(`[Orchestrator V2] 🚀 New request: "${userPrompt.substring(0, 50)}..."`);
         console.log('═══════════════════════════════════════════════════════════════');
 
+        // Check if this needs browser research
+        let browserResult = null;
+        let browserContext = '';
+
+        if (needsBrowser(userPrompt)) {
+            console.log('[Orchestrator V2] 🌐 Browser research needed!');
+            browserResult = await executeBrowserResearch(userPrompt);
+
+            if (browserResult.success && browserResult.results?.content) {
+                browserContext = `\n\n🌐 نتائج البحث من الإنترنت:\n` +
+                    `📍 المصدر: ${browserResult.results.title || 'بحث Google'}\n` +
+                    `🔗 الرابط: ${browserResult.results.url || ''}\n` +
+                    `📄 المحتوى:\n${browserResult.results.content.substring(0, 3000)}`;
+                console.log('[Orchestrator V2] ✅ Browser research completed');
+            }
+        }
+
         // Build context
         let contextString = '';
         if (conversationHistory && conversationHistory.length > 0) {
@@ -356,11 +413,13 @@ export default async function handler(req, res) {
             day: 'numeric', hour: '2-digit', minute: '2-digit'
         });
 
-        // Build full prompt
+        // Build full prompt with browser context
         const fullPrompt = SYSTEM_PROMPT +
             `\n\n⏰ الوقت الحالي: ${timeString}` +
             contextString +
-            '\n\n👤 سؤال المستخدم:\n' + userPrompt;
+            browserContext +
+            '\n\n👤 سؤال المستخدم:\n' + userPrompt +
+            (browserContext ? '\n\n⚠️ استخدم المعلومات من نتائج البحث أعلاه للإجابة بشكل دقيق ومحدث.' : '');
 
         // Use Smart Router
         const result = await smartRoute(fullPrompt);
@@ -375,6 +434,8 @@ export default async function handler(req, res) {
                 provider: result.provider,
                 model: result.model,
                 reviewed: result.reviewed || false,
+                browserUsed: !!browserResult?.success,
+                screenshot: browserResult?.results?.screenshot || null
             }
         });
 
