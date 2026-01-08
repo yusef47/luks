@@ -25,3 +25,5 @@ start-server.sh
 *.backup.tsx
 *.refactored.tsx
 *.final.tsx
+worker/
+api/browser-stream.js
