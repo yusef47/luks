@@ -204,6 +204,7 @@ const App: React.FC = () => {
   const [viewedStep, setViewedStep] = useState<StepResult | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [cycleCount, setCycleCount] = useState(1);
+  const [isBrowserActive, setIsBrowserActive] = useState(false);
 
   // ========== FILE ATTACHMENT ==========
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -715,6 +716,7 @@ ${fileAnalysis}
                   <VirtualComputer
                     viewedStep={viewedStep}
                     t={t as any}
+                    isBrowserActive={isBrowserActive}
                   />
                 </div>
               </div>

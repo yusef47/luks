@@ -109,7 +109,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
         {/* Input Container - Conditional Styling */}
         <div className={`
-          flex flex-col gap-2 transition-all duration-300
+          flex flex-col gap-2 transition-all duration-300 w-full
           ${variant === 'center'
             ? 'bg-[var(--bg-color)] border border-[var(--border-color)] shadow-[var(--shadow-soft)] p-3 rounded-2xl min-h-[140px]'
             : 'pill-input p-2 flex-row items-end'
@@ -124,10 +124,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onKeyDown={handleKeyDown}
             placeholder={isTutorMode ? "Type or speak..." : (variant === 'center' ? "Describe your task or ask anything..." : t('promptPlaceholder'))}
             className={`
-              bg-transparent focus:outline-none resize-none text-[var(--text-color)] placeholder-[var(--text-secondary-color)]
+              block bg-transparent focus:outline-none resize-none text-[var(--text-color)] placeholder-[var(--text-secondary-color)]
               ${variant === 'center'
                 ? 'w-full text-lg p-2 min-h-[60px]'
-                : 'flex-grow text-base p-2 max-h-40'
+                : 'flex-grow text-base p-2 max-h-40 w-full'
               }
             `}
             rows={1}
