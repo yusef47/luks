@@ -159,6 +159,15 @@ export default async function handler(req, res) {
                 result = { connected: socket.connected, workerUrl: WORKER_URL };
                 break;
 
+            case 'runAgent':
+                // AI-Powered Browser Agent - needs longer timeout
+                console.log('[BrowserBridge] 🤖 Starting Browser Agent...');
+                result = await emitAsync(socket, 'browser:agent', {
+                    task: params.task,
+                    maxSteps: params.maxSteps || 10
+                }, 120000); // 2 minute timeout for agent tasks
+                break;
+
             default:
                 return res.status(400).json({ success: false, error: `Unknown action: ${action}` });
         }

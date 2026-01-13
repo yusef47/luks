@@ -219,7 +219,7 @@ function needsBrowserResearch(question) {
     return false;
 }
 
-// Execute browser research via browser-bridge
+// Execute browser research via AI-Powered Browser Agent
 async function executeBrowserResearch(query) {
     try {
         const baseUrl = process.env.VERCEL_URL
@@ -228,56 +228,43 @@ async function executeBrowserResearch(query) {
 
         const bridgeUrl = `${baseUrl}/api/browser-bridge`;
 
-        console.log(`[Synthesize] 🌐 Browser: Navigating to Google search...`);
+        console.log(`[Synthesize] 🤖 Starting AI Browser Agent for: "${query}"`);
 
-        // Step 1: Navigate to Google search
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=ar`;
-        const gotoRes = await fetch(bridgeUrl, {
+        // Call the AI Browser Agent
+        const response = await fetch(bridgeUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'goto', params: { url: searchUrl } })
+            body: JSON.stringify({
+                action: 'runAgent',
+                params: {
+                    task: query,
+                    maxSteps: 8
+                }
+            })
         });
-        const gotoData = await gotoRes.json();
 
-        if (!gotoData.success) {
-            console.log(`[Synthesize] ⚠️ Browser navigation failed: ${gotoData.error}`);
-            return { success: false, error: gotoData.error };
+        const result = await response.json();
+
+        if (!result.success) {
+            console.log(`[Synthesize] ⚠️ Browser Agent failed: ${result.error}`);
+            return { success: false, error: result.error };
         }
 
-        // Wait for page to load
-        await new Promise(r => setTimeout(r, 2000));
-
-        // Step 2: Get page content
-        console.log(`[Synthesize] 📄 Browser: Extracting content...`);
-        const contentRes = await fetch(bridgeUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'getContent', params: {} })
-        });
-        const contentData = await contentRes.json();
-
-        // Step 3: Take screenshot
-        console.log(`[Synthesize] 📸 Browser: Taking screenshot...`);
-        const ssRes = await fetch(bridgeUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'screenshot', params: {} })
-        });
-        const ssData = await ssRes.json();
-
-        console.log(`[Synthesize] ✅ Browser research completed`);
+        console.log(`[Synthesize] ✅ Browser Agent completed in ${result.totalSteps} steps`);
 
         return {
             success: true,
+            agentUsed: true,
             results: {
-                title: contentData.title || 'نتائج البحث',
-                url: contentData.url || searchUrl,
-                content: contentData.textContent?.substring(0, 3000) || '',
-                screenshot: ssData.image || null
+                title: 'نتائج البحث الذكي',
+                content: result.result || '',
+                screenshot: result.finalScreenshot || null,
+                steps: result.steps || [],
+                totalSteps: result.totalSteps
             }
         };
     } catch (error) {
-        console.error('[Synthesize] ❌ Browser research error:', error.message);
+        console.error('[Synthesize] ❌ Browser Agent error:', error.message);
         return { success: false, error: error.message };
     }
 }

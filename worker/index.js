@@ -9,6 +9,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { chromium } from 'playwright';
 import dotenv from 'dotenv';
+import { runBrowserAgent } from './browser-agent.js';
 
 dotenv.config();
 
@@ -327,6 +328,41 @@ io.on('connection', async (socket) => {
     // =========================================================================
     //                      DISCONNECT HANDLER
     // =========================================================================
+
+    // =========================================================================
+    //                      BROWSER AGENT (AI-POWERED)
+    // =========================================================================
+
+    socket.on('browser:agent', async (data, callback) => {
+        try {
+            const { task, maxSteps = 10 } = data;
+            console.log('🤖 [Agent] Starting AI Browser Agent...');
+            console.log(`🎯 [Agent] Task: "${task}"`);
+
+            if (!activePage) {
+                await initBrowser();
+            }
+
+            // Run the browser agent with Vision AI
+            const result = await runBrowserAgent(activePage, task, socket, maxSteps);
+
+            console.log(`✅ [Agent] Completed in ${result.totalSteps} steps`);
+            callback({
+                success: result.success,
+                result: result.result,
+                steps: result.steps.map(s => ({
+                    stepNumber: s.stepNumber,
+                    observation: s.observation,
+                    action: s.action?.description || s.action?.type
+                })),
+                finalScreenshot: result.finalScreenshot,
+                totalSteps: result.totalSteps
+            });
+        } catch (error) {
+            console.error('❌ [Agent] Error:', error.message);
+            callback({ success: false, error: error.message });
+        }
+    });
 
     socket.on('disconnect', () => {
         console.log('🔌 Client disconnected:', socket.id);
