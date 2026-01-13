@@ -194,11 +194,17 @@ function needsRealtimeData(question) {
 
 // Keywords that indicate need for BROWSER (visual browsing, scraping)
 const BROWSER_KEYWORDS = [
-    // Arabic
+    // Arabic - Phrases
     'ابحث لي', 'ابحث عن', 'جيب لي', 'هات لي', 'روح جيب',
     'افتح موقع', 'افتح صفحة', 'شوف لي', 'دور على',
+    // Arabic - Single words that strongly indicate web search need
+    'أسعار', 'سعر', 'اخبار', 'أخبار', 'النهاردة', 'اليوم',
+    'جيب', 'هات', 'ابحث',
+    // Common searches
+    'ذهب', 'gold', 'price', 'news', 'current', 'today',
     // English
-    'search for', 'find me', 'look up', 'browse', 'open website'
+    'search for', 'find me', 'look up', 'browse', 'open website',
+    'what is the price', 'latest news'
 ];
 
 function needsBrowserResearch(question) {
@@ -209,6 +215,7 @@ function needsBrowserResearch(question) {
             return true;
         }
     }
+    console.log(`[Synthesize] ℹ️ No browser keywords found in: "${question.substring(0, 100)}"`);
     return false;
 }
 
