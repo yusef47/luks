@@ -131,10 +131,16 @@ const executeVideo = async (task: string, videoFile: File, onChunk: (chunk: stri
 const synthesizeAnswer = async (prompt: string, results: any, onChunk: (chunk: string) => void, conversationId?: string, conversationHistory?: any[]) => {
   try {
     const result = await callBackendAPI('/orchestrator/synthesize', { prompt, results, conversationId, conversationHistory }, onChunk);
-    return result.data || {};
+    // Return full result including meta for browserUsed detection
+    return {
+      data: result.data || {},
+      meta: result.meta || {},
+      browserUsed: result.meta?.browserUsed || false,
+      screenshot: result.meta?.screenshot || null
+    };
   } catch (error) {
     console.error('Synthesize error:', error);
-    return {};
+    return { data: {}, meta: {}, browserUsed: false, screenshot: null };
   }
 };
 
@@ -204,7 +210,6 @@ const App: React.FC = () => {
   const [viewedStep, setViewedStep] = useState<StepResult | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [cycleCount, setCycleCount] = useState(1);
-  const [isBrowserActive, setIsBrowserActive] = useState(false);
 
   // ========== FILE ATTACHMENT ==========
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -565,7 +570,16 @@ ${fileAnalysis}
               const conversationHistory = conversations.find(c => c.id === convoId)?.exchanges
                 .filter(e => e.status === 'completed')
                 .map(e => ({ prompt: e.prompt, results: e.results })) || [];
-              r = await synthesizeAnswer(exchange.prompt, outputs, onChunk, convoId, conversationHistory);
+              const synthResult = await synthesizeAnswer(exchange.prompt, outputs, onChunk, convoId, conversationHistory);
+
+              // Auto-show Virtual Computer if browser was used
+              if (synthResult.browserUsed) {
+                console.log('[App] 🖥️ Browser was used - auto-showing Virtual Computer');
+                setShowComputer(true);
+              }
+
+              // Extract the data for further processing
+              r = typeof synthResult.data === 'string' ? synthResult.data : synthResult.data;
             } else {
               r = await executeOrchestratorIntermediateStep(step.task, exchange.prompt, outputs, onChunk);
             }
@@ -716,7 +730,6 @@ ${fileAnalysis}
                   <VirtualComputer
                     viewedStep={viewedStep}
                     t={t as any}
-                    isBrowserActive={isBrowserActive}
                   />
                 </div>
               </div>

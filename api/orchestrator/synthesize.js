@@ -192,6 +192,89 @@ function needsRealtimeData(question) {
     return false;
 }
 
+// Keywords that indicate need for BROWSER (visual browsing, scraping)
+const BROWSER_KEYWORDS = [
+    // Arabic
+    'ابحث لي', 'ابحث عن', 'جيب لي', 'هات لي', 'روح جيب',
+    'افتح موقع', 'افتح صفحة', 'شوف لي', 'دور على',
+    // English
+    'search for', 'find me', 'look up', 'browse', 'open website'
+];
+
+function needsBrowserResearch(question) {
+    const lowerQuestion = question.toLowerCase();
+    for (const keyword of BROWSER_KEYWORDS) {
+        if (lowerQuestion.includes(keyword.toLowerCase())) {
+            console.log(`[Synthesize] 🖥️ Browser research needed: keyword "${keyword}" found`);
+            return true;
+        }
+    }
+    return false;
+}
+
+// Execute browser research via browser-bridge
+async function executeBrowserResearch(query) {
+    try {
+        const baseUrl = process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : 'http://localhost:3000';
+
+        const bridgeUrl = `${baseUrl}/api/browser-bridge`;
+
+        console.log(`[Synthesize] 🌐 Browser: Navigating to Google search...`);
+
+        // Step 1: Navigate to Google search
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=ar`;
+        const gotoRes = await fetch(bridgeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'goto', params: { url: searchUrl } })
+        });
+        const gotoData = await gotoRes.json();
+
+        if (!gotoData.success) {
+            console.log(`[Synthesize] ⚠️ Browser navigation failed: ${gotoData.error}`);
+            return { success: false, error: gotoData.error };
+        }
+
+        // Wait for page to load
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Step 2: Get page content
+        console.log(`[Synthesize] 📄 Browser: Extracting content...`);
+        const contentRes = await fetch(bridgeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getContent', params: {} })
+        });
+        const contentData = await contentRes.json();
+
+        // Step 3: Take screenshot
+        console.log(`[Synthesize] 📸 Browser: Taking screenshot...`);
+        const ssRes = await fetch(bridgeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'screenshot', params: {} })
+        });
+        const ssData = await ssRes.json();
+
+        console.log(`[Synthesize] ✅ Browser research completed`);
+
+        return {
+            success: true,
+            results: {
+                title: contentData.title || 'نتائج البحث',
+                url: contentData.url || searchUrl,
+                content: contentData.textContent?.substring(0, 3000) || '',
+                screenshot: ssData.image || null
+            }
+        };
+    } catch (error) {
+        console.error('[Synthesize] ❌ Browser research error:', error.message);
+        return { success: false, error: error.message };
+    }
+}
+
 async function fetchRealtimeData(question) {
     const keys = getGeminiKeys();
     if (keys.length === 0) return null;
@@ -513,11 +596,27 @@ export default async function handler(req, res) {
         console.log(`[Synthesize] 🧠 New request`);
         console.log('═══════════════════════════════════════════════════════════════');
 
-        // Step 1: Check if question needs real-time data
+        // Step 0: Check if browser research is needed
+        let browserResult = null;
+        let browserUsed = false;
+        if (needsBrowserResearch(userPrompt)) {
+            console.log('[Synthesize] 🖥️ Step 0: Browser research triggered...');
+            browserResult = await executeBrowserResearch(userPrompt);
+            if (browserResult.success) {
+                browserUsed = true;
+                console.log('[Synthesize] ✅ Browser research successful');
+            }
+        }
+
+        // Step 1: Check if question needs real-time data (only if browser didn't work)
         let realtimeData = null;
-        if (needsRealtimeData(userPrompt)) {
+        if (!browserUsed && needsRealtimeData(userPrompt)) {
             console.log('[Synthesize] 🌐 Step 1: Fetching real-time data...');
             realtimeData = await fetchRealtimeData(userPrompt);
+        } else if (browserUsed) {
+            // Use browser content as realtime data
+            realtimeData = browserResult?.results?.content || null;
+            console.log('[Synthesize] 📊 Step 1: Using browser content as real-time data');
         } else {
             console.log('[Synthesize] 📊 Step 1: No real-time data needed');
         }
@@ -573,7 +672,12 @@ ${realtimeData}
         res.status(200).json({
             success: true,
             data: response,
-            meta: { questionType, model: selectedModel.split('/')[1]?.split(':')[0] }
+            meta: {
+                questionType,
+                model: selectedModel.split('/')[1]?.split(':')[0],
+                browserUsed: browserUsed,
+                screenshot: browserResult?.results?.screenshot || null
+            }
         });
     } catch (error) {
         console.error('[Synthesize] ❌ Error:', error.message);
