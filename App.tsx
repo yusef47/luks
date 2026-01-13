@@ -210,6 +210,7 @@ const App: React.FC = () => {
   const [viewedStep, setViewedStep] = useState<StepResult | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [cycleCount, setCycleCount] = useState(1);
+  const [aiBrowserScreenshot, setAiBrowserScreenshot] = useState<string | null>(null);
 
   // ========== FILE ATTACHMENT ==========
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -576,6 +577,10 @@ ${fileAnalysis}
               if (synthResult.browserUsed) {
                 console.log('[App] 🖥️ Browser was used - auto-showing Virtual Computer');
                 setShowComputer(true);
+                // Save the screenshot from AI research
+                if (synthResult.screenshot) {
+                  setAiBrowserScreenshot(synthResult.screenshot);
+                }
               }
 
               // Extract the data for further processing
@@ -730,6 +735,7 @@ ${fileAnalysis}
                   <VirtualComputer
                     viewedStep={viewedStep}
                     t={t as any}
+                    aiBrowserScreenshot={aiBrowserScreenshot}
                   />
                 </div>
               </div>

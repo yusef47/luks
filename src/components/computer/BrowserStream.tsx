@@ -14,9 +14,10 @@ import {
 interface BrowserStreamProps {
     isActive: boolean;
     onStatusChange?: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void;
+    aiScreenshot?: string | null;
 }
 
-export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatusChange }) => {
+export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatusChange, aiScreenshot = null }) => {
     const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
     const [screenshot, setScreenshot] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -61,6 +62,17 @@ export const BrowserStream: React.FC<BrowserStreamProps> = ({ isActive, onStatus
         }
         checkWorker();
     }, [isActive, checkWorker]);
+
+    // Use AI screenshot when it arrives
+    useEffect(() => {
+        if (aiScreenshot) {
+            console.log('[BrowserStream] 📸 Received AI screenshot, displaying...');
+            setScreenshot(aiScreenshot);
+            setStatus('connected');
+            onStatusChange?.('connected');
+            setLastAction('🤖 لوكاس قام بالبحث - هذه النتيجة');
+        }
+    }, [aiScreenshot, onStatusChange]);
 
     // Execute browser action
     const executeAction = async (action: string, params: any = {}) => {

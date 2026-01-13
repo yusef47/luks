@@ -13,9 +13,10 @@ interface VirtualComputerProps {
   viewedStep: StepResult | null;
   t: (key: string) => string;
   isBrowserActive?: boolean;
+  aiBrowserScreenshot?: string | null;
 }
 
-export const VirtualComputer: React.FC<VirtualComputerProps> = ({ viewedStep, t, isBrowserActive = false }) => {
+export const VirtualComputer: React.FC<VirtualComputerProps> = ({ viewedStep, t, isBrowserActive = false, aiBrowserScreenshot = null }) => {
   const [activeTab, setActiveTab] = useState<'agent' | 'browser'>('agent');
   const [browserStatus, setBrowserStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
 
@@ -50,8 +51,8 @@ export const VirtualComputer: React.FC<VirtualComputerProps> = ({ viewedStep, t,
         <button
           onClick={() => setActiveTab('agent')}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'agent'
-              ? 'text-[var(--primary-color)] border-b-2 border-[var(--primary-color)] bg-[var(--bg-color)]'
-              : 'text-[var(--text-secondary-color)] hover:text-[var(--text-color)]'
+            ? 'text-[var(--primary-color)] border-b-2 border-[var(--primary-color)] bg-[var(--bg-color)]'
+            : 'text-[var(--text-secondary-color)] hover:text-[var(--text-color)]'
             }`}
         >
           <Brain className="w-4 h-4" />
@@ -60,8 +61,8 @@ export const VirtualComputer: React.FC<VirtualComputerProps> = ({ viewedStep, t,
         <button
           onClick={() => setActiveTab('browser')}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'browser'
-              ? 'text-[var(--primary-color)] border-b-2 border-[var(--primary-color)] bg-[var(--bg-color)]'
-              : 'text-[var(--text-secondary-color)] hover:text-[var(--text-color)]'
+            ? 'text-[var(--primary-color)] border-b-2 border-[var(--primary-color)] bg-[var(--bg-color)]'
+            : 'text-[var(--text-secondary-color)] hover:text-[var(--text-color)]'
             }`}
         >
           <Monitor className="w-4 h-4" />
@@ -83,6 +84,7 @@ export const VirtualComputer: React.FC<VirtualComputerProps> = ({ viewedStep, t,
             <BrowserStream
               isActive={isBrowserActive || activeTab === 'browser'}
               onStatusChange={setBrowserStatus}
+              aiScreenshot={aiBrowserScreenshot}
             />
           </div>
         )}
