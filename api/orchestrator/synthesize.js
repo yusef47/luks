@@ -280,7 +280,86 @@ async function executeBrowserResearch(query) {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+//                    TAVILY SEARCH API (PRIMARY)
+// ═══════════════════════════════════════════════════════════════
+
+async function fetchTavilyData(question) {
+    const tavilyKey = process.env.TAVILY_API_KEY;
+    if (!tavilyKey) {
+        console.log('[Synthesize] ⚠️ No Tavily API key found');
+        return null;
+    }
+
+    console.log('[Synthesize] 🔍 Fetching data with Tavily Search...');
+
+    try {
+        const response = await fetch('https://api.tavily.com/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: tavilyKey,
+                query: question,
+                search_depth: 'advanced',
+                include_answer: true,
+                include_raw_content: false,
+                max_results: 5
+            })
+        });
+
+        if (!response.ok) {
+            console.log(`[Synthesize] ⚠️ Tavily returned ${response.status}`);
+            return null;
+        }
+
+        const data = await response.json();
+
+        if (data.answer || data.results?.length > 0) {
+            console.log('[Synthesize] ✅ Tavily search successful');
+
+            // Format the results
+            let content = '';
+
+            // Add Tavily's AI-generated answer if available
+            if (data.answer) {
+                content += `**الإجابة:** ${data.answer}\n\n`;
+            }
+
+            // Add sources
+            if (data.results && data.results.length > 0) {
+                content += `**المصادر:**\n`;
+                data.results.forEach((result, i) => {
+                    content += `${i + 1}. [${result.title}](${result.url})\n`;
+                    if (result.content) {
+                        content += `   ${result.content.substring(0, 200)}...\n`;
+                    }
+                });
+            }
+
+            return content;
+        }
+
+        return null;
+    } catch (error) {
+        console.error('[Synthesize] ❌ Tavily error:', error.message);
+        return null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    GEMINI GOOGLE SEARCH (FALLBACK)
+// ═══════════════════════════════════════════════════════════════
+
 async function fetchRealtimeData(question) {
+    // Try Tavily first (primary)
+    const tavilyResult = await fetchTavilyData(question);
+    if (tavilyResult) {
+        return tavilyResult;
+    }
+
+    // Fallback to Gemini Google Search
+    console.log('[Synthesize] 🔄 Tavily failed, falling back to Gemini Google Search...');
+
     const keys = getGeminiKeys();
     if (keys.length === 0) return null;
 
