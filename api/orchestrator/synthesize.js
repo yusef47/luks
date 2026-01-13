@@ -680,9 +680,11 @@ export default async function handler(req, res) {
         console.log(`[Synthesize] 🧠 New request`);
         console.log('═══════════════════════════════════════════════════════════════');
 
-        // Step 0: Check if browser research is needed
+        // Step 0: Browser Agent (DISABLED FOR NOW - uncomment when ready)
+        // NOTE: Browser agent is disabled. Using Tavily + Gemini for search instead.
         let browserResult = null;
         let browserUsed = false;
+        /*
         if (needsBrowserResearch(userPrompt)) {
             console.log('[Synthesize] 🖥️ Step 0: Browser research triggered...');
             browserResult = await executeBrowserResearch(userPrompt);
@@ -691,6 +693,7 @@ export default async function handler(req, res) {
                 console.log('[Synthesize] ✅ Browser research successful');
             }
         }
+        */
 
         // Step 1: Check if question needs real-time data (only if browser didn't work)
         let realtimeData = null;
