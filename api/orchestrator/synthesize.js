@@ -208,13 +208,24 @@ const BROWSER_KEYWORDS = [
 ];
 
 function needsBrowserResearch(question) {
+    console.log(`[Synthesize] 🔍 Checking browser keywords for: "${question}"`);
     const lowerQuestion = question.toLowerCase();
+
     for (const keyword of BROWSER_KEYWORDS) {
-        if (lowerQuestion.includes(keyword.toLowerCase())) {
-            console.log(`[Synthesize] 🖥️ Browser research needed: keyword "${keyword}" found`);
+        const lowerKeyword = keyword.toLowerCase();
+        if (lowerQuestion.includes(lowerKeyword)) {
+            console.log(`[Synthesize] 🖥️ Browser research needed: keyword "${keyword}" found!`);
             return true;
         }
     }
+
+    // Also check each Arabic character separately to debug
+    const hasArabicSearch = /ابحث|جيب|اسعار|ذهب|أسعار/.test(question);
+    if (hasArabicSearch) {
+        console.log(`[Synthesize] 🖥️ Browser research needed via regex match!`);
+        return true;
+    }
+
     console.log(`[Synthesize] ℹ️ No browser keywords found in: "${question.substring(0, 100)}"`);
     return false;
 }
