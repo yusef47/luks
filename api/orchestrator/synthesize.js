@@ -443,9 +443,9 @@ async function fetchTavilyData(question) {
             body: JSON.stringify({
                 api_key: tavilyKey,
                 query: question,
-                search_depth: 'advanced',  // Advanced for full content
+                search_depth: 'basic',     // Revert to basic (Developer Plan limit)
                 include_answer: true,
-                include_raw_content: true, // Get full page content for comparison
+                include_raw_content: false, // Revert to false to fix 400 error
                 max_results: 5
             })
         });
