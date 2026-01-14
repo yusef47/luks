@@ -281,11 +281,93 @@ async function executeBrowserResearch(query) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    TAVILY SEARCH API (PRIMARY)
+//                    SMART VERIFICATION SYSTEM (INLINE)
 // ═══════════════════════════════════════════════════════════════
 
-// Import Smart Verification System
-import { runSmartVerification, needsVerification } from '../utils/smart-verify.js';
+// Level 1: Extract numbers for comparison
+function extractNumbers(text) {
+    const numbers = [];
+    const matches = text.match(/(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/g);
+    if (matches) {
+        numbers.push(...matches.map(n => parseFloat(n.replace(/,/g, ''))));
+    }
+    return numbers.filter(n => !isNaN(n));
+}
+
+// Level 1: Compare sources
+function compareSources(tavilyResults) {
+    if (!tavilyResults || tavilyResults.length < 2) {
+        return { hasConsensus: true, confidence: 'low', conflicts: [] };
+    }
+    const allNumbers = {};
+    const conflicts = [];
+    tavilyResults.forEach((result) => {
+        const numbers = extractNumbers(result.content || '');
+        numbers.forEach(num => {
+            if (!allNumbers[num]) allNumbers[num] = [];
+            allNumbers[num].push({ source: result.title });
+        });
+    });
+    const numberList = Object.keys(allNumbers).map(Number).sort((a, b) => a - b);
+    for (let i = 0; i < numberList.length - 1; i++) {
+        const n1 = numberList[i], n2 = numberList[i + 1];
+        const diff = Math.abs(n1 - n2) / Math.max(n1, n2);
+        if (diff > 0 && diff < 0.15) {
+            conflicts.push({ values: [n1, n2], difference: `${(diff * 100).toFixed(1)}%` });
+        }
+    }
+    return { hasConsensus: conflicts.length === 0, confidence: conflicts.length === 0 ? 'high' : conflicts.length <= 2 ? 'medium' : 'low', conflicts };
+}
+
+// Level 2: Verify gold math
+function verifyMathematics(text) {
+    const issues = [];
+    if (/ذهب|gold|عيار/i.test(text)) {
+        const gramMatch = text.match(/الجرام[:\s]+([0-9,\.]+)/);
+        const ounceMatch = text.match(/الأونصة[:\s]+([0-9,\.]+)/);
+        if (gramMatch && ounceMatch) {
+            const gramPrice = parseFloat(gramMatch[1].replace(/,/g, ''));
+            const ouncePrice = parseFloat(ounceMatch[1].replace(/,/g, ''));
+            const expected = gramPrice * 31.1035;
+            if (Math.abs(expected - ouncePrice) / expected > 0.1) {
+                issues.push({ message: `سعر الأونصة غير متسق: المتوقع ${expected.toFixed(0)} بينما المذكور ${ouncePrice}` });
+            }
+        }
+    }
+    return { isConsistent: issues.length === 0, issues };
+}
+
+// Level 4: Generate notes
+function generateVerificationNotes(sourceResult, mathResult) {
+    const notes = [];
+    if (!sourceResult.hasConsensus && sourceResult.conflicts.length > 0) {
+        notes.push(`⚠️ تم رصد تضارب في الأرقام بين ${sourceResult.conflicts.length} مصدر`);
+    }
+    if (!mathResult.isConsistent) {
+        mathResult.issues.forEach(i => notes.push(`🧮 ${i.message}`));
+    }
+    if (sourceResult.confidence === 'low') {
+        notes.push('💡 يُنصح بالتحقق من هذه المعلومات من مصادر رسمية');
+    }
+    return notes;
+}
+
+// Main verification function
+function runSmartVerification(tavilyResults, responseText, question) {
+    if (!/سعر|أسعار|price|\d+|اليوم|today/.test(question)) {
+        return { verified: true, skipped: true, notes: [] };
+    }
+    console.log('[SmartVerify] 🔍 Running verification...');
+    const sourceComparison = compareSources(tavilyResults);
+    const mathematical = verifyMathematics(responseText);
+    const notes = generateVerificationNotes(sourceComparison, mathematical);
+    console.log(`[SmartVerify] ✅ Done. Confidence: ${sourceComparison.confidence}, Notes: ${notes.length}`);
+    return { verified: true, skipped: false, sourceComparison, mathematical, notes, overallConfidence: sourceComparison.confidence };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    TAVILY SEARCH API (PRIMARY)
+// ═══════════════════════════════════════════════════════════════
 
 async function fetchTavilyData(question) {
     const tavilyKey = process.env.TAVILY_API_KEY;
