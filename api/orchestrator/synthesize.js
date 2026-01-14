@@ -319,6 +319,24 @@ function compareSources(tavilyResults) {
     return { hasConsensus: conflicts.length === 0, confidence: conflicts.length === 0 ? 'high' : conflicts.length <= 2 ? 'medium' : 'low', conflicts };
 }
 
+// Level 2: Verify gold math (restored)
+function verifyMathematics(text) {
+    const issues = [];
+    if (/ذهب|gold|عيار/i.test(text)) {
+        const gramMatch = text.match(/الجرام[:\s]+([0-9,\.]+)/);
+        const ounceMatch = text.match(/الأونصة[:\s]+([0-9,\.]+)/);
+        if (gramMatch && ounceMatch) {
+            const gramPrice = parseFloat(gramMatch[1].replace(/,/g, ''));
+            const ouncePrice = parseFloat(ounceMatch[1].replace(/,/g, ''));
+            const expected = gramPrice * 31.1035;
+            if (Math.abs(expected - ouncePrice) / expected > 0.1) {
+                issues.push({ message: `سعر الأونصة غير متسق: المتوقع ${expected.toFixed(0)} بينما المذكور ${ouncePrice}` });
+            }
+        }
+    }
+    return { isConsistent: issues.length === 0, issues };
+}
+
 // Level 3: Verify temporal relevance (Enhanced)
 function verifyTemporalRelevance(tavilyResults, maxAgeHours = 48) {
     const now = new Date();
@@ -893,11 +911,14 @@ ${realtimeData}
             response = await callGroq(getSystemPrompt(), userMessage, conversationHistory);
         }
 
-        // Step 6: Gemini review
+        // Step 6: Gemini review (DISABLED - user requested)
+        // Uncomment to re-enable Gemini polishing
+        /*
         if (response) {
             console.log('[Synthesize] 🔵 Step 6: Gemini reviewing...');
             response = await geminiReviewer(response, userPrompt);
         }
+        */
 
         // Step 7: Smart Verification (4 Levels)
         let verificationResult = null;
