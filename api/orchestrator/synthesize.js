@@ -319,50 +319,108 @@ function compareSources(tavilyResults) {
     return { hasConsensus: conflicts.length === 0, confidence: conflicts.length === 0 ? 'high' : conflicts.length <= 2 ? 'medium' : 'low', conflicts };
 }
 
-// Level 2: Verify gold math
-function verifyMathematics(text) {
-    const issues = [];
-    if (/ذهب|gold|عيار/i.test(text)) {
-        const gramMatch = text.match(/الجرام[:\s]+([0-9,\.]+)/);
-        const ounceMatch = text.match(/الأونصة[:\s]+([0-9,\.]+)/);
-        if (gramMatch && ounceMatch) {
-            const gramPrice = parseFloat(gramMatch[1].replace(/,/g, ''));
-            const ouncePrice = parseFloat(ounceMatch[1].replace(/,/g, ''));
-            const expected = gramPrice * 31.1035;
-            if (Math.abs(expected - ouncePrice) / expected > 0.1) {
-                issues.push({ message: `سعر الأونصة غير متسق: المتوقع ${expected.toFixed(0)} بينما المذكور ${ouncePrice}` });
+// Level 3: Verify temporal relevance (Enhanced)
+function verifyTemporalRelevance(tavilyResults, maxAgeHours = 48) {
+    const now = new Date();
+    const warnings = [];
+    const oldNewsIndicators = [/منذ\s+\d+\s+سنوات/, /في عام\s+\d{4}/, /back in\s+\d{4}/];
+
+    if (!tavilyResults || tavilyResults.length === 0) {
+        return { isRecent: false, warnings: ['لم يتم العثور على مصادر'] };
+    }
+
+    tavilyResults.forEach(result => {
+        let isOld = false;
+        const content = result.content || '';
+
+        // Check for "re-reporting" indicators (e.g., "discovered in 2023")
+        for (const indicator of oldNewsIndicators) {
+            if (indicator.test(content)) {
+                warnings.push(`⚠️ ${result.title}: قد يحتوي على معلومات أرشيفية (تم رصد تواريخ قديمة)`);
+                isOld = true;
+                break;
             }
         }
-    }
-    return { isConsistent: issues.length === 0, issues };
+
+        // Check published date if available
+        if (!isOld && result.published_date) {
+            const pubDate = new Date(result.published_date);
+            const ageHours = (now - pubDate) / (1000 * 60 * 60);
+            if (ageHours > maxAgeHours) {
+                // If it's very old (> 1 year), marked as archive
+                if (ageHours > 24 * 365) {
+                    warnings.push(`📅 ${result.title}: خبر أرشيفي من ${pubDate.getFullYear()}`);
+                } else {
+                    warnings.push(`🕒 ${result.title}: تم نشره منذ ${Math.floor(ageHours)} ساعة`);
+                }
+            }
+        }
+    });
+
+    return {
+        isRecent: warnings.length === 0,
+        warnings
+    };
 }
 
-// Level 4: Generate notes
-function generateVerificationNotes(sourceResult, mathResult) {
+// Level 4: Generate notes (Comprehensive)
+function generateVerificationNotes(sourceResult, mathResult, temporalResult) {
     const notes = [];
+
+    // Level 1: Sources
     if (!sourceResult.hasConsensus && sourceResult.conflicts.length > 0) {
-        notes.push(`⚠️ تم رصد تضارب في الأرقام بين ${sourceResult.conflicts.length} مصدر`);
+        notes.push(`⚠️ تم رصد تضارب في الأرقام بين ${sourceResult.conflicts.length} مصادر`);
+        sourceResult.conflicts.forEach(c => {
+            notes.push(`   - تباين: ${c.difference} بين المصادر`);
+        });
     }
+
+    // Level 2: Math
     if (!mathResult.isConsistent) {
         mathResult.issues.forEach(i => notes.push(`🧮 ${i.message}`));
     }
-    if (sourceResult.confidence === 'low') {
-        notes.push('💡 يُنصح بالتحقق من هذه المعلومات من مصادر رسمية');
+
+    // Level 3: Temporal
+    if (!temporalResult.isRecent) {
+        // Show max 2 temporal warnings to avoid clutter
+        temporalResult.warnings.slice(0, 2).forEach(w => notes.push(w));
+        if (temporalResult.warnings.length > 2) notes.push(`...واحتمالية وجود مصادر قديمة أخرى.`);
     }
+
+    // Level 4: Uncertainty/Confidence
+    if (sourceResult.confidence === 'low' || !temporalResult.isRecent) {
+        notes.push('💡 **تنبيه:** يرجى التأكد من تاريخ المعلومة، قد تكون هناك أخبار قديمة يُعاد تداولها.');
+    }
+
     return notes;
 }
 
 // Main verification function
 function runSmartVerification(tavilyResults, responseText, question) {
-    if (!/سعر|أسعار|price|\d+|اليوم|today/.test(question)) {
+    // Expand triggers to include "discovery", "project", "agreement" to catch the user's examples
+    if (!/سعر|أسعار|price|\d+|اليوم|today|اكتشاف|مشروع|اتفاقية|توقيع/.test(question)) {
         return { verified: true, skipped: true, notes: [] };
     }
-    console.log('[SmartVerify] 🔍 Running verification...');
+
+    console.log('[SmartVerify] 🔍 Running verification (Levels 1-4)...');
+
     const sourceComparison = compareSources(tavilyResults);
     const mathematical = verifyMathematics(responseText);
-    const notes = generateVerificationNotes(sourceComparison, mathematical);
-    console.log(`[SmartVerify] ✅ Done. Confidence: ${sourceComparison.confidence}, Notes: ${notes.length}`);
-    return { verified: true, skipped: false, sourceComparison, mathematical, notes, overallConfidence: sourceComparison.confidence };
+    const temporal = verifyTemporalRelevance(tavilyResults); // Now calling Level 3
+
+    const notes = generateVerificationNotes(sourceComparison, mathematical, temporal);
+
+    console.log(`[SmartVerify] ✅ Done. Notes generated: ${notes.length}`);
+
+    return {
+        verified: true,
+        skipped: false,
+        sourceComparison,
+        mathematical,
+        temporal,
+        notes,
+        overallConfidence: sourceComparison.confidence
+    };
 }
 
 // ═══════════════════════════════════════════════════════════════
