@@ -284,6 +284,9 @@ async function executeBrowserResearch(query) {
 //                    TAVILY SEARCH API (PRIMARY)
 // ═══════════════════════════════════════════════════════════════
 
+// Import Smart Verification System
+import { runSmartVerification, needsVerification } from '../utils/smart-verify.js';
+
 async function fetchTavilyData(question) {
     const tavilyKey = process.env.TAVILY_API_KEY;
     if (!tavilyKey) {
@@ -291,7 +294,7 @@ async function fetchTavilyData(question) {
         return null;
     }
 
-    console.log('[Synthesize] 🔍 Fetching data with Tavily Search...');
+    console.log('[Synthesize] 🔍 Fetching data with Tavily Search (Advanced)...');
 
     try {
         const response = await fetch('https://api.tavily.com/search', {
@@ -300,9 +303,9 @@ async function fetchTavilyData(question) {
             body: JSON.stringify({
                 api_key: tavilyKey,
                 query: question,
-                search_depth: 'advanced',
+                search_depth: 'advanced',  // Advanced for full content
                 include_answer: true,
-                include_raw_content: false,
+                include_raw_content: true, // Get full page content for comparison
                 max_results: 5
             })
         });
@@ -315,7 +318,7 @@ async function fetchTavilyData(question) {
         const data = await response.json();
 
         if (data.answer || data.results?.length > 0) {
-            console.log('[Synthesize] ✅ Tavily search successful');
+            console.log(`[Synthesize] ✅ Tavily search successful (${data.results?.length || 0} sources)`);
 
             // Format the results
             let content = '';
@@ -325,18 +328,23 @@ async function fetchTavilyData(question) {
                 content += `**الإجابة:** ${data.answer}\n\n`;
             }
 
-            // Add sources
+            // Add sources with more context
             if (data.results && data.results.length > 0) {
-                content += `**المصادر:**\n`;
+                content += `**المصادر (${data.results.length}):**\n`;
                 data.results.forEach((result, i) => {
                     content += `${i + 1}. [${result.title}](${result.url})\n`;
                     if (result.content) {
-                        content += `   ${result.content.substring(0, 200)}...\n`;
+                        content += `   ${result.content.substring(0, 300)}...\n`;
                     }
                 });
             }
 
-            return content;
+            // Return both formatted content and raw results for verification
+            return {
+                content,
+                rawResults: data.results || [],
+                answer: data.answer || null
+            };
         }
 
         return null;
@@ -354,7 +362,9 @@ async function fetchRealtimeData(question) {
     // Try Tavily first (primary)
     const tavilyResult = await fetchTavilyData(question);
     if (tavilyResult) {
-        return tavilyResult;
+        // Store raw results globally for verification later
+        global._tavilyRawResults = tavilyResult.rawResults;
+        return tavilyResult.content;
     }
 
     // Fallback to Gemini Google Search
@@ -749,6 +759,28 @@ ${realtimeData}
             response = await geminiReviewer(response, userPrompt);
         }
 
+        // Step 7: Smart Verification (4 Levels)
+        let verificationResult = null;
+        if (response && global._tavilyRawResults) {
+            console.log('[Synthesize] 🔍 Step 7: Running Smart Verification...');
+            verificationResult = runSmartVerification(
+                global._tavilyRawResults,
+                response,
+                userPrompt
+            );
+
+            // Append verification notes to response if there are warnings
+            if (verificationResult.notes && verificationResult.notes.length > 0) {
+                response += '\n\n---\n**ملاحظات التحقق:**\n';
+                verificationResult.notes.forEach(note => {
+                    response += `• ${note}\n`;
+                });
+            }
+
+            // Clear the global cache
+            delete global._tavilyRawResults;
+        }
+
         if (!response) {
             response = lang === 'ar' ? 'عذراً، حدث خطأ في معالجة الطلب.' : 'Sorry, an error occurred.';
         }
@@ -763,7 +795,11 @@ ${realtimeData}
                 questionType,
                 model: selectedModel.split('/')[1]?.split(':')[0],
                 browserUsed: browserUsed,
-                screenshot: browserResult?.results?.screenshot || null
+                screenshot: browserResult?.results?.screenshot || null,
+                verification: verificationResult ? {
+                    confidence: verificationResult.overallConfidence,
+                    notesCount: verificationResult.notes?.length || 0
+                } : null
             }
         });
     } catch (error) {
