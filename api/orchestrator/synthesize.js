@@ -518,54 +518,99 @@ async function fetchTavilyData(question) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    RAG ENGINE (Manus Specification)
+//                    RAG ENGINE (Manus Blueprint - Complete)
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Decompose complex question into simple, targeted sub-queries
+ * STEP 1: Use MiMo to decompose question into search queries (Manus Blueprint)
+ * MiMo is smarter than regex patterns for complex questions
  */
-function ragDecomposeQuestion(question) {
+async function ragDecomposeWithMiMo(question) {
+    const keys = getOpenRouterKeys();
+    if (keys.length === 0) {
+        // Fallback to basic decomposition
+        return ragBasicDecompose(question);
+    }
+
+    const decomposerPrompt = `أنت خبير في محركات البحث. حول سؤال المستخدم التالي إلى 3 استعلامات بحث بسيطة ومختلفة باللغة الإنجليزية.
+
+سؤال المستخدم: "${question.substring(0, 300)}"
+
+أخرج قائمة من 3 استعلامات بحث فقط، كل استعلام في سطر جديد.
+لا تضف أي شرح أو ترقيم، فقط الاستعلامات:`;
+
+    try {
+        console.log('[RAG] Using MiMo for query decomposition...');
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${keys[0]}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://luks-pied.vercel.app',
+                'X-Title': 'Lukas AI'
+            },
+            body: JSON.stringify({
+                model: MODELS.ANALYZER,
+                messages: [{ role: 'user', content: decomposerPrompt }],
+                max_tokens: 150,
+            })
+        });
+
+        if (res.ok) {
+            const d = await res.json();
+            const text = d.choices?.[0]?.message?.content?.trim() || '';
+            const queries = text.split('\n')
+                .map(q => q.trim())
+                .filter(q => q.length > 10 && !q.startsWith('-') && !q.match(/^\d/))
+                .slice(0, 3);
+
+            if (queries.length > 0) {
+                console.log(`[RAG] MiMo generated ${queries.length} queries`);
+                return queries;
+            }
+        }
+    } catch (e) {
+        console.log(`[RAG] MiMo decomposition failed: ${e.message}`);
+    }
+
+    return ragBasicDecompose(question);
+}
+
+/**
+ * Fallback basic decomposition (regex-based)
+ */
+function ragBasicDecompose(question) {
     const queries = [];
 
-    // Detect entities and create focused queries
-    const hasNvidia = /nvidia|إنفيديا/i.test(question);
-    const hasChina = /صين|الصين|china/i.test(question);
-    const hasRestrictions = /قيود|عقوبات|حظر|restrictions|ban|export/i.test(question);
-    const hasChips = /رقائق|chips|AI|semiconductor/i.test(question);
-    const askAboutCompanies = /شركات|companies|بدائل|alternatives/i.test(question);
-
-    // Query 1: Policy/restrictions focus
-    if (hasRestrictions || hasChips) {
-        queries.push("US AI chip export restrictions China policy 2025 2026 latest news");
+    // Extract key topics
+    if (/nvidia|إنفيديا/i.test(question)) {
+        queries.push("Nvidia China AI chip export restrictions 2025 2026");
+    }
+    if (/قيود|restrictions|حظر|ban/i.test(question)) {
+        queries.push("US AI chip export ban China policy latest news");
+    }
+    if (/شركات صينية|chinese companies|بدائل/i.test(question)) {
+        queries.push("Chinese AI chip companies alternatives Huawei SMIC 2025");
     }
 
-    // Query 2: Company-specific
-    if (hasNvidia && hasChina) {
-        queries.push("Nvidia China chip ban H100 H200 strategy 2025 2026");
-    }
-
-    // Query 3: Alternatives/competitors
-    if (askAboutCompanies || question.includes('بدائل')) {
-        queries.push("Chinese AI chip companies alternatives Huawei SMIC Cambricon 2025");
-    }
-
-    // Fallback
     if (queries.length === 0) {
-        queries.push(`${question.substring(0, 150)} latest news 2025 2026`);
+        queries.push(`${question.substring(0, 100)} latest news 2025`);
     }
 
-    console.log(`[RAG] Decomposed into ${queries.length} queries`);
+    console.log(`[RAG] Basic decomposition: ${queries.length} queries`);
     return queries.slice(0, 3);
 }
 
 /**
- * Search Tavily with multiple queries and collect full text
+ * STEP 2: Search & Collect (Manus Blueprint)
+ * Get full content from 5 results × 3 queries = up to 15 articles
  */
 async function ragSearchAndCollect(queries) {
     const tavilyKey = process.env.TAVILY_API_KEY;
     if (!tavilyKey) return null;
 
-    const allResults = [];
+    let fullContent = "";
+    let sourceCount = 0;
 
     for (let i = 0; i < queries.length; i++) {
         const query = queries[i];
@@ -588,25 +633,23 @@ async function ragSearchAndCollect(queries) {
             if (response.ok) {
                 const data = await response.json();
 
+                // Add Tavily's answer summary
                 if (data.answer) {
-                    allResults.push({
-                        type: 'answer',
-                        content: data.answer,
-                        source: 'Tavily AI'
-                    });
+                    fullContent += `--- ملخص البحث ---\n${data.answer}\n\n`;
                 }
 
+                // Add each source with full content (Manus format: --- NEW SOURCE ---)
                 if (data.results) {
-                    data.results.forEach((r) => {
-                        allResults.push({
-                            type: 'source',
-                            sourceId: allResults.length + 1,
-                            title: r.title,
-                            url: r.url,
-                            content: r.content || '',
-                            publishedDate: r.published_date || 'Unknown'
-                        });
-                    });
+                    for (const r of data.results) {
+                        sourceCount++;
+                        fullContent += `--- NEW SOURCE ---\n`;
+                        fullContent += `العنوان: ${r.title}\n`;
+                        fullContent += `الرابط: ${r.url}\n`;
+                        if (r.published_date) {
+                            fullContent += `التاريخ: ${r.published_date}\n`;
+                        }
+                        fullContent += `المحتوى:\n${r.content || 'غير متوفر'}\n\n`;
+                    }
                 }
             }
         } catch (e) {
@@ -614,73 +657,65 @@ async function ragSearchAndCollect(queries) {
         }
     }
 
-    console.log(`[RAG] Collected ${allResults.length} sources`);
-    return allResults;
+    console.log(`[RAG] Collected ${sourceCount} sources`);
+    return { content: fullContent, sourceCount };
 }
 
 /**
- * Format results into labeled context for LLM
+ * STEP 3: Build the "Golden Prompt" (Manus Blueprint - EXACT TEXT)
+ * This is the most important prompt - strict and unambiguous
  */
-function ragFormatContext(results) {
-    if (!results || results.length === 0) return null;
+function ragBuildGoldenPrompt(sourcesContent, originalQuestion) {
+    return `أنت مساعد باحث متخصص في التلخيص الدقيق. مهمتك هي الإجابة على "سؤال المستخدم الأصلي" باستخدام "البيانات المجمعة من المصادر" فقط.
 
-    let context = "═══════════════════════════════════════════════════════════════\n";
-    context += "المصادر المتاحة (هذا هو مصدرك الوحيد للإجابة):\n";
-    context += "═══════════════════════════════════════════════════════════════\n\n";
+اتبع هذه القواعد بصرامة مطلقة:
+1. ممنوع منعاً باتاً إضافة أي معلومة، أي تاريخ، أي اسم، أو أي رقم غير موجود حرفياً في "البيانات المجمعة من المصادر".
+2. إذا كانت البيانات المجمعة لا تحتوي على إجابة لجزء من السؤال، يجب أن تقول بوضوح: "لم أجد معلومات كافية في المصادر المتاحة حول هذا الجزء."
+3. لا تذكر أسماء المصادر (مثل "المصدر 1") إلا إذا كنت ستذكر رابط المصدر كاملاً.
+4. لا تستخدم معرفتك أو ذاكرتك الداخلية. اعتمد 100% على النصوص التالية فقط.
 
-    results.forEach((r) => {
-        if (r.type === 'answer') {
-            context += `[ملخص تلقائي]: ${r.content}\n\n`;
-        } else {
-            context += `[المصدر ${r.sourceId}] ${r.title}\n`;
-            context += `التاريخ: ${r.publishedDate}\n`;
-            context += `المحتوى: ${r.content}\n`;
-            context += `الرابط: ${r.url}\n\n`;
-        }
-    });
+---
+سؤال المستخدم الأصلي:
+${originalQuestion}
+---
+البيانات المجمعة من المصادر:
+${sourcesContent}
+---
 
-    context += "═══════════════════════════════════════════════════════════════\n";
-    return context;
+الآن، قم بصياغة إجابة دقيقة وموجزة.`;
 }
 
 /**
- * Build strict summarizer prompt (Manus specification)
- */
-function ragBuildPrompt(context, question) {
-    return `أنت آلة تلخيص فقط. مهمتك الوحيدة هي قراءة النصوص المقدمة ودمجها في إجابة.
-
-قواعد صارمة لا يمكن كسرها:
-1. اقتبس فقط من النص المقدم أدناه
-2. لا تضف أي معلومة غير موجودة حرفياً في النصوص
-3. اذكر رقم المصدر بين قوسين بعد كل جملة [المصدر X]
-4. إذا كانت النصوص لا تجيب، قل: "لم يتوفر في المصادر"
-5. لا تستخدم أي معرفة سابقة
-
-${context}
-
-السؤال: ${question}
-
-لخص المصادر أعلاه للإجابة:`;
-}
-
-/**
- * Main RAG pipeline
+ * STEP 4: Main RAG Pipeline (Manus Blueprint)
  */
 async function processWithRAG(question) {
-    console.log('[RAG] Starting pipeline...');
+    console.log('[RAG] ═══════════════════════════════════════════════════');
+    console.log('[RAG] Starting Manus Blueprint RAG Pipeline...');
 
-    const queries = ragDecomposeQuestion(question);
-    const results = await ragSearchAndCollect(queries);
+    // Step 1: Decompose with MiMo
+    const queries = await ragDecomposeWithMiMo(question);
+    console.log(`[RAG] Step 1 Complete: ${queries.length} search queries`);
 
-    if (!results || results.length === 0) {
+    // Step 2: Search & Collect
+    const searchResult = await ragSearchAndCollect(queries);
+    if (!searchResult || !searchResult.content) {
+        console.log('[RAG] Step 2 Failed: No results');
         return { success: false, prompt: null, sourceCount: 0 };
     }
+    console.log(`[RAG] Step 2 Complete: ${searchResult.sourceCount} sources collected`);
 
-    const context = ragFormatContext(results);
-    const prompt = ragBuildPrompt(context, question);
+    // Step 3: Build Golden Prompt
+    const prompt = ragBuildGoldenPrompt(searchResult.content, question);
+    console.log('[RAG] Step 3 Complete: Golden Prompt built');
 
-    console.log('[RAG] Pipeline complete');
-    return { success: true, prompt: prompt, sourceCount: results.length };
+    console.log('[RAG] ═══════════════════════════════════════════════════');
+    console.log('[RAG] Pipeline Complete! Ready for summarization.');
+
+    return {
+        success: true,
+        prompt: prompt,
+        sourceCount: searchResult.sourceCount
+    };
 }
 
 // ═══════════════════════════════════════════════════════════════
