@@ -954,50 +954,36 @@ export default async function handler(req, res) {
         const needsRealtime = analysis.needsRealtime;
         console.log(`[Synthesize] 🎯 MiMo decided: Type=${questionType}, NeedsRealtime=${needsRealtime}`);
 
-        // Step 2: Fetch real-time data if MiMo says we need it
-        let realtimeData = null;
+        // Step 2: Use RAG Pipeline if real-time data needed
+        let userMessage;
+        let ragUsed = false;
+
         if (needsRealtime) {
-            console.log('[Synthesize] 🌐 Step 2: Fetching real-time data (MiMo requested)...');
-            realtimeData = await fetchRealtimeData(userPrompt);
+            console.log('[Synthesize] 🔄 Step 2: Running RAG Pipeline...');
+            const { processWithRAG } = require('./rag-engine.js');
+            const ragResult = await processWithRAG(userPrompt);
+
+            if (ragResult.success) {
+                userMessage = ragResult.prompt;  // Use the strict summarizer prompt
+                ragUsed = true;
+                console.log(`[Synthesize] ✅ RAG Pipeline complete: ${ragResult.sourceCount} sources`);
+            } else {
+                userMessage = userPrompt;
+                console.log('[Synthesize] ⚠️ RAG Pipeline failed, using direct question');
+            }
         } else {
-            console.log('[Synthesize] 📊 Step 2: No real-time data needed (MiMo decided)');
+            userMessage = userPrompt;
+            console.log('[Synthesize] 📊 Step 2: No RAG needed (simple question)');
+        }
+
+        // Add any additional results text
+        if (resultsText && !ragUsed) {
+            userMessage += `\n\nالبيانات المتاحة:\n${resultsText}`;
         }
 
         // Step 3: Select best model based on question type
         const selectedModel = selectModel(questionType);
         console.log(`[Synthesize] 🎯 Step 3: Selected model: ${selectedModel.split('/')[1]?.split(':')[0]} for type: ${questionType}`);
-
-        // Step 4: Build STRICT summarizer message (Manus approach)
-        let userMessage;
-        if (realtimeData) {
-            // STRICT SUMMARIZER MODE - Model can ONLY use provided data
-            userMessage = `أنت ملخّص بيانات فقط. لا تضف أي معلومة من ذاكرتك.
-
-═══════════════════════════════════════════════════════════════
-السؤال الأصلي: ${userPrompt}
-═══════════════════════════════════════════════════════════════
-
-═══════════════════════════════════════════════════════════════
-البيانات المتاحة من الإنترنت (هذا هو مصدرك الوحيد):
-═══════════════════════════════════════════════════════════════
-${realtimeData}
-═══════════════════════════════════════════════════════════════
-
-مهمتك:
-1. لخص البيانات أعلاه فقط للإجابة على السؤال
-2. لا تضف أي معلومة غير موجودة في النص أعلاه
-3. إذا لم تجد إجابة لجزء من السؤال، قل: "لم أجد معلومات حول هذا"
-4. اذكر المصدر مع كل معلومة
-5. لا تستخدم ذاكرتك أو معرفتك السابقة أبداً
-
-الآن لخص البيانات أعلاه فقط:`;
-            console.log('[Synthesize] 📦 STRICT SUMMARIZER MODE activated');
-        } else {
-            userMessage = userPrompt;
-        }
-        if (resultsText) {
-            userMessage += `\n\nالبيانات المتاحة:\n${resultsText}`;
-        }
 
         console.log('[Synthesize] 🟣 Step 4: Getting response...');
         let response = await callOpenRouterModel(selectedModel, getSystemPrompt(), userMessage, conversationHistory);
