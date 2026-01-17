@@ -651,62 +651,65 @@ async function ragSearchSingleQuery(query) {
 }
 
 /**
- * STEP 3: Summarize single topic using GEMINI (Manus recommendation)
- * Gemini follows instructions better than MiMo, with temperature=0 for factual output
+ * STEP 3: Summarize single topic using DeepSeek R1 (Testing)
+ * DeepSeek R1 is a reasoning model - might be more accurate
  */
 async function ragSummarizeTopic(topicContent, topicDescription) {
-    const geminiKeys = getGeminiKeys();
-    if (geminiKeys.length === 0 || !topicContent) {
-        console.log('[RAG] No Gemini keys available');
+    const keys = getOpenRouterKeys();
+    if (keys.length === 0 || !topicContent) {
+        console.log('[RAG] No OpenRouter keys available');
         return null;
     }
 
-    const prompt = `أنت ملخص بيانات دقيق. لخص النصوص التالية حول "${topicDescription}".
+    // Manus V3 "Zero-Inference" Prompt - forbids gap-filling
+    const prompt = `أنت آلة نسخ وتلخيص دقيقة جداً. مهمتك هي استخراج المعلومات بشكل حرفي من النصوص المقدمة.
 
-قواعد صارمة يجب اتباعها:
-1. اكتب فقط ما هو موجود في النص أدناه - لا تضف أي شيء
-2. لا تذكر أي تاريخ أو رقم غير موجود في النص
-3. لا تستخدم معرفتك السابقة أبداً
-4. إذا لم تجد معلومات، قل "غير متوفر في النص"
+اتبع هذه القواعد كأنها قانون مطلق:
+1. ممنوع الاستنتاج أو ملء الفراغات: إذا لم يذكر النص تاريخاً محدداً، لا تخترع تاريخاً. قل "لم يذكر المصدر تاريخاً محدداً".
+2. الاقتباس الحرفي: كل معلومة تذكرها يجب أن تكون موجودة بشكل شبه حرفي في النصوص.
+3. لا تستخدم معرفتك أبداً: اعتمد 100% على النصوص التالية فقط.
+4. اعترف بالجهل: إذا كانت البيانات لا تجيب على جزء من السؤال، قل "غير متوفر في المصادر".
+
+الموضوع: ${topicDescription}
 
 النصوص:
 ${topicContent.substring(0, 4000)}
 
-ملخص دقيق (فقط ما في النص):`;
+ملخص حرفي (فقط ما في النص، بدون استنتاج):`;
 
-    // Try each Gemini key
-    for (let i = 0; i < Math.min(geminiKeys.length, 3); i++) {
-        try {
-            console.log(`[RAG] Using Gemini for summarization (key ${i + 1})...`);
-            const res = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKeys[i]}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: {
-                            temperature: 0,  // CRITICAL: No creativity, factual only
-                            maxOutputTokens: 500
-                        }
-                    })
-                }
-            );
+    try {
+        console.log('[RAG] Using DeepSeek R1 for summarization...');
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${keys[0]}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://luks-pied.vercel.app',
+                'X-Title': 'Lukas AI'
+            },
+            body: JSON.stringify({
+                model: 'deepseek/deepseek-r1-0528:free',  // DeepSeek R1 Reasoning
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 600,
+                temperature: 0  // CRITICAL: No creativity
+            })
+        });
 
-            if (res.ok) {
-                const data = await res.json();
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                if (text) {
-                    console.log('[RAG] ✅ Gemini summarization successful');
-                    return text;
-                }
+        if (res.ok) {
+            const data = await res.json();
+            const text = data.choices?.[0]?.message?.content?.trim();
+            if (text) {
+                console.log('[RAG] ✅ DeepSeek R1 summarization successful');
+                return text;
             }
-        } catch (e) {
-            console.log(`[RAG] Gemini key ${i + 1} failed: ${e.message}`);
+        } else {
+            console.log(`[RAG] DeepSeek R1 failed: ${res.status}`);
         }
+    } catch (e) {
+        console.log(`[RAG] DeepSeek R1 error: ${e.message}`);
     }
 
-    console.log('[RAG] All Gemini keys failed');
+    console.log('[RAG] DeepSeek R1 failed, no fallback');
     return null;
 }
 
