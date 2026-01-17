@@ -602,119 +602,160 @@ function ragBasicDecompose(question) {
 }
 
 /**
- * STEP 2: Search & Collect (Manus Blueprint)
- * Get full content from 5 results × 3 queries = up to 15 articles
+ * STEP 2: Search single query and return results (Manus Step-by-Step)
  */
-async function ragSearchAndCollect(queries) {
+async function ragSearchSingleQuery(query) {
     const tavilyKey = process.env.TAVILY_API_KEY;
     if (!tavilyKey) return null;
 
-    let fullContent = "";
-    let sourceCount = 0;
+    console.log(`[RAG] Searching: "${query}"`);
 
-    for (let i = 0; i < queries.length; i++) {
-        const query = queries[i];
-        console.log(`[RAG] Query ${i + 1}/${queries.length}: "${query}"`);
+    try {
+        const response = await fetch('https://api.tavily.com/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: tavilyKey,
+                query: query,
+                search_depth: 'basic',
+                include_answer: true,
+                max_results: 5,
+                days: 7
+            })
+        });
 
-        try {
-            const response = await fetch('https://api.tavily.com/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    api_key: tavilyKey,
-                    query: query,
-                    search_depth: 'basic',
-                    include_answer: true,
-                    max_results: 5,
-                    days: 7
-                })
-            });
+        if (response.ok) {
+            const data = await response.json();
+            let content = "";
 
-            if (response.ok) {
-                const data = await response.json();
+            if (data.answer) {
+                content += `${data.answer}\n\n`;
+            }
 
-                // Add Tavily's answer summary
-                if (data.answer) {
-                    fullContent += `--- ملخص البحث ---\n${data.answer}\n\n`;
-                }
-
-                // Add each source with full content (Manus format: --- NEW SOURCE ---)
-                if (data.results) {
-                    for (const r of data.results) {
-                        sourceCount++;
-                        fullContent += `--- NEW SOURCE ---\n`;
-                        fullContent += `العنوان: ${r.title}\n`;
-                        fullContent += `الرابط: ${r.url}\n`;
-                        if (r.published_date) {
-                            fullContent += `التاريخ: ${r.published_date}\n`;
-                        }
-                        fullContent += `المحتوى:\n${r.content || 'غير متوفر'}\n\n`;
-                    }
+            if (data.results) {
+                for (const r of data.results) {
+                    content += `--- مصدر ---\n`;
+                    content += `${r.title}\n`;
+                    content += `${r.content || ''}\n`;
+                    if (r.url) content += `(${r.url})\n`;
+                    content += `\n`;
                 }
             }
-        } catch (e) {
-            console.log(`[RAG] Query failed: ${e.message}`);
+
+            return content;
         }
+    } catch (e) {
+        console.log(`[RAG] Search failed: ${e.message}`);
     }
-
-    console.log(`[RAG] Collected ${sourceCount} sources`);
-    return { content: fullContent, sourceCount };
+    return null;
 }
 
 /**
- * STEP 3: Build the "Golden Prompt" (Manus Blueprint - EXACT TEXT)
- * This is the most important prompt - strict and unambiguous
+ * STEP 3: Summarize single topic (Manus Step-by-Step)
+ * Focus on ONE topic only to prevent mixing
  */
-function ragBuildGoldenPrompt(sourcesContent, originalQuestion) {
-    return `أنت مساعد باحث متخصص في التلخيص الدقيق. مهمتك هي الإجابة على "سؤال المستخدم الأصلي" باستخدام "البيانات المجمعة من المصادر" فقط.
+async function ragSummarizeTopic(topicContent, topicDescription) {
+    const keys = getOpenRouterKeys();
+    if (keys.length === 0 || !topicContent) return null;
 
-اتبع هذه القواعد بصرامة مطلقة:
-1. ممنوع منعاً باتاً إضافة أي معلومة، أي تاريخ، أي اسم، أو أي رقم غير موجود حرفياً في "البيانات المجمعة من المصادر".
-2. إذا كانت البيانات المجمعة لا تحتوي على إجابة لجزء من السؤال، يجب أن تقول بوضوح: "لم أجد معلومات كافية في المصادر المتاحة حول هذا الجزء."
-3. لا تذكر أسماء المصادر (مثل "المصدر 1") إلا إذا كنت ستذكر رابط المصدر كاملاً.
-4. لا تستخدم معرفتك أو ذاكرتك الداخلية. اعتمد 100% على النصوص التالية فقط.
+    const prompt = `لخص النصوص التالية حول "${topicDescription}" فقط.
 
----
-سؤال المستخدم الأصلي:
-${originalQuestion}
----
-البيانات المجمعة من المصادر:
-${sourcesContent}
----
+قواعد صارمة:
+- اكتب فقط ما هو موجود في النص أدناه
+- لا تضف أي معلومة من خارج النص
+- إذا لم تجد معلومات كافية، قل ذلك
 
-الآن، قم بصياغة إجابة دقيقة وموجزة.`;
+النصوص:
+${topicContent}
+
+ملخص موجز:`;
+
+    try {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${keys[0]}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://luks-pied.vercel.app'
+            },
+            body: JSON.stringify({
+                model: MODELS.SIMPLE,  // Use fast model for sub-summaries
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 500,
+            })
+        });
+
+        if (res.ok) {
+            const d = await res.json();
+            return d.choices?.[0]?.message?.content?.trim() || null;
+        }
+    } catch (e) {
+        console.log(`[RAG] Summary failed: ${e.message}`);
+    }
+    return null;
 }
 
 /**
- * STEP 4: Main RAG Pipeline (Manus Blueprint)
+ * STEP 4: Combine clean summaries (Manus Step-by-Step)
+ */
+function ragBuildFinalPrompt(summaries, originalQuestion) {
+    const combined = summaries.filter(s => s).join('\n\n---\n\n');
+
+    return `أنت مساعد يدمج ملخصات بحثية. ادمج الملخصات التالية في إجابة واحدة متماسكة.
+
+قاعدة واحدة فقط: ادمج ما هو مكتوب أدناه فقط، لا تضف أي شيء من عندك.
+
+السؤال الأصلي: ${originalQuestion}
+
+الملخصات:
+${combined}
+
+الإجابة المدمجة:`;
+}
+
+/**
+ * STEP 5: Main RAG Pipeline (Manus Step-by-Step Summarization)
  */
 async function processWithRAG(question) {
     console.log('[RAG] ═══════════════════════════════════════════════════');
-    console.log('[RAG] Starting Manus Blueprint RAG Pipeline...');
+    console.log('[RAG] Starting Step-by-Step RAG Pipeline...');
 
     // Step 1: Decompose with MiMo
     const queries = await ragDecomposeWithMiMo(question);
-    console.log(`[RAG] Step 1 Complete: ${queries.length} search queries`);
+    console.log(`[RAG] Step 1: ${queries.length} search queries generated`);
 
-    // Step 2: Search & Collect
-    const searchResult = await ragSearchAndCollect(queries);
-    if (!searchResult || !searchResult.content) {
-        console.log('[RAG] Step 2 Failed: No results');
+    // Step 2 & 3: Search each query and summarize separately
+    const summaries = [];
+    for (let i = 0; i < queries.length; i++) {
+        const query = queries[i];
+        console.log(`[RAG] Step 2.${i + 1}: Searching "${query.substring(0, 40)}..."`);
+
+        const searchContent = await ragSearchSingleQuery(query);
+        if (searchContent) {
+            console.log(`[RAG] Step 3.${i + 1}: Summarizing results...`);
+            const summary = await ragSummarizeTopic(searchContent, query);
+            if (summary) {
+                summaries.push(summary);
+                console.log(`[RAG] ✅ Summary ${i + 1} ready`);
+            }
+        }
+    }
+
+    if (summaries.length === 0) {
+        console.log('[RAG] No summaries generated');
         return { success: false, prompt: null, sourceCount: 0 };
     }
-    console.log(`[RAG] Step 2 Complete: ${searchResult.sourceCount} sources collected`);
 
-    // Step 3: Build Golden Prompt
-    const prompt = ragBuildGoldenPrompt(searchResult.content, question);
-    console.log('[RAG] Step 3 Complete: Golden Prompt built');
+    // Step 4: Build final prompt to combine clean summaries
+    const prompt = ragBuildFinalPrompt(summaries, question);
 
     console.log('[RAG] ═══════════════════════════════════════════════════');
-    console.log('[RAG] Pipeline Complete! Ready for summarization.');
+    console.log(`[RAG] Pipeline Complete! ${summaries.length} clean summaries ready`);
 
     return {
         success: true,
         prompt: prompt,
-        sourceCount: searchResult.sourceCount
+        sourceCount: summaries.length * 5  // Approximate
     };
 }
 
