@@ -714,7 +714,7 @@ ${topicContent.substring(0, 4000)}
 ملخص حرفي (فقط ما في النص، بدون استنتاج):`;
 
     try {
-        console.log('[RAG] Using DeepSeek R1 for summarization...');
+        console.log('[RAG] Trying DeepSeek R1...');
         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -724,10 +724,10 @@ ${topicContent.substring(0, 4000)}
                 'X-Title': 'Lukas AI'
             },
             body: JSON.stringify({
-                model: 'deepseek/deepseek-r1-0528:free',  // DeepSeek R1 Reasoning
+                model: 'deepseek/deepseek-r1-0528:free',
                 messages: [{ role: 'user', content: prompt }],
                 max_tokens: 600,
-                temperature: 0  // CRITICAL: No creativity
+                temperature: 0
             })
         });
 
@@ -735,17 +735,47 @@ ${topicContent.substring(0, 4000)}
             const data = await res.json();
             const text = data.choices?.[0]?.message?.content?.trim();
             if (text) {
-                console.log('[RAG] ✅ DeepSeek R1 summarization successful');
+                console.log('[RAG] ✅ DeepSeek R1 success');
                 return text;
             }
         } else {
-            console.log(`[RAG] DeepSeek R1 failed: ${res.status}`);
+            console.log(`[RAG] DeepSeek R1 rate limited (${res.status}), trying LLaMA...`);
         }
     } catch (e) {
-        console.log(`[RAG] DeepSeek R1 error: ${e.message}`);
+        console.log(`[RAG] DeepSeek error: ${e.message}`);
     }
 
-    console.log('[RAG] DeepSeek R1 failed, no fallback');
+    // Fallback to LLaMA 3.3 70B
+    try {
+        console.log('[RAG] Trying LLaMA 3.3 70B...');
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${keys[0]}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://luks-pied.vercel.app'
+            },
+            body: JSON.stringify({
+                model: 'meta-llama/llama-3.3-70b-instruct',
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 600,
+                temperature: 0
+            })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            const text = data.choices?.[0]?.message?.content?.trim();
+            if (text) {
+                console.log('[RAG] ✅ LLaMA 3.3 fallback success');
+                return text;
+            }
+        }
+    } catch (e) {
+        console.log(`[RAG] LLaMA error: ${e.message}`);
+    }
+
+    console.log('[RAG] All summarizers failed');
     return null;
 }
 
