@@ -73,6 +73,15 @@ function getSystemPrompt() {
 ✅ لكن استخدم سياق المحادثة لفهم ما يتحدث عنه المستخدم
 
 ═══════════════════════════════════════════════════════════════
+                        قاعدة المصداقية (مهم جداً!)
+═══════════════════════════════════════════════════════════════
+🚫 ممنوع منعاً باتاً اختراع أي معلومات أو أرقام أو نتائج
+🚫 لا تخترع نتائج مباريات أو أسعار أو تواريخ
+✅ إذا لم تجد المعلومة في البيانات المقدمة، قل: "لم أتمكن من التحقق من هذه المعلومة"
+✅ إذا كانت البيانات ناقصة، قل: "المعلومات المتاحة محدودة"
+✅ استخدم فقط المعلومات الموجودة في البيانات المقدمة لك
+
+═══════════════════════════════════════════════════════════════
                         الذاكرة والسياق
 ═══════════════════════════════════════════════════════════════
 ⚠️ مهم جداً: تذكر كل سياق المحادثة السابقة:
@@ -381,34 +390,22 @@ function verifyTemporalRelevance(tavilyResults, maxAgeHours = 48) {
     };
 }
 
-// Level 4: Generate notes (Comprehensive)
+// Level 4: Generate notes (SIMPLIFIED - only important warnings)
 function generateVerificationNotes(sourceResult, mathResult, temporalResult) {
     const notes = [];
 
-    // Level 1: Sources
-    if (!sourceResult.hasConsensus && sourceResult.conflicts.length > 0) {
-        notes.push(`⚠️ تم رصد تضارب في الأرقام بين ${sourceResult.conflicts.length} مصادر`);
-        sourceResult.conflicts.forEach(c => {
-            notes.push(`   - تباين: ${c.difference} بين المصادر`);
-        });
-    }
-
-    // Level 2: Math
+    // Only show math issues (these are important)
     if (!mathResult.isConsistent) {
         mathResult.issues.forEach(i => notes.push(`🧮 ${i.message}`));
     }
 
-    // Level 3: Temporal
-    if (!temporalResult.isRecent) {
-        // Show max 2 temporal warnings to avoid clutter
-        temporalResult.warnings.slice(0, 2).forEach(w => notes.push(w));
-        if (temporalResult.warnings.length > 2) notes.push(`...واحتمالية وجود مصادر قديمة أخرى.`);
+    // Only show if sources are old (important warning)
+    if (!temporalResult.isRecent && temporalResult.warnings.length > 0) {
+        notes.push('📅 بعض المصادر قد تكون قديمة - يُنصح بالتحقق من المصادر الرسمية');
     }
 
-    // Level 4: Uncertainty/Confidence
-    if (sourceResult.confidence === 'low' || !temporalResult.isRecent) {
-        notes.push('💡 **تنبيه:** يرجى التأكد من تاريخ المعلومة، قد تكون هناك أخبار قديمة يُعاد تداولها.');
-    }
+    // Skip source conflicts - too noisy and not helpful
+    // Skip general uncertainty warnings - already covered above
 
     return notes;
 }
@@ -461,10 +458,11 @@ async function fetchTavilyData(question) {
             body: JSON.stringify({
                 api_key: tavilyKey,
                 query: question,
-                search_depth: 'basic',     // Revert to basic (Developer Plan limit)
+                search_depth: 'basic',
                 include_answer: true,
-                include_raw_content: false, // Revert to false to fix 400 error
-                max_results: 5
+                include_raw_content: false,
+                max_results: 10,  // Increased for better coverage
+                days: 7           // Focus on recent news (last week)
             })
         });
 
@@ -513,85 +511,129 @@ async function fetchTavilyData(question) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//                    GEMINI GOOGLE SEARCH (FALLBACK)
+//                    MULTI-QUERY FOR COMPLEX QUESTIONS
 // ═══════════════════════════════════════════════════════════════
 
-async function fetchRealtimeData(question) {
-    // Try Tavily first (primary)
-    const tavilyResult = await fetchTavilyData(question);
-    if (tavilyResult) {
-        // Store raw results globally for verification later
-        global._tavilyRawResults = tavilyResult.rawResults;
-        return tavilyResult.content;
+/**
+ * Detect if question needs multi-query approach
+ */
+function needsMultiQuery(question) {
+    const complexPatterns = [
+        /و.*و/,                    // Multiple topics with "و"
+        /مقارنة|بين.*و/,           // Comparison
+        /تأثير.*على/,              // Impact analysis
+        /أوروبا.*آسيا|آسيا.*أوروبا/, // Multiple regions
+        /الأسبوع.*الماضي|آخر.*أسبوع/, // Time-sensitive analysis
+    ];
+    return complexPatterns.some(p => p.test(question));
+}
+
+/**
+ * Split complex question into multiple queries
+ */
+function splitIntoQueries(question) {
+    const queries = [question]; // Always include original
+
+    // Add date-focused query for time-sensitive questions
+    if (/اليوم|أمس|الأسبوع|2026/.test(question)) {
+        const today = new Date().toISOString().split('T')[0];
+        queries.push(`${question} ${today}`);
     }
 
-    // Fallback to Gemini Google Search
-    console.log('[Synthesize] 🔄 Tavily failed, falling back to Gemini Google Search...');
+    // Add region-specific queries for comparison questions
+    if (/أوروبا|Europe/i.test(question)) {
+        queries.push(question.replace(/آسيا|Asia/gi, '').trim());
+    }
+    if (/آسيا|Asia/i.test(question)) {
+        queries.push(question.replace(/أوروبا|Europe/gi, '').trim());
+    }
 
-    const keys = getGeminiKeys();
-    if (keys.length === 0) return null;
+    return queries.slice(0, 3); // Max 3 queries
+}
 
-    const searchPrompt = `ابحث عن أحدث المعلومات والبيانات الحقيقية عن:
-"${question}"
+/**
+ * Execute multiple Tavily searches and combine results
+ */
+async function multiQueryTavily(question) {
+    const tavilyKey = process.env.TAVILY_API_KEY;
+    if (!tavilyKey) return null;
 
-المطلوب:
-- أحدث الأرقام والأسعار الحقيقية
-- آخر الأخبار والتحديثات
-- بيانات من آخر 24-48 ساعة
-- اذكر المصادر والتواريخ
+    // Check if multi-query is needed
+    if (!needsMultiQuery(question)) {
+        return await fetchTavilyData(question);
+    }
 
-أعطني البيانات الخام فقط بدون تحليل.`;
+    console.log('[Synthesize] 🔄 Complex question detected - using Multi-Query...');
+    const queries = splitIntoQueries(question);
+    console.log(`[Synthesize] 📊 Splitting into ${queries.length} queries`);
 
-    console.log('[Synthesize] 🔍 Fetching real-time data with Google Search...');
+    const allResults = [];
+    let combinedAnswer = '';
 
-    // Smart approach: Only try 3 times with delay to avoid rate limiting
-    const MAX_ATTEMPTS = 3;
-    const shuffledKeys = keys.sort(() => Math.random() - 0.5);
-
-    for (let i = 0; i < MAX_ATTEMPTS && i < shuffledKeys.length; i++) {
-        const key = shuffledKeys[i];
-        const model = GEMINI_MODELS[i % GEMINI_MODELS.length];
-
+    for (const query of queries) {
+        console.log(`[Synthesize] 🔍 Query: "${query.substring(0, 50)}..."`);
         try {
-            console.log(`[Synthesize] 📡 Attempt ${i + 1}/${MAX_ATTEMPTS}: ${model}`);
-
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+            const response = await fetch('https://api.tavily.com/search', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    contents: [{ role: 'user', parts: [{ text: searchPrompt }] }],
-                    tools: [{ googleSearch: {} }],
-                    generationConfig: { maxOutputTokens: 4000 }
+                    api_key: tavilyKey,
+                    query: query,
+                    search_depth: 'basic',
+                    include_answer: true,
+                    max_results: 5,
+                    days: 7
                 })
             });
 
-            if (res.status === 429) {
-                console.log(`[Synthesize] ⚠️ Rate limited, waiting 1s...`);
-                await new Promise(r => setTimeout(r, 1000)); // Wait 1 second
-                continue;
-            }
-
-            if (res.ok) {
-                const d = await res.json();
-                const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (text) {
-                    console.log(`[Synthesize] ✅ Real-time data fetched (${text.length} chars)`);
-                    return text;
-                }
-            } else {
-                console.log(`[Synthesize] ⚠️ Error ${res.status}`);
-            }
-
-            // Wait between attempts
-            if (i < MAX_ATTEMPTS - 1) {
-                await new Promise(r => setTimeout(r, 500));
+            if (response.ok) {
+                const data = await response.json();
+                if (data.answer && !combinedAnswer) combinedAnswer = data.answer;
+                if (data.results) allResults.push(...data.results);
             }
         } catch (e) {
-            console.log(`[Synthesize] ⚠️ Exception: ${e.message}`);
+            console.log(`[Synthesize] ⚠️ Query failed: ${e.message}`);
         }
     }
 
-    console.log('[Synthesize] ⚠️ Could not fetch real-time data, continuing without it');
+    // Remove duplicates by URL
+    const uniqueResults = allResults.filter((r, i, arr) =>
+        arr.findIndex(x => x.url === r.url) === i
+    );
+
+    console.log(`[Synthesize] ✅ Multi-Query complete: ${uniqueResults.length} unique sources`);
+
+    // Format combined results
+    let content = '';
+    if (combinedAnswer) content += `**الإجابة:** ${combinedAnswer}\n\n`;
+    if (uniqueResults.length > 0) {
+        content += `**المصادر (${uniqueResults.length}):**\n`;
+        uniqueResults.slice(0, 10).forEach((r, i) => {
+            content += `${i + 1}. [${r.title}](${r.url})\n`;
+            if (r.content) content += `   ${r.content.substring(0, 200)}...\n`;
+        });
+    }
+
+    return content ? { content, rawResults: uniqueResults, answer: combinedAnswer } : null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//                    FETCH REALTIME DATA (MAIN)
+// ═══════════════════════════════════════════════════════════════
+
+async function fetchRealtimeData(question) {
+    // Use Multi-Query Tavily (automatically handles complex vs simple questions)
+    console.log('[Synthesize] 🔍 Fetching real-time data with Tavily...');
+
+    const tavilyResult = await multiQueryTavily(question);
+    if (tavilyResult) {
+        // Store raw results globally for verification later
+        global._tavilyRawResults = tavilyResult.rawResults;
+        console.log(`[Synthesize] ✅ Tavily success: ${tavilyResult.rawResults?.length || 0} sources`);
+        return tavilyResult.content;
+    }
+
+    console.log('[Synthesize] ⚠️ Tavily failed, continuing without real-time data');
     return null;
 }
 
