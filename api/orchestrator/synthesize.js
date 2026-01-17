@@ -602,7 +602,8 @@ function ragBasicDecompose(question) {
 }
 
 /**
- * STEP 2: Search single query and return results (Manus Step-by-Step)
+ * STEP 2: Search + Extract full content (Manus recommendation)
+ * First search for URLs, then extract full article content
  */
 async function ragSearchSingleQuery(query) {
     const tavilyKey = process.env.TAVILY_API_KEY;
@@ -611,39 +612,74 @@ async function ragSearchSingleQuery(query) {
     console.log(`[RAG] Searching: "${query}"`);
 
     try {
-        const response = await fetch('https://api.tavily.com/search', {
+        // Step 1: Search for URLs
+        const searchResponse = await fetch('https://api.tavily.com/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 api_key: tavilyKey,
                 query: query,
-                search_depth: 'basic',
+                search_depth: 'advanced',  // Use advanced for better results
                 include_answer: true,
                 max_results: 5,
-                days: 7
+                days: 30  // Expand to 30 days for more results
             })
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            let content = "";
+        if (!searchResponse.ok) return null;
 
-            if (data.answer) {
-                content += `${data.answer}\n\n`;
-            }
+        const searchData = await searchResponse.json();
+        let fullContent = "";
 
-            if (data.results) {
-                for (const r of data.results) {
-                    content += `--- مصدر ---\n`;
-                    content += `${r.title}\n`;
-                    content += `${r.content || ''}\n`;
-                    if (r.url) content += `(${r.url})\n`;
-                    content += `\n`;
-                }
-            }
-
-            return content;
+        // Add Tavily's AI answer
+        if (searchData.answer) {
+            fullContent += `[ملخص البحث]: ${searchData.answer}\n\n`;
         }
+
+        // Collect URLs for extraction
+        const urls = [];
+        if (searchData.results) {
+            for (const r of searchData.results) {
+                if (r.url) urls.push(r.url);
+                // Also add the snippet content
+                fullContent += `--- مصدر ---\n`;
+                fullContent += `العنوان: ${r.title}\n`;
+                fullContent += `الملخص: ${r.content || ''}\n`;
+                fullContent += `الرابط: ${r.url}\n\n`;
+            }
+        }
+
+        // Step 2: Extract full content from top 3 URLs
+        if (urls.length > 0) {
+            console.log(`[RAG] Extracting full content from ${Math.min(urls.length, 3)} URLs...`);
+            try {
+                const extractResponse = await fetch('https://api.tavily.com/extract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        api_key: tavilyKey,
+                        urls: urls.slice(0, 3)  // Extract top 3 URLs
+                    })
+                });
+
+                if (extractResponse.ok) {
+                    const extractData = await extractResponse.json();
+                    if (extractData.results) {
+                        fullContent += `\n=== محتوى كامل من المقالات ===\n\n`;
+                        for (const ext of extractData.results) {
+                            if (ext.raw_content) {
+                                fullContent += `[مقال كامل]: ${ext.raw_content.substring(0, 2000)}\n\n`;
+                            }
+                        }
+                        console.log(`[RAG] ✅ Extracted full content from ${extractData.results.length} articles`);
+                    }
+                }
+            } catch (extractError) {
+                console.log(`[RAG] Extract failed (using snippets): ${extractError.message}`);
+            }
+        }
+
+        return fullContent;
     } catch (e) {
         console.log(`[RAG] Search failed: ${e.message}`);
     }
