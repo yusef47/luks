@@ -526,36 +526,52 @@ async function fetchTavilyData(question) {
  */
 function needsMultiQuery(question) {
     const complexPatterns = [
-        /و.*و/,                    // Multiple topics with "و"
-        /مقارنة|بين.*و/,           // Comparison
-        /تأثير.*على/,              // Impact analysis
-        /أوروبا.*آسيا|آسيا.*أوروبا/, // Multiple regions
-        /الأسبوع.*الماضي|آخر.*أسبوع/, // Time-sensitive analysis
+        /و.*و/,                     // Multiple topics with "و"
+        /مقارنة|بين.*و/,            // Comparison
+        /تأثير.*على/,               // Impact analysis
+        /قيود|عقوبات|حظر/,          // Restrictions/sanctions
+        /nvidia|إنفيديا|apple|google|شركة/i, // Companies
+        /رقائق|chips|AI|ذكاء اصطناعي/i, // Tech topics
+        /صين|الصين|china|أمريكا|america/i, // Countries
     ];
     return complexPatterns.some(p => p.test(question));
 }
 
 /**
- * Split complex question into multiple queries
+ * Split complex question into multiple targeted queries
  */
 function splitIntoQueries(question) {
-    const queries = [question]; // Always include original
+    const queries = [];
 
-    // Add date-focused query for time-sensitive questions
-    if (/اليوم|أمس|الأسبوع|2026/.test(question)) {
-        const today = new Date().toISOString().split('T')[0];
-        queries.push(`${question} ${today}`);
+    // Extract key entities and create focused queries
+    const hasNvidia = /nvidia|إنفيديا/i.test(question);
+    const hasChina = /صين|الصين|china/i.test(question);
+    const hasRestrictions = /قيود|عقوبات|حظر|restrictions|ban/i.test(question);
+    const hasChips = /رقائق|chips|AI chips/i.test(question);
+    const hasChineseCompanies = /شركات صينية|بدائل محلية|chinese companies/i.test(question);
+
+    // Query 1: Main topic with date
+    queries.push(`${question.substring(0, 200)} 2025 2026`);
+
+    // Query 2: Company-specific if mentioned
+    if (hasNvidia && hasChina) {
+        queries.push("Nvidia China chip restrictions strategy 2025 2026");
     }
 
-    // Add region-specific queries for comparison questions
-    if (/أوروبا|Europe/i.test(question)) {
-        queries.push(question.replace(/آسيا|Asia/gi, '').trim());
-    }
-    if (/آسيا|Asia/i.test(question)) {
-        queries.push(question.replace(/أوروبا|Europe/gi, '').trim());
+    // Query 3: Secondary aspect
+    if (hasChineseCompanies || question.includes('بدائل')) {
+        queries.push("Chinese AI chip companies alternatives to Nvidia Huawei SMIC 2025");
     }
 
-    return queries.slice(0, 3); // Max 3 queries
+    // Query 4: Policy/restrictions focus
+    if (hasRestrictions && hasChips) {
+        queries.push("US AI chip export restrictions China policy 2025 2026");
+    }
+
+    // Remove duplicates and limit to 3
+    const unique = [...new Set(queries)];
+    console.log(`[MultiQuery] Generated ${unique.length} sub-queries`);
+    return unique.slice(0, 3);
 }
 
 /**
