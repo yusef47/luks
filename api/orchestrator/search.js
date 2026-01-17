@@ -1,17 +1,7 @@
-// Search API - Gemini with Google Search + Groq fallback
+// Search API - Tavily Search (Primary) + Groq fallback
+// NO GEMINI - User requested to remove all Google/Gemini dependencies
 
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-const GROQ_MODELS = ['qwen-2.5-32b', 'gpt-oss-120b', 'llama-3.3-70b-versatile'];
-
-function getGeminiKeys() {
-    const keys = [];
-    for (let i = 1; i <= 15; i++) {
-        const key = process.env[`GEMINI_API_KEY_${i}`];
-        if (key && key.trim()) keys.push(key.trim());
-    }
-    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
-    return keys.sort(() => Math.random() - 0.5);
-}
+const GROQ_MODELS = ['qwen-2.5-32b', 'llama-3.3-70b-versatile'];
 
 function getGroqKeys() {
     const keys = [];
@@ -22,33 +12,64 @@ function getGroqKeys() {
     return keys;
 }
 
-let geminiIdx = 0, groqIdx = 0;
+let groqIdx = 0;
 
-async function searchWithGemini(query) {
-    const keys = getGeminiKeys();
-    if (keys.length === 0) return null;
-
-    for (const model of GEMINI_MODELS) {
-        for (let i = 0; i < 3; i++) {
-            try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': keys[geminiIdx++ % keys.length] },
-                    body: JSON.stringify({
-                        contents: [{ role: 'user', parts: [{ text: query }] }],
-                        tools: [{ googleSearch: {} }],
-                        generationConfig: { maxOutputTokens: 4000 }
-                    })
-                });
-                if (res.ok) {
-                    const d = await res.json();
-                    const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (text) return text;
-                }
-            } catch (e) { }
-        }
+async function searchWithTavily(query) {
+    const tavilyKey = process.env.TAVILY_API_KEY;
+    if (!tavilyKey) {
+        console.log('[Search] ⚠️ No Tavily API key found');
+        return null;
     }
-    return null;
+
+    try {
+        const response = await fetch('https://api.tavily.com/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                api_key: tavilyKey,
+                query: query,
+                search_depth: 'basic',
+                include_answer: true,
+                max_results: 5,
+                days: 7
+            })
+        });
+
+        if (!response.ok) {
+            console.log(`[Search] ⚠️ Tavily returned ${response.status}`);
+            return null;
+        }
+
+        const data = await response.json();
+
+        // Return the direct answer if available
+        if (data.answer) {
+            let result = data.answer;
+
+            // Add sources
+            if (data.results && data.results.length > 0) {
+                result += '\n\n**المصادر:**\n';
+                data.results.slice(0, 3).forEach((r, i) => {
+                    result += `${i + 1}. [${r.title}](${r.url})\n`;
+                });
+            }
+            return result;
+        }
+
+        // Fallback to snippets if no answer
+        if (data.results && data.results.length > 0) {
+            let result = '';
+            data.results.forEach((r, i) => {
+                result += `**${i + 1}. ${r.title}**\n${r.content}\n\n`;
+            });
+            return result;
+        }
+
+        return null;
+    } catch (error) {
+        console.error('[Search] ❌ Tavily error:', error.message);
+        return null;
+    }
 }
 
 async function callGroq(prompt) {
@@ -86,11 +107,11 @@ export default async function handler(req, res) {
         const searchQuery = query || task;
         if (!searchQuery) return res.status(400).json({ success: false, error: 'Missing query' });
 
-        console.log('[Search] 🔍 Searching with Gemini...');
-        let result = await searchWithGemini(searchQuery);
+        console.log('[Search] 🔍 Searching with Tavily...');
+        let result = await searchWithTavily(searchQuery);
 
         if (!result) {
-            console.log('[Search] ⚡ Trying Groq...');
+            console.log('[Search] ⚡ Tavily failed, trying Groq...');
             result = await callGroq(searchQuery);
         }
 
