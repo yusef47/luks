@@ -1126,7 +1126,6 @@ export default async function handler(req, res) {
 
         if (needsRealtime) {
             console.log('[Synthesize] 🔄 Step 2: Running RAG Pipeline...');
-            const { processWithRAG } = require('./rag-engine.js');
             const ragResult = await processWithRAG(userPrompt);
 
             if (ragResult.success) {
