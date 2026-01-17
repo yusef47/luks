@@ -643,20 +643,27 @@ async function fetchRealtimeData(question) {
 
 async function analyzeQuestion(question) {
     const keys = getOpenRouterKeys();
-    if (keys.length === 0) return 'simple';
+    if (keys.length === 0) return { type: 'simple', needsRealtime: false };
 
-    const analyzerPrompt = `أنت محلل أسئلة ذكي. حلل السؤال التالي وحدد نوعه.
+    const analyzerPrompt = `أنت محلل أسئلة ذكي. حلل السؤال التالي وقرر:
+1. نوع السؤال
+2. هل يحتاج بيانات حية من الإنترنت؟
 
 السؤال: "${question.substring(0, 500)}"
 
-أجب بكلمة واحدة فقط من هذه الخيارات:
-- simple (تحية، سؤال بسيط، معلومة عامة)
-- math (رياضيات، حسابات، معادلات، أرقام، إثبات)
-- code (برمجة، كود، خوارزميات، API)
-- research (بحث، تحليل، مقارنة، دراسة)
-- heavy (معقد، تفكير عميق، فلسفة، خطة شاملة)
+أجب بالتنسيق التالي فقط (سطرين):
+TYPE: [simple/math/code/research/heavy]
+REALTIME: [yes/no]
 
-الإجابة (كلمة واحدة فقط):`;
+متى يحتاج بيانات حية (REALTIME: yes):
+- أسعار (ذهب، أسهم، عملات)
+- أخبار اليوم أو الأسبوع
+- أحداث جارية أو مستجدات
+- معلومات عن شركات أو أشخاص حاليين
+- أي سؤال يذكر "اليوم"، "أمس"، "الآن"، "حالياً"
+- تطورات سياسية/اقتصادية/تقنية جارية
+
+أجب بسطرين فقط:`;
 
     for (const key of keys.slice(0, 2)) {
         try {
@@ -672,27 +679,35 @@ async function analyzeQuestion(question) {
                 body: JSON.stringify({
                     model: MODELS.ANALYZER,
                     messages: [{ role: 'user', content: analyzerPrompt }],
-                    max_tokens: 20,
+                    max_tokens: 50,
                 })
             });
 
             if (res.ok) {
                 const d = await res.json();
-                const text = d.choices?.[0]?.message?.content?.toLowerCase().trim();
-                const validTypes = ['simple', 'math', 'code', 'research', 'heavy'];
+                const text = d.choices?.[0]?.message?.content?.toLowerCase().trim() || '';
 
-                for (const type of validTypes) {
-                    if (text?.includes(type)) {
-                        console.log(`[Analyzer] ✅ Question type: ${type}`);
-                        return type;
+                // Parse type
+                const validTypes = ['simple', 'math', 'code', 'research', 'heavy'];
+                let type = 'simple';
+                for (const t of validTypes) {
+                    if (text.includes(`type: ${t}`) || text.includes(t)) {
+                        type = t;
+                        break;
                     }
                 }
+
+                // Parse needsRealtime
+                const needsRealtime = text.includes('realtime: yes') || text.includes('yes');
+
+                console.log(`[Analyzer] ✅ Type: ${type}, NeedsRealtime: ${needsRealtime}`);
+                return { type, needsRealtime };
             }
         } catch (e) { continue; }
     }
 
-    console.log('[Analyzer] ⚠️ Default to simple');
-    return 'simple';
+    console.log('[Analyzer] ⚠️ Default to simple, no realtime');
+    return { type: 'simple', needsRealtime: false };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -905,24 +920,23 @@ export default async function handler(req, res) {
         }
         */
 
-        // Step 1: Check if question needs real-time data (only if browser didn't work)
+        // Step 1: Analyze question with MiMo FIRST (to decide if we need real-time data)
+        console.log('[Synthesize] 📊 Step 1: Analyzing question with MiMo...');
+        const analysis = await analyzeQuestion(userPrompt);
+        const questionType = analysis.type;
+        const needsRealtime = analysis.needsRealtime;
+        console.log(`[Synthesize] 🎯 MiMo decided: Type=${questionType}, NeedsRealtime=${needsRealtime}`);
+
+        // Step 2: Fetch real-time data if MiMo says we need it
         let realtimeData = null;
-        if (!browserUsed && needsRealtimeData(userPrompt)) {
-            console.log('[Synthesize] 🌐 Step 1: Fetching real-time data...');
+        if (needsRealtime) {
+            console.log('[Synthesize] 🌐 Step 2: Fetching real-time data (MiMo requested)...');
             realtimeData = await fetchRealtimeData(userPrompt);
-        } else if (browserUsed) {
-            // Use browser content as realtime data
-            realtimeData = browserResult?.results?.content || null;
-            console.log('[Synthesize] 📊 Step 1: Using browser content as real-time data');
         } else {
-            console.log('[Synthesize] 📊 Step 1: No real-time data needed');
+            console.log('[Synthesize] 📊 Step 2: No real-time data needed (MiMo decided)');
         }
 
-        // Step 2: Analyze question with MiMo
-        console.log('[Synthesize] 📊 Step 2: Analyzing question...');
-        const questionType = await analyzeQuestion(userPrompt);
-
-        // Step 3: Select best model
+        // Step 3: Select best model based on question type
         const selectedModel = selectModel(questionType);
         console.log(`[Synthesize] 🎯 Step 3: Selected model: ${selectedModel.split('/')[1]?.split(':')[0]} for type: ${questionType}`);
 
