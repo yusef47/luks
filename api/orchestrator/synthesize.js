@@ -651,47 +651,62 @@ async function ragSearchSingleQuery(query) {
 }
 
 /**
- * STEP 3: Summarize single topic (Manus Step-by-Step)
- * Focus on ONE topic only to prevent mixing
+ * STEP 3: Summarize single topic using GEMINI (Manus recommendation)
+ * Gemini follows instructions better than MiMo, with temperature=0 for factual output
  */
 async function ragSummarizeTopic(topicContent, topicDescription) {
-    const keys = getOpenRouterKeys();
-    if (keys.length === 0 || !topicContent) return null;
+    const geminiKeys = getGeminiKeys();
+    if (geminiKeys.length === 0 || !topicContent) {
+        console.log('[RAG] No Gemini keys available');
+        return null;
+    }
 
-    const prompt = `لخص النصوص التالية حول "${topicDescription}" فقط.
+    const prompt = `أنت ملخص بيانات دقيق. لخص النصوص التالية حول "${topicDescription}".
 
-قواعد صارمة:
-- اكتب فقط ما هو موجود في النص أدناه
-- لا تضف أي معلومة من خارج النص
-- إذا لم تجد معلومات كافية، قل ذلك
+قواعد صارمة يجب اتباعها:
+1. اكتب فقط ما هو موجود في النص أدناه - لا تضف أي شيء
+2. لا تذكر أي تاريخ أو رقم غير موجود في النص
+3. لا تستخدم معرفتك السابقة أبداً
+4. إذا لم تجد معلومات، قل "غير متوفر في النص"
 
 النصوص:
-${topicContent}
+${topicContent.substring(0, 4000)}
 
-ملخص موجز:`;
+ملخص دقيق (فقط ما في النص):`;
 
-    try {
-        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${keys[0]}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://luks-pied.vercel.app'
-            },
-            body: JSON.stringify({
-                model: MODELS.SIMPLE,  // Use fast model for sub-summaries
-                messages: [{ role: 'user', content: prompt }],
-                max_tokens: 500,
-            })
-        });
+    // Try each Gemini key
+    for (let i = 0; i < Math.min(geminiKeys.length, 3); i++) {
+        try {
+            console.log(`[RAG] Using Gemini for summarization (key ${i + 1})...`);
+            const res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKeys[i]}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: {
+                            temperature: 0,  // CRITICAL: No creativity, factual only
+                            maxOutputTokens: 500
+                        }
+                    })
+                }
+            );
 
-        if (res.ok) {
-            const d = await res.json();
-            return d.choices?.[0]?.message?.content?.trim() || null;
+            if (res.ok) {
+                const data = await res.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                if (text) {
+                    console.log('[RAG] ✅ Gemini summarization successful');
+                    return text;
+                }
+            }
+        } catch (e) {
+            console.log(`[RAG] Gemini key ${i + 1} failed: ${e.message}`);
         }
-    } catch (e) {
-        console.log(`[RAG] Summary failed: ${e.message}`);
     }
+
+    console.log('[RAG] All Gemini keys failed');
     return null;
 }
 
