@@ -6,6 +6,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { PaperclipIcon, CogIcon, ArrowRightIcon, WindowCloseIcon } from '../../../components/icons';
 import { SettingsPopover } from '../common/SettingsPopover';
+import { BrowserAIModal } from '../BrowserAIModal';
 
 interface ChatInputProps {
   // Input
@@ -65,6 +66,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showBrowserAIModal, setShowBrowserAIModal] = useState(false);
 
   // Focus textarea on mount if centered
   useEffect(() => {
@@ -182,8 +184,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         if (onOpenBrowserAI) {
                           onOpenBrowserAI();
                         } else {
-                          // Open extension instructions in new tab
-                          window.open('https://github.com/yusef47/luks/tree/main/extension', '_blank');
+                          setShowBrowserAIModal(true);
                         }
                         setShowAttachMenu(false);
                       }}
@@ -255,6 +256,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </div>
         )}
       </div>
+
+      {/* Browser AI Modal */}
+      <BrowserAIModal
+        isOpen={showBrowserAIModal}
+        onClose={() => setShowBrowserAIModal(false)}
+      />
     </div>
   );
 };
