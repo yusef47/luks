@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { StreamingMarkdownRenderer } from './StreamingMarkdownRenderer';
 
 interface AutonomousModeProps {
     isOpen: boolean;
@@ -315,7 +316,7 @@ const FullReport: React.FC<{ report: string; title: string; isArabic: boolean }>
                 position: 'relative',
                 direction: isArabic ? 'rtl' : 'ltr'
             }}>
-                {report}
+                <StreamingMarkdownRenderer content={report} />
                 {!expanded && <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '80px', background: 'linear-gradient(transparent, rgba(12,12,20,1))' }} />}
             </div>
         </div>
@@ -563,21 +564,26 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
                                     <span style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', padding: '5px 9px', borderRadius: '6px', fontSize: '10px', boxShadow: '0 3px 12px rgba(99,102,241,0.4)' }}>📊</span>
-                                    <span style={{ color: '#fff', fontSize: '12px', fontWeight: '600' }}>MODEL PERFORMANCE</span>
+                                    <span style={{ color: '#fff', fontSize: '12px', fontWeight: '600' }}>{isArabic ? 'إحصائيات البحث' : 'SEARCH STATS'}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '10px' }}>
-                                    <Ring value={87} label="Accuracy" color="#22c55e" />
-                                    <Ring value={92} label="Speed" color="#06b6d4" />
+                                    <Ring value={result.results.sources?.length || 0} label={isArabic ? 'المصادر' : 'Sources'} color="#22c55e" />
+                                    <Ring value={result.results.charts?.length || 0} label={isArabic ? 'الرسوم' : 'Charts'} color="#06b6d4" />
                                 </div>
                             </div>
                         </div>
 
                         {/* Row 2: Stats */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '20px' }}>
-                            <Stat value={`${result.results.stats?.[0]?.value || 55}%`} label={result.results.stats?.[0]?.label || 'إحصائية 1'} icon="💰" color="#f59e0b" />
-                            <Stat value={`${result.results.stats?.[1]?.value || 78}`} label={result.results.stats?.[1]?.label || 'إحصائية 2'} icon="📊" color="#6366f1" />
-                            <Stat value={`${result.results.stats?.[2]?.value || 85}%`} label={result.results.stats?.[2]?.label || 'إحصائية 3'} icon="📈" color="#22c55e" />
-                            <Stat value={`${result.results.stats?.[3]?.value || 56}$`} label={result.results.stats?.[3]?.label || 'إحصائية 4'} icon="⚡" color="#06b6d4" />
+                            {result.results.stats?.slice(0, 4).map((stat, i) => (
+                                <Stat
+                                    key={i}
+                                    value={`${stat.value}${stat.unit || ''}`}
+                                    label={stat.label}
+                                    icon={['💰', '📊', '📈', '⚡'][i]}
+                                    color={['#f59e0b', '#6366f1', '#22c55e', '#06b6d4'][i]}
+                                />
+                            ))}
                         </div>
 
                         {/* Row 3: Summary */}
@@ -593,7 +599,9 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                                 <span style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)', padding: '6px 10px', borderRadius: '8px', fontSize: '11px', boxShadow: '0 4px 15px rgba(245,158,11,0.4)' }}>💡</span>
                                 <span style={{ color: '#fff', fontSize: '14px', fontWeight: '700' }}>{isArabic ? 'الملخص التنفيذي' : 'Executive Summary'}</span>
                             </div>
-                            <p style={{ color: '#d4d4d8', fontSize: '14px', lineHeight: '2.2', margin: 0 }}>{result.results.summary}</p>
+                            <div style={{ color: '#d4d4d8', fontSize: '14px', lineHeight: '2.2' }}>
+                                <StreamingMarkdownRenderer content={result.results.summary} />
+                            </div>
                         </div>
 
                         {/* Row 4: All Charts */}
