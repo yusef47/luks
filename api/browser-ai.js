@@ -152,8 +152,8 @@ async function callVisionAI(prompt, screenshotBase64) {
 
                 // Handle rate limiting with retry
                 if (response.status === 429) {
-                    console.log(`[BrowserAI] ${modelName} rate limited, waiting 2s...`);
-                    await sleep(2000);
+                    console.log(`[BrowserAI] ${modelName} rate limited, waiting 5s...`);
+                    await sleep(5000);
                     continue;
                 }
 
