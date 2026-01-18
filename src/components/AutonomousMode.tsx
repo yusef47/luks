@@ -596,17 +596,80 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
                             <p style={{ color: '#d4d4d8', fontSize: '14px', lineHeight: '2.2', margin: 0 }}>{result.results.summary}</p>
                         </div>
 
-                        {/* Row 4: Ranking Bars */}
-                        <div style={{ marginBottom: '20px' }}>
-                            <Bars data={result.results.charts?.[0]?.data || []} title={isArabic ? 'الترتيب' : 'Ranking'} />
-                        </div>
+                        {/* Row 4: All Charts */}
+                        {result.results.charts && result.results.charts.length > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: result.results.charts.length > 1 ? 'repeat(2, 1fr)' : '1fr', gap: '20px', marginBottom: '20px' }}>
+                                {result.results.charts.map((chart: ChartData, index: number) => (
+                                    <Bars key={index} data={chart.data || []} title={chart.title || (isArabic ? 'البيانات' : 'Data')} />
+                                ))}
+                            </div>
+                        )}
 
                         {/* Row 5: Full Report */}
                         <div style={{ marginBottom: '20px' }}>
                             <FullReport report={result.results.report} title={result.title} isArabic={isArabic} />
                         </div>
 
-                        {/* Row 6: Export */}
+                        {/* Row 6: Sources */}
+                        {result.results.sources && result.results.sources.length > 0 && (
+                            <div style={{
+                                background: 'linear-gradient(145deg, rgba(15,15,25,0.8), rgba(10,10,18,0.9))',
+                                borderRadius: '16px',
+                                padding: '20px',
+                                border: '1px solid rgba(99,102,241,0.15)',
+                                marginBottom: '20px',
+                                boxShadow: '0 4px 30px rgba(0,0,0,0.3)'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                    <span style={{
+                                        background: 'linear-gradient(135deg, #06b6d4, #22d3ee)',
+                                        padding: '6px 10px',
+                                        borderRadius: '8px',
+                                        fontSize: '11px',
+                                        boxShadow: '0 4px 15px rgba(6,182,212,0.4)'
+                                    }}>📚</span>
+                                    <span style={{ color: '#fff', fontSize: '14px', fontWeight: '700' }}>
+                                        {isArabic ? 'المصادر' : 'Sources'} ({result.results.sources.length})
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    {result.results.sources.map((source: Source, index: number) => (
+                                        <a
+                                            key={index}
+                                            href={source.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '10px',
+                                                padding: '12px 16px',
+                                                background: 'rgba(6,182,212,0.08)',
+                                                borderRadius: '10px',
+                                                border: '1px solid rgba(6,182,212,0.2)',
+                                                textDecoration: 'none',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <span style={{ color: '#22d3ee', fontSize: '14px' }}>🔗</span>
+                                            <span style={{
+                                                color: '#a5f3fc',
+                                                fontSize: '13px',
+                                                flex: 1,
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                {source.title}
+                                            </span>
+                                            <span style={{ color: '#67e8f9', fontSize: '11px' }}>↗</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Row 7: Export */}
                         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '15px', paddingBottom: '40px' }}>
                             <button onClick={handlePDF} style={{
                                 padding: '16px 50px',
