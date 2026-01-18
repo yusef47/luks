@@ -1,25 +1,10 @@
 /**
  * BrowserAIPanel Component
  * Panel for controlling Browser AI from Lukas frontend
+ * Uses custom events to communicate with extension (no ID needed!)
  */
 
-import React, { useState, useEffect } from 'react';
-
-// Declare chrome types for extension communication
-declare const chrome: {
-    runtime: {
-        sendMessage: (extensionId: string, message: any, callback?: (response: any) => void) => void;
-        lastError: { message: string } | undefined;
-    };
-};
-
-// Extension ID - will be set dynamically
-const EXTENSION_ID = 'imdcehilcjdkcommhlbpkcedikbkbklm'; // Replace with actual ID after installation
-
-interface BrowserAIPanelProps {
-    isOpen: boolean;
-    onClose: () => void;
-}
+import React, { useState, useEffect, useCallback } from 'react';
 
 interface StepUpdate {
     type: string;
@@ -28,6 +13,12 @@ interface StepUpdate {
     action?: string;
     result?: string;
     screenshot?: string;
+    error?: string;
+}
+
+interface BrowserAIPanelProps {
+    isOpen: boolean;
+    onClose: () => void;
 }
 
 export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose }) => {
@@ -41,24 +32,66 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
     const [result, setResult] = useState<string | null>(null);
     const [latestScreenshot, setLatestScreenshot] = useState<string | null>(null);
 
-    // Check if extension is installed
-    useEffect(() => {
-        if (isOpen && typeof chrome !== 'undefined' && chrome.runtime) {
-            try {
-                chrome.runtime.sendMessage(EXTENSION_ID, { action: 'ping' }, (response) => {
-                    if (chrome.runtime.lastError) {
-                        setExtensionConnected(false);
-                        setStatus('الإضافة غير مثبتة');
-                    } else if (response?.status === 'ok') {
-                        setExtensionConnected(true);
-                        setStatus('جاهز');
-                    }
-                });
-            } catch {
-                setExtensionConnected(false);
+    // Handle extension responses
+    const handleExtensionResponse = useCallback((event: Event) => {
+        const customEvent = event as CustomEvent;
+        const data = customEvent.detail;
+        console.log('[Lukas Panel] Received:', data);
+
+        if (data.type === 'ready' || data.type === 'pong') {
+            setExtensionConnected(true);
+            setStatus('جاهز');
+        }
+
+        if (data.type === 'step') {
+            setCurrentStep(data.step || 0);
+            setSteps(prev => [...prev, data]);
+            setStatus(data.action || 'جاري التنفيذ...');
+            if (data.screenshot) {
+                setLatestScreenshot(data.screenshot);
             }
         }
-    }, [isOpen]);
+
+        if (data.type === 'complete') {
+            setIsRunning(false);
+            setStatus('✅ اكتمل');
+            setResult(data.result);
+            if (data.screenshot) {
+                setLatestScreenshot(data.screenshot);
+            }
+        }
+
+        if (data.type === 'error') {
+            setIsRunning(false);
+            setStatus(`❌ ${data.error}`);
+        }
+    }, []);
+
+    // Setup event listener
+    useEffect(() => {
+        if (isOpen) {
+            window.addEventListener('lukas-browser-ai-response', handleExtensionResponse);
+
+            // Ping extension to check if installed
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('lukas-browser-ai-message', {
+                    detail: { action: 'ping' }
+                }));
+            }, 100);
+
+            // If no response in 2 seconds, extension not installed
+            const timeout = setTimeout(() => {
+                if (!extensionConnected) {
+                    setStatus('الإضافة غير مثبتة');
+                }
+            }, 2000);
+
+            return () => {
+                window.removeEventListener('lukas-browser-ai-response', handleExtensionResponse);
+                clearTimeout(timeout);
+            };
+        }
+    }, [isOpen, handleExtensionResponse, extensionConnected]);
 
     const handleStart = () => {
         if (!task.trim() || !extensionConnected) return;
@@ -69,31 +102,16 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
         setResult(null);
         setStatus('بدء التنفيذ...');
 
-        chrome.runtime.sendMessage(
-            EXTENSION_ID,
-            { action: 'startTask', task, maxSteps },
-            (response) => {
-                setIsRunning(false);
-
-                if (response?.type === 'error') {
-                    setStatus(`خطأ: ${response.error}`);
-                } else if (response?.type === 'complete') {
-                    setStatus('✅ اكتمل');
-                    setResult(response.result);
-                    if (response.updates) {
-                        setSteps(response.updates);
-                        const lastWithScreenshot = response.updates.filter((u: StepUpdate) => u.screenshot).pop();
-                        if (lastWithScreenshot) {
-                            setLatestScreenshot(lastWithScreenshot.screenshot);
-                        }
-                    }
-                }
-            }
-        );
+        // Send task to extension via custom event
+        window.dispatchEvent(new CustomEvent('lukas-browser-ai-message', {
+            detail: { action: 'startTask', task, maxSteps }
+        }));
     };
 
     const handleStop = () => {
-        chrome.runtime.sendMessage(EXTENSION_ID, { action: 'stopTask' });
+        window.dispatchEvent(new CustomEvent('lukas-browser-ai-message', {
+            detail: { action: 'stopTask' }
+        }));
         setIsRunning(false);
         setStatus('تم الإيقاف');
     };
@@ -150,7 +168,7 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
                                 max="20"
                                 value={maxSteps}
                                 onChange={(e) => setMaxSteps(parseInt(e.target.value))}
-                                className="w-full"
+                                className="w-full accent-purple-500"
                                 disabled={isRunning}
                             />
                         </div>
@@ -161,14 +179,14 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
                                 <button
                                     onClick={handleStart}
                                     disabled={!task.trim() || !extensionConnected}
-                                    className="flex-1 py-2 px-4 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl font-semibold disabled:opacity-50"
+                                    className="flex-1 py-2 px-4 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl font-semibold disabled:opacity-50 hover:opacity-90 transition-opacity"
                                 >
                                     🚀 ابدأ
                                 </button>
                             ) : (
                                 <button
                                     onClick={handleStop}
-                                    className="flex-1 py-2 px-4 bg-red-500 text-white rounded-xl font-semibold"
+                                    className="flex-1 py-2 px-4 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition-colors"
                                 >
                                     ⏹ إيقاف
                                 </button>
@@ -176,7 +194,7 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
                         </div>
 
                         {/* Progress */}
-                        {isRunning && (
+                        {(isRunning || currentStep > 0) && (
                             <div className="mb-4">
                                 <div className="flex justify-between text-xs text-[var(--text-secondary-color)] mb-1">
                                     <span>الخطوة {currentStep}/{maxSteps}</span>
@@ -184,7 +202,7 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
                                 </div>
                                 <div className="h-2 bg-[var(--bg-tertiary-color)] rounded-full overflow-hidden">
                                     <div
-                                        className="h-full bg-gradient-to-r from-purple-500 to-indigo-600 transition-all"
+                                        className="h-full bg-gradient-to-r from-purple-500 to-indigo-600 transition-all duration-300"
                                         style={{ width: `${(currentStep / maxSteps) * 100}%` }}
                                     />
                                 </div>
@@ -194,12 +212,15 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
                         {/* Steps Log */}
                         <div className="flex-1 overflow-y-auto">
                             <p className="text-xs text-[var(--text-secondary-color)] mb-2">سجل الخطوات:</p>
-                            <div className="space-y-1">
+                            <div className="space-y-1 max-h-40 overflow-y-auto">
                                 {steps.map((step, i) => (
                                     <div key={i} className="text-xs p-2 bg-[var(--bg-tertiary-color)] rounded-lg">
-                                        <span className="text-[var(--accent-color)]">#{step.step}</span> {step.action}
+                                        <span className="text-[var(--accent-color)] font-bold">#{step.step}</span> {step.action}
                                     </div>
                                 ))}
+                                {steps.length === 0 && (
+                                    <p className="text-xs text-[var(--text-secondary-color)] opacity-50">لا توجد خطوات بعد...</p>
+                                )}
                             </div>
                         </div>
 
@@ -214,12 +235,13 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
                         {!extensionConnected && (
                             <div className="mt-4 p-3 bg-amber-500/20 border border-amber-500/30 rounded-xl">
                                 <p className="text-sm text-amber-400 mb-2">⚠️ الإضافة غير مثبتة</p>
-                                <button
-                                    onClick={() => window.open('/lukas-browser-ai.zip', '_blank')}
-                                    className="text-xs text-[var(--accent-color)] underline"
+                                <a
+                                    href="/lukas-browser-ai.zip"
+                                    download
+                                    className="text-xs text-[var(--accent-color)] underline hover:opacity-80"
                                 >
-                                    تحميل الإضافة
-                                </button>
+                                    📥 تحميل الإضافة
+                                </a>
                             </div>
                         )}
                     </div>
@@ -232,7 +254,7 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
                                 <img
                                     src={`data:image/jpeg;base64,${latestScreenshot}`}
                                     alt="Browser Screenshot"
-                                    className="max-w-full max-h-full object-contain"
+                                    className="max-w-full max-h-full object-contain rounded-lg"
                                 />
                             ) : (
                                 <div className="text-center text-[var(--text-secondary-color)]">

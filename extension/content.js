@@ -186,5 +186,67 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Log that content script is loaded
+// ==========================================
+// Web Page Communication (for Lukas frontend)
+// ==========================================
+
+// Listen for messages from Lukas web page
+window.addEventListener('lukas-browser-ai-message', async (event) => {
+    const message = event.detail;
+    console.log('[Lukas Content] Received from page:', message);
+
+    if (message.action === 'ping') {
+        // Respond that extension is installed
+        window.dispatchEvent(new CustomEvent('lukas-browser-ai-response', {
+            detail: { type: 'pong', status: 'ok', version: '1.0.0' }
+        }));
+    }
+
+    if (message.action === 'startTask') {
+        // Forward to background script
+        chrome.runtime.sendMessage({
+            action: 'startTask',
+            task: message.task,
+            maxSteps: message.maxSteps || 15
+        });
+    }
+
+    if (message.action === 'stopTask') {
+        chrome.runtime.sendMessage({ action: 'stopTask' });
+    }
+});
+
+// Listen for updates from background script and forward to page
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Existing handlers
+    if (message.action === 'getPageInfo') {
+        sendResponse(getPageInfo());
+    }
+
+    if (message.action === 'executeAction') {
+        executeAction(message.data).then(result => {
+            sendResponse(result);
+        });
+        return true;
+    }
+
+    // Forward progress updates to the page
+    if (message.type === 'step' || message.type === 'complete' || message.type === 'error') {
+        window.dispatchEvent(new CustomEvent('lukas-browser-ai-response', {
+            detail: message
+        }));
+    }
+});
+
+// Announce presence when on Lukas pages
+if (window.location.hostname.includes('luks-pied.vercel.app') || window.location.hostname === 'localhost') {
+    // Wait a bit then announce
+    setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('lukas-browser-ai-response', {
+            detail: { type: 'ready', status: 'ok', version: '1.0.0' }
+        }));
+        console.log('[Lukas Content] Announced presence to Lukas page');
+    }, 500);
+}
+
 console.log('[Lukas Content] Browser AI content script loaded');
