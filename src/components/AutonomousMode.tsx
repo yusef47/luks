@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StreamingMarkdownRenderer } from './StreamingMarkdownRenderer';
+import { marked } from 'marked';
 
 interface AutonomousModeProps {
     isOpen: boolean;
@@ -420,11 +421,16 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
         h2 { color: #22d3ee; font-size: 20px; margin: 30px 0 15px 0; }
         h3 { color: #a855f7; font-size: 16px; margin: 20px 0 10px 0; }
         p, li { color: #d4d4d8; line-height: 2; }
-        ul { padding-right: 20px; }
+        ul { padding-right: 20px; list-style-type: disc; }
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 25px 0; }
         .summary-box { background: linear-gradient(145deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05)); padding: 25px; border-radius: 16px; border-left: 4px solid #f59e0b; margin: 25px 0; }
-        .report-box { background: linear-gradient(145deg, rgba(168,85,247,0.1), rgba(168,85,247,0.05)); padding: 25px; border-radius: 16px; border-left: 4px solid #a855f7; margin: 25px 0; white-space: pre-wrap; }
+        .report-box { background: linear-gradient(145deg, rgba(168,85,247,0.1), rgba(168,85,247,0.05)); padding: 25px; border-radius: 16px; border-left: 4px solid #a855f7; margin: 25px 0; }
         strong { color: #fff; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; background: rgba(99,102,241,0.1); border-radius: 12px; overflow: hidden; }
+        th { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; padding: 15px; text-align: right; font-weight: 600; }
+        td { padding: 12px 15px; border-bottom: 1px solid rgba(255,255,255,0.1); color: #d4d4d8; }
+        tr:hover td { background: rgba(99,102,241,0.15); }
+        tr:last-child td { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -434,14 +440,14 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     
     <div class="summary-box">
         <h2>💡 الملخص التنفيذي</h2>
-        <p>${result.results.summary}</p>
+        <div>${marked.parse(result.results.summary || '')}</div>
     </div>
     
     ${chartsHtml}
     
     <div class="report-box">
         <h2>📄 التقرير الكامل</h2>
-        <div>${result.results.report}</div>
+        <div>${marked.parse(result.results.report || '')}</div>
     </div>
     
     ${sourcesHtml}

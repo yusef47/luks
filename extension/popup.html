@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Lukas Browser AI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 360px;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(135deg, #0f0f1a, #1a1a2e);
+            color: #e5e5e5;
+            padding: 16px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .header img {
+            width: 32px;
+            height: 32px;
+        }
+
+        .header h1 {
+            font-size: 16px;
+            color: #6366f1;
+        }
+
+        .header .status {
+            margin-right: auto;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .header .status.busy {
+            background: rgba(234, 179, 8, 0.2);
+            color: #eab308;
+        }
+
+        .input-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
+        .input-section label {
+            display: block;
+            font-size: 12px;
+            color: #a1a1aa;
+            margin-bottom: 8px;
+        }
+
+        .input-section textarea {
+            width: 100%;
+            height: 70px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px;
+            font-size: 13px;
+            resize: none;
+            outline: none;
+        }
+
+        .input-section textarea:focus {
+            border-color: #6366f1;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #fff;
+        }
+
+        .btn-start:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-start:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-stop {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-stop:hover {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        .progress {
+            margin-top: 12px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            display: none;
+        }
+
+        .progress.active {
+            display: block;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 11px;
+            color: #a1a1aa;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6366f1, #22d3ee);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .step-info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #22d3ee;
+        }
+
+        .log {
+            margin-top: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 11px;
+            color: #71717a;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 8px;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-entry.action {
+            color: #6366f1;
+        }
+
+        .log-entry.success {
+            color: #22c55e;
+        }
+
+        .log-entry.error {
+            color: #ef4444;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <img src="icons/icon48.png" alt="Lukas">
+        <h1>Lukas Browser AI</h1>
+        <span class="status" id="status">جاهز</span>
+    </div>
+
+    <div class="input-section">
+        <label>✍️ اكتب المهمة المطلوبة:</label>
+        <textarea id="taskInput" placeholder="مثال: ابحث عن أفضل فنادق دبي واحجز الأرخص..."></textarea>
+    </div>
+
+    <div class="buttons">
+        <button class="btn btn-start" id="startBtn">🚀 ابدأ</button>
+        <button class="btn btn-stop" id="stopBtn" style="display:none;">⏹ إيقاف</button>
+    </div>
+
+    <div class="progress" id="progress">
+        <div class="progress-header">
+            <span>الخطوة <span id="stepNum">1</span> من <span id="maxSteps">10</span></span>
+            <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+        <div class="step-info" id="stepInfo">جاري التحليل...</div>
+    </div>
+
+    <div class="log" id="log"></div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
