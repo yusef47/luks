@@ -359,7 +359,107 @@ const AutonomousMode: React.FC<AutonomousModeProps> = ({ isOpen, onClose, langua
     };
 
     const handleReset = () => { setResult(null); setPrompt(''); setProgress(0); setError(null); };
-    const handlePDF = () => { if (!result) return; const h = `<!DOCTYPE html><html dir="${isArabic ? 'rtl' : 'ltr'}"><head><meta charset="UTF-8"><style>body{font-family:system-ui,-apple-system,sans-serif;padding:50px;max-width:900px;margin:0 auto;background:linear-gradient(135deg,#0a0a12,#0f0f1a);color:#e5e5e5;line-height:2}h1{color:#6366f1;border-bottom:2px solid #6366f1;padding-bottom:20px;font-size:28px}h2{color:#22d3ee;margin-top:35px;font-size:20px}.box{background:linear-gradient(145deg,rgba(99,102,241,0.1),rgba(99,102,241,0.05));padding:25px;border-radius:12px;border-left:4px solid #6366f1;margin:25px 0}</style></head><body><h1>🧠 ${result.title}</h1><div class="box"><h2>الملخص التنفيذي</h2><p>${result.results.summary}</p></div><h2>التقرير الكامل</h2><div style="white-space:pre-wrap">${result.results.report}</div>${result.results.sources.length > 0 ? `<h2>المصادر</h2><ul>${result.results.sources.map(s => `<li><a href="${s.url}" style="color:#818cf8">${s.title}</a></li>`).join('')}</ul>` : ''}</body></html>`; const b = new Blob([h], { type: 'text/html' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `lukas-report-${Date.now()}.html`; a.click(); };
+
+    const handlePDF = () => {
+        if (!result) return;
+
+        // Create styled HTML for PDF
+        const statsHtml = result.results.stats?.map(s =>
+            `<div style="background:linear-gradient(145deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05));padding:20px;border-radius:12px;text-align:center;border:1px solid rgba(99,102,241,0.3)">
+                <div style="font-size:28px;font-weight:800;color:#6366f1">${s.value}${s.unit || ''}</div>
+                <div style="font-size:12px;color:#a1a1aa;margin-top:8px">${s.label}</div>
+            </div>`
+        ).join('') || '';
+
+        const chartsHtml = result.results.charts?.map(chart =>
+            `<div style="background:linear-gradient(145deg,rgba(15,15,25,0.9),rgba(10,10,18,0.95));padding:20px;border-radius:16px;border:1px solid rgba(99,102,241,0.2);margin:20px 0">
+                <h3 style="color:#22d3ee;margin:0 0 15px 0">📊 ${chart.title}</h3>
+                ${chart.data?.map((d, i) =>
+                `<div style="display:flex;align-items:center;margin:10px 0">
+                        <span style="color:#a1a1aa;min-width:150px">${d.label}</span>
+                        <div style="flex:1;height:24px;background:rgba(255,255,255,0.05);border-radius:6px;overflow:hidden">
+                            <div style="width:${(d.value / Math.max(...chart.data.map(x => x.value))) * 100}%;height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:6px"></div>
+                        </div>
+                        <span style="color:#6366f1;font-weight:700;min-width:80px;text-align:right">${d.value.toLocaleString()}</span>
+                    </div>`
+            ).join('') || ''}
+            </div>`
+        ).join('') || '';
+
+        const sourcesHtml = result.results.sources?.length > 0
+            ? `<div style="background:linear-gradient(145deg,rgba(6,182,212,0.1),rgba(6,182,212,0.05));padding:20px;border-radius:16px;border:1px solid rgba(6,182,212,0.3);margin:25px 0">
+                <h2 style="color:#22d3ee;margin:0 0 15px 0">📚 المصادر (${result.results.sources.length})</h2>
+                ${result.results.sources.map((s, i) =>
+                `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+                        <span style="color:#06b6d4">${i + 1}.</span>
+                        <a href="${s.url}" style="color:#a5f3fc;text-decoration:none;margin-right:10px">${s.title}</a>
+                    </div>`
+            ).join('')}
+            </div>`
+            : '';
+
+        const htmlContent = `
+<!DOCTYPE html>
+<html dir="${isArabic ? 'rtl' : 'ltr'}">
+<head>
+    <meta charset="UTF-8">
+    <title>🧠 ${result.title}</title>
+    <style>
+        @media print {
+            body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0a0a12, #0f0f1a);
+            color: #e5e5e5;
+            padding: 40px;
+            line-height: 1.8;
+        }
+        h1 { color: #6366f1; font-size: 32px; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #6366f1; }
+        h2 { color: #22d3ee; font-size: 20px; margin: 30px 0 15px 0; }
+        h3 { color: #a855f7; font-size: 16px; margin: 20px 0 10px 0; }
+        p, li { color: #d4d4d8; line-height: 2; }
+        ul { padding-right: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 25px 0; }
+        .summary-box { background: linear-gradient(145deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05)); padding: 25px; border-radius: 16px; border-left: 4px solid #f59e0b; margin: 25px 0; }
+        .report-box { background: linear-gradient(145deg, rgba(168,85,247,0.1), rgba(168,85,247,0.05)); padding: 25px; border-radius: 16px; border-left: 4px solid #a855f7; margin: 25px 0; white-space: pre-wrap; }
+        strong { color: #fff; }
+    </style>
+</head>
+<body>
+    <h1>🧠 ${result.title}</h1>
+    
+    <div class="stats-grid">${statsHtml}</div>
+    
+    <div class="summary-box">
+        <h2>💡 الملخص التنفيذي</h2>
+        <p>${result.results.summary}</p>
+    </div>
+    
+    ${chartsHtml}
+    
+    <div class="report-box">
+        <h2>📄 التقرير الكامل</h2>
+        <div>${result.results.report}</div>
+    </div>
+    
+    ${sourcesHtml}
+    
+    <div style="text-align:center;margin-top:40px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);color:#71717a;font-size:12px">
+        تم إنشاء هذا التقرير بواسطة لوكاس - ${new Date().toLocaleDateString('ar-EG')}
+    </div>
+</body>
+</html>`;
+
+        // Open in new window and trigger print
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            setTimeout(() => { printWindow.print(); }, 500);
+        }
+    };
 
     if (!isOpen) return null;
 
