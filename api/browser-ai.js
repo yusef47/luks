@@ -5,11 +5,11 @@
  */
 
 const VISION_MODELS = [
-    'qwen/qwen2.5-vl-7b-instruct:free',     // Best for Vision
-    'google/gemma-3-27b-it:free',           // Strong alternative
-    'google/gemma-3-12b-it:free',           // Lighter
-    'allenai/molmo-7b-d-0924:free',         // Fast
-    'google/gemma-3-4b-it:free',            // Fastest
+    'qwen/qwen-2.5-vl-7b-instruct:free',    // Correct: with hyphen
+    'google/gemma-3-27b-it:free',
+    'google/gemini-2.0-flash-exp:free',
+    'google/gemma-3-12b-it:free',
+    'google/gemma-3-4b-it:free',
 ];
 
 function getOpenRouterKeys() {
