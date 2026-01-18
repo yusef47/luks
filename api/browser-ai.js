@@ -4,11 +4,12 @@
  */
 
 const VISION_MODELS = [
-    'google/gemini-2.0-flash-exp:free',
-    'google/gemini-exp-1206:free',
-    'qwen/qwen-2.5-vl-72b-instruct:free',
-    'qwen/qwen-2.5-vl-7b-instruct:free',
-    'meta-llama/llama-3.2-90b-vision-instruct:free',
+    'meta-llama/llama-3.2-11b-vision-instruct:free',  // Meta Llama Vision - confirmed working
+    'qwen/qwen2.5-vl-32b-instruct:free',              // Qwen VL 32B - confirmed
+    'qwen/qwen2.5-vl-3b-instruct:free',               // Qwen VL 3B - confirmed
+    'google/gemma-3-27b-it:free',                     // Gemma 3 27B - confirmed
+    'google/gemma-3-12b-it:free',                     // Gemma 3 12B - confirmed
+    'mistralai/mistral-small-3.1-24b-instruct:free',  // Mistral Small - vision capable
 ];
 
 function getOpenRouterKeys() {
