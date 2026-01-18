@@ -177,18 +177,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                       <span className="text-lg">📎</span>
                       <span>رفع ملف</span>
                     </button>
-                    {onOpenBrowserAI && (
-                      <button
-                        onClick={() => {
+                    <button
+                      onClick={() => {
+                        if (onOpenBrowserAI) {
                           onOpenBrowserAI();
-                          setShowAttachMenu(false);
-                        }}
-                        className="w-full px-4 py-3 text-sm text-right flex items-center gap-3 hover:bg-[var(--hover-bg-color)] transition-colors border-t border-[var(--border-color)]"
-                      >
-                        <span className="text-lg">🖥️</span>
-                        <span>Browser AI</span>
-                      </button>
-                    )}
+                        } else {
+                          // Open extension instructions in new tab
+                          window.open('https://github.com/yusef47/luks/tree/main/extension', '_blank');
+                        }
+                        setShowAttachMenu(false);
+                      }}
+                      className="w-full px-4 py-3 text-sm text-right flex items-center gap-3 hover:bg-[var(--hover-bg-color)] transition-colors border-t border-[var(--border-color)]"
+                    >
+                      <span className="text-lg">🖥️</span>
+                      <span>Browser AI</span>
+                      <span className="text-[10px] text-[var(--text-secondary-color)] mr-auto">إضافة</span>
+                    </button>
                   </div>
                 )}
               </div>
