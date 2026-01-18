@@ -1,24 +1,17 @@
 /**
  * Browser AI API Endpoint
  * Receives screenshots from extension and returns AI actions
+ * Uses Gemini Vision API directly
  */
 
-const VISION_MODELS = [
-    'meta-llama/llama-3.2-11b-vision-instruct:free',  // Meta Llama Vision - confirmed working
-    'qwen/qwen2.5-vl-32b-instruct:free',              // Qwen VL 32B - confirmed
-    'qwen/qwen2.5-vl-3b-instruct:free',               // Qwen VL 3B - confirmed
-    'google/gemma-3-27b-it:free',                     // Gemma 3 27B - confirmed
-    'google/gemma-3-12b-it:free',                     // Gemma 3 12B - confirmed
-    'mistralai/mistral-small-3.1-24b-instruct:free',  // Mistral Small - vision capable
-];
-
-function getOpenRouterKeys() {
+// Get Gemini API keys
+function getGeminiKeys() {
     const keys = [];
     for (let i = 1; i <= 10; i++) {
-        const key = process.env[`OPENROUTER_API_KEY_${i}`];
+        const key = process.env[`GEMINI_API_KEY_${i}`];
         if (key && key.trim()) keys.push(key.trim());
     }
-    if (process.env.OPENROUTER_API_KEY) keys.push(process.env.OPENROUTER_API_KEY.trim());
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY.trim());
     return keys;
 }
 
@@ -91,8 +84,8 @@ ${pageText?.substring(0, 1500) || 'غير متاح'}
 - كن فعالاً - لا تأخذ خطوات غير ضرورية
 - أجب بـ JSON فقط بدون أي نص إضافي`;
 
-        // Call Vision AI
-        const aiResponse = await callVisionAI(prompt, screenshot);
+        // Call Gemini Vision
+        const aiResponse = await callGeminiVision(prompt, screenshot);
 
         if (!aiResponse) {
             return res.status(500).json({ error: 'AI failed to respond' });
@@ -108,66 +101,70 @@ ${pageText?.substring(0, 1500) || 'غير متاح'}
     }
 }
 
-async function callVisionAI(prompt, screenshotBase64) {
-    const keys = getOpenRouterKeys();
+async function callGeminiVision(prompt, screenshotBase64) {
+    const keys = getGeminiKeys();
     if (keys.length === 0) {
-        console.error('[BrowserAI] No API keys');
+        console.error('[BrowserAI] No Gemini API keys');
         return null;
     }
 
-    for (const model of VISION_MODELS) {
-        for (let attempt = 0; attempt < 2; attempt++) {
-            const apiKey = keys[keyIndex++ % keys.length];
+    const models = [
+        'gemini-2.0-flash-exp',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro'
+    ];
+
+    for (const model of models) {
+        // Try each key
+        for (let attempt = 0; attempt < Math.min(3, keys.length); attempt++) {
+            const apiKey = keys[(keyIndex++) % keys.length];
 
             try {
-                console.log(`[BrowserAI] Trying ${model.split('/')[1]?.split(':')[0]}...`);
+                console.log(`[BrowserAI] Trying Gemini ${model}...`);
 
-                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
-                        'HTTP-Referer': 'https://luks-pied.vercel.app',
-                        'X-Title': 'Lukas Browser AI'
-                    },
-                    body: JSON.stringify({
-                        model,
-                        messages: [{
-                            role: 'user',
-                            content: [
-                                { type: 'text', text: prompt },
-                                {
-                                    type: 'image_url',
-                                    image_url: {
-                                        url: `data:image/jpeg;base64,${screenshotBase64}`
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{
+                                parts: [
+                                    { text: prompt },
+                                    {
+                                        inline_data: {
+                                            mime_type: 'image/jpeg',
+                                            data: screenshotBase64
+                                        }
                                     }
-                                }
-                            ]
-                        }],
-                        max_tokens: 1000
-                    })
-                });
-
-                if (response.status === 429) {
-                    console.log('[BrowserAI] Rate limited, trying next...');
-                    continue;
-                }
+                                ]
+                            }],
+                            generationConfig: {
+                                temperature: 0.4,
+                                maxOutputTokens: 1000
+                            }
+                        })
+                    }
+                );
 
                 const data = await response.json();
 
-                if (data.choices?.[0]?.message?.content) {
-                    const content = data.choices[0].message.content;
+                if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    const content = data.candidates[0].content.parts[0].text;
                     // Extract JSON from response
                     const jsonMatch = content.match(/\{[\s\S]*\}/);
                     if (jsonMatch) {
-                        console.log(`[BrowserAI] ✅ ${model.split('/')[1]?.split(':')[0]} success`);
+                        console.log(`[BrowserAI] ✅ Gemini ${model} success`);
                         return JSON.parse(jsonMatch[0]);
                     }
                 }
 
                 if (data.error) {
-                    console.log(`[BrowserAI] API error: ${data.error.message}`);
-                    continue;
+                    console.log(`[BrowserAI] Gemini error: ${data.error.message}`);
+                    if (data.error.code === 429) {
+                        console.log('[BrowserAI] Rate limited, trying next key...');
+                        continue;
+                    }
                 }
             } catch (error) {
                 console.log(`[BrowserAI] Error: ${error.message}`);
@@ -176,7 +173,7 @@ async function callVisionAI(prompt, screenshotBase64) {
         }
     }
 
-    console.error('[BrowserAI] All models failed');
+    console.error('[BrowserAI] All Gemini models failed');
     return {
         observation: 'فشل التحليل',
         thinking: 'لم أتمكن من تحليل الصورة',
