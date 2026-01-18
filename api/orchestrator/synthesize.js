@@ -603,11 +603,11 @@ function ragBasicDecompose(question) {
 
 /**
  * STEP 2: Search + Extract full content (Manus recommendation)
- * First search for URLs, then extract full article content
+ * Returns {content, urls} for source tracking
  */
 async function ragSearchSingleQuery(query) {
     const tavilyKey = process.env.TAVILY_API_KEY;
-    if (!tavilyKey) return null;
+    if (!tavilyKey) return { content: null, urls: [] };
 
     console.log(`[RAG] Searching: "${query}"`);
 
@@ -619,17 +619,18 @@ async function ragSearchSingleQuery(query) {
             body: JSON.stringify({
                 api_key: tavilyKey,
                 query: query,
-                search_depth: 'advanced',  // Use advanced for better results
+                search_depth: 'advanced',
                 include_answer: true,
                 max_results: 5,
-                days: 30  // Expand to 30 days for more results
+                days: 30
             })
         });
 
-        if (!searchResponse.ok) return null;
+        if (!searchResponse.ok) return { content: null, urls: [] };
 
         const searchData = await searchResponse.json();
         let fullContent = "";
+        const collectedUrls = [];  // Track URLs for sources
 
         // Add Tavily's AI answer
         if (searchData.answer) {
@@ -637,11 +638,11 @@ async function ragSearchSingleQuery(query) {
         }
 
         // Collect URLs for extraction
-        const urls = [];
         if (searchData.results) {
             for (const r of searchData.results) {
-                if (r.url) urls.push(r.url);
-                // Also add the snippet content
+                if (r.url) {
+                    collectedUrls.push({ title: r.title, url: r.url });
+                }
                 fullContent += `--- مصدر ---\n`;
                 fullContent += `العنوان: ${r.title}\n`;
                 fullContent += `الملخص: ${r.content || ''}\n`;
@@ -650,6 +651,7 @@ async function ragSearchSingleQuery(query) {
         }
 
         // Step 2: Extract full content from top 3 URLs
+        const urls = collectedUrls.map(u => u.url);
         if (urls.length > 0) {
             console.log(`[RAG] Extracting full content from ${Math.min(urls.length, 3)} URLs...`);
             try {
@@ -658,7 +660,7 @@ async function ragSearchSingleQuery(query) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         api_key: tavilyKey,
-                        urls: urls.slice(0, 3)  // Extract top 3 URLs
+                        urls: urls.slice(0, 3)
                     })
                 });
 
@@ -679,11 +681,11 @@ async function ragSearchSingleQuery(query) {
             }
         }
 
-        return fullContent;
+        return { content: fullContent, urls: collectedUrls };
     } catch (e) {
         console.log(`[RAG] Search failed: ${e.message}`);
     }
-    return null;
+    return { content: null, urls: [] };
 }
 
 /**
@@ -799,6 +801,7 @@ ${combined}
 
 /**
  * STEP 5: Main RAG Pipeline (Manus Step-by-Step Summarization)
+ * Returns {success, prompt, sourceCount, sources} with source links
  */
 async function processWithRAG(question) {
     console.log('[RAG] ═══════════════════════════════════════════════════');
@@ -810,14 +813,23 @@ async function processWithRAG(question) {
 
     // Step 2 & 3: Search each query and summarize separately
     const summaries = [];
+    const allSources = [];  // Collect all source URLs
+
     for (let i = 0; i < queries.length; i++) {
         const query = queries[i];
         console.log(`[RAG] Step 2.${i + 1}: Searching "${query.substring(0, 40)}..."`);
 
-        const searchContent = await ragSearchSingleQuery(query);
-        if (searchContent) {
+        const searchResult = await ragSearchSingleQuery(query);
+        if (searchResult.content) {
+            // Collect unique sources
+            for (const src of searchResult.urls) {
+                if (!allSources.find(s => s.url === src.url)) {
+                    allSources.push(src);
+                }
+            }
+
             console.log(`[RAG] Step 3.${i + 1}: Summarizing results...`);
-            const summary = await ragSummarizeTopic(searchContent, query);
+            const summary = await ragSummarizeTopic(searchResult.content, query);
             if (summary) {
                 summaries.push(summary);
                 console.log(`[RAG] ✅ Summary ${i + 1} ready`);
@@ -827,19 +839,20 @@ async function processWithRAG(question) {
 
     if (summaries.length === 0) {
         console.log('[RAG] No summaries generated');
-        return { success: false, prompt: null, sourceCount: 0 };
+        return { success: false, prompt: null, sourceCount: 0, sources: [] };
     }
 
     // Step 4: Build final prompt to combine clean summaries
     const prompt = ragBuildFinalPrompt(summaries, question);
 
     console.log('[RAG] ═══════════════════════════════════════════════════');
-    console.log(`[RAG] Pipeline Complete! ${summaries.length} clean summaries ready`);
+    console.log(`[RAG] Pipeline Complete! ${summaries.length} summaries, ${allSources.length} sources`);
 
     return {
         success: true,
         prompt: prompt,
-        sourceCount: summaries.length * 5  // Approximate
+        sourceCount: allSources.length,
+        sources: allSources.slice(0, 5)  // Top 5 unique sources
     };
 }
 
@@ -1283,6 +1296,7 @@ export default async function handler(req, res) {
         // Step 2: Use RAG Pipeline if real-time data needed
         let userMessage;
         let ragUsed = false;
+        let ragSources = [];  // Store sources for citation
 
         if (needsRealtime) {
             console.log('[Synthesize] 🔄 Step 2: Running RAG Pipeline...');
@@ -1291,6 +1305,7 @@ export default async function handler(req, res) {
             if (ragResult.success) {
                 userMessage = ragResult.prompt;  // Use the strict summarizer prompt
                 ragUsed = true;
+                ragSources = ragResult.sources || [];  // Store sources
                 console.log(`[Synthesize] ✅ RAG Pipeline complete: ${ragResult.sourceCount} sources`);
             } else {
                 userMessage = userPrompt;
@@ -1348,6 +1363,15 @@ export default async function handler(req, res) {
 
             // Clear the global cache
             delete global._tavilyRawResults;
+        }
+
+        // Step 8: Add source links if RAG was used
+        if (response && ragUsed && ragSources.length > 0) {
+            response += '\n\n---\n**📚 المصادر:**\n';
+            ragSources.slice(0, 5).forEach((src, i) => {
+                // Format: [title](url) - opens in new tab in frontend
+                response += `${i + 1}. [${src.title}](${src.url})\n`;
+            });
         }
 
         if (!response) {
