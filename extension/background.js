@@ -243,11 +243,24 @@ async function executeAction(tabId, action) {
     }
 }
 
-// Send message to popup
-function sendToPopup(message) {
+// Send message to popup AND to content script (for web page)
+async function sendToPopup(message) {
+    // Send to popup
     chrome.runtime.sendMessage(message).catch(() => {
         // Popup might be closed, ignore
     });
+
+    // Also send to active tab's content script (for Lukas web page)
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) {
+            chrome.tabs.sendMessage(tab.id, message).catch(() => {
+                // Content script might not be ready, ignore
+            });
+        }
+    } catch (e) {
+        // Ignore errors
+    }
 }
 
 // Utility
