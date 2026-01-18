@@ -57,6 +57,9 @@ interface ChatPanelProps {
 
   // Localization
   t: (key: string) => string;
+
+  // Browser AI
+  onOpenBrowserAI?: () => void;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -81,7 +84,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   showComputer,
   onToggleComputer,
   onClarificationResponse,
-  t
+  t,
+  onOpenBrowserAI
 }) => {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -257,6 +261,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   onToggleSettings={onToggleSettings}
                   cycleCount={cycleCount}
                   setCycleCount={setCycleCount}
+                  onOpenBrowserAI={onOpenBrowserAI}
                   t={t}
                   variant="center"
                 />
@@ -375,6 +380,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             onToggleSettings={onToggleSettings}
             cycleCount={cycleCount}
             setCycleCount={setCycleCount}
+            onOpenBrowserAI={onOpenBrowserAI}
             t={t}
             variant="bottom"
           />

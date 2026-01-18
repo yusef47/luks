@@ -3,7 +3,7 @@
  * مكون إدخال الرسائل مع دعم الصوت والمرفقات
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { PaperclipIcon, CogIcon, ArrowRightIcon, WindowCloseIcon } from '../../../components/icons';
 import { SettingsPopover } from '../common/SettingsPopover';
 
@@ -32,6 +32,9 @@ interface ChatInputProps {
   cycleCount: number;
   setCycleCount: (count: number) => void;
 
+  // Browser AI
+  onOpenBrowserAI?: () => void;
+
   // Localization
   // Localization
   t: (key: string) => string;
@@ -55,11 +58,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onToggleSettings,
   cycleCount,
   setCycleCount,
+  onOpenBrowserAI,
   t,
   variant = 'bottom' // 'center' | 'bottom'
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
 
   // Focus textarea on mount if centered
   useEffect(() => {
@@ -148,14 +153,45 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             />
 
             {/* Left Tools */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
-                className="p-2 rounded-xl text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)] transition-colors h-9 w-9 flex items-center justify-center"
-              >
-                <PaperclipIcon className="w-5 h-5" />
-              </button>
+            <div className="flex items-center gap-1 relative">
+              {/* Attachment Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowAttachMenu(!showAttachMenu)}
+                  disabled={isLoading}
+                  className="p-2 rounded-xl text-[var(--text-secondary-color)] hover:bg-[var(--hover-bg-color)] hover:text-[var(--text-color)] transition-colors h-9 w-9 flex items-center justify-center"
+                >
+                  <PaperclipIcon className="w-5 h-5" />
+                </button>
+
+                {/* Dropdown Menu */}
+                {showAttachMenu && (
+                  <div className="absolute bottom-full left-0 mb-2 bg-[var(--bg-secondary-color)] border border-[var(--border-color)] rounded-xl shadow-lg overflow-hidden min-w-[180px] z-50">
+                    <button
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                        setShowAttachMenu(false);
+                      }}
+                      className="w-full px-4 py-3 text-sm text-right flex items-center gap-3 hover:bg-[var(--hover-bg-color)] transition-colors"
+                    >
+                      <span className="text-lg">📎</span>
+                      <span>رفع ملف</span>
+                    </button>
+                    {onOpenBrowserAI && (
+                      <button
+                        onClick={() => {
+                          onOpenBrowserAI();
+                          setShowAttachMenu(false);
+                        }}
+                        className="w-full px-4 py-3 text-sm text-right flex items-center gap-3 hover:bg-[var(--hover-bg-color)] transition-colors border-t border-[var(--border-color)]"
+                      >
+                        <span className="text-lg">🖥️</span>
+                        <span>Browser AI</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={onToggleListening}
