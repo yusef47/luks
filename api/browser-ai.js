@@ -1,15 +1,22 @@
 /**
  * Browser AI API Endpoint
  * Receives screenshots from extension and returns AI actions
- * Uses OpenRouter Vision Models
+ * Uses OpenRouter Vision Models with Text-Only Fallback
  */
 
 const VISION_MODELS = [
-    'qwen/qwen-2.5-vl-7b-instruct:free',    // Correct: with hyphen
+    'qwen/qwen-2.5-vl-7b-instruct:free',
     'google/gemma-3-27b-it:free',
     'google/gemini-2.0-flash-exp:free',
     'google/gemma-3-12b-it:free',
-    'google/gemma-3-4b-it:free',
+];
+
+// Text-only models as fallback (no image, just page text)
+const TEXT_MODELS = [
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'qwen/qwen3-235b-a22b:free',
+    'deepseek/deepseek-r1:free',
+    'mistralai/mistral-small-3.1-24b-instruct:free',
 ];
 
 function getOpenRouterKeys() {
@@ -25,7 +32,6 @@ function getOpenRouterKeys() {
 let keyIndex = 0;
 
 export default async function handler(req, res) {
-    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -34,73 +40,44 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     try {
-        const { task, screenshot, url, title, pageText, previousSteps = [] } = req.body;
+        const { task, screenshot, url, title, pageText, previousSteps = [], clickableElements = [] } = req.body;
 
-        if (!task || !screenshot) {
-            return res.status(400).json({ error: 'Missing task or screenshot' });
+        if (!task) {
+            return res.status(400).json({ error: 'Missing task' });
         }
 
         console.log(`[BrowserAI] Task: "${task.substring(0, 50)}..."`);
         console.log(`[BrowserAI] URL: ${url}`);
-        console.log(`[BrowserAI] Previous steps: ${previousSteps.length}`);
 
-        // Build step history
         const stepHistory = previousSteps.map((s, i) =>
             `Step ${i + 1}: ${s.action} - ${s.description || ''}`
         ).join('\n');
 
-        // Build prompt
-        const prompt = `أنت وكيل متصفح ذكي يتحكم في متصفح المستخدم. يمكنك رؤية لقطة الشاشة الحالية.
-
-المهمة: ${task}
-
-الرابط الحالي: ${url || 'غير معروف'}
-عنوان الصفحة: ${title || 'غير معروف'}
-
-الخطوات السابقة:
-${stepHistory || 'لا توجد خطوات سابقة'}
-
-محتوى الصفحة (جزء):
-${pageText?.substring(0, 1500) || 'غير متاح'}
-
-بناءً على ما تراه في لقطة الشاشة، قرر الإجراء التالي لإكمال المهمة.
-
-أجب بصيغة JSON التالية فقط:
-{
-    "observation": "وصف موجز لما تراه على الصفحة",
-    "thinking": "تفكيرك حول ما يجب فعله",
-    "action": {
-        "type": "click" أو "type" أو "scroll" أو "goto" أو "wait" أو "pressKey" أو "done",
-        "x": 500,
-        "y": 300,
-        "text": "النص للكتابة إذا كان الإجراء type",
-        "url": "الرابط إذا كان الإجراء goto",
-        "direction": "up أو down إذا كان scroll",
-        "key": "Enter أو Tab إذا كان pressKey",
-        "description": "وصف الإجراء بالعربية"
-    },
-    "taskComplete": false,
-    "result": "اكتب النتيجة هنا فقط إذا كان taskComplete = true"
-}
-
-تعليمات مهمة:
-- إذا رأيت نتائج بالمعلومات المطلوبة، استخرجها واجعل taskComplete: true
-- للنقر، قدّر إحداثيات x,y بناءً على موقع العنصر
-- إذا رأيت مربع بحث، اكتب فيه
-- إذا احتجت للتمرير لرؤية المزيد، استخدم scroll
-- كن فعالاً - لا تأخذ خطوات غير ضرورية
-- أجب بـ JSON فقط بدون أي نص إضافي`;
-
-        // Call Vision AI
-        const aiResponse = await callVisionAI(prompt, screenshot);
-
-        if (!aiResponse) {
-            return res.status(500).json({ error: 'AI failed to respond' });
+        // Try Vision AI first (with screenshot)
+        if (screenshot) {
+            const visionResult = await callVisionAI(task, screenshot, url, title, pageText, stepHistory);
+            if (visionResult) {
+                console.log(`[BrowserAI] ✅ Vision mode success`);
+                return res.status(200).json(visionResult);
+            }
         }
 
-        console.log(`[BrowserAI] AI response: ${aiResponse.action?.type} - ${aiResponse.action?.description}`);
+        // Fallback to Text-Only AI
+        console.log(`[BrowserAI] Falling back to text-only mode...`);
+        const textResult = await callTextAI(task, url, title, pageText, stepHistory, clickableElements);
 
-        res.status(200).json(aiResponse);
+        if (textResult) {
+            console.log(`[BrowserAI] ✅ Text-only mode success`);
+            return res.status(200).json(textResult);
+        }
+
+        // All failed
+        return res.status(200).json({
+            observation: 'فشل التحليل',
+            thinking: 'جميع الموديلات مشغولة',
+            action: { type: 'wait', duration: 5000, description: 'انتظار - جاري إعادة المحاولة' },
+            taskComplete: false
+        });
 
     } catch (error) {
         console.error('[BrowserAI] Error:', error);
@@ -108,85 +85,155 @@ ${pageText?.substring(0, 1500) || 'غير متاح'}
     }
 }
 
-async function callVisionAI(prompt, screenshotBase64) {
+// Vision AI (with screenshot)
+async function callVisionAI(task, screenshot, url, title, pageText, stepHistory) {
     const keys = getOpenRouterKeys();
-    if (keys.length === 0) {
-        console.error('[BrowserAI] No OpenRouter API keys');
-        return null;
-    }
+    if (keys.length === 0) return null;
+
+    const prompt = buildPrompt(task, url, title, pageText, stepHistory, true);
 
     for (const model of VISION_MODELS) {
-        // Try each model with multiple keys
-        for (let attempt = 0; attempt < Math.min(2, keys.length); attempt++) {
-            const apiKey = keys[(keyIndex++) % keys.length];
-            const modelName = model.split('/')[1]?.split(':')[0] || model;
+        const apiKey = keys[(keyIndex++) % keys.length];
+        const modelName = model.split('/')[1]?.split(':')[0] || model;
 
-            try {
-                console.log(`[BrowserAI] Trying ${modelName}...`);
+        try {
+            console.log(`[BrowserAI] Trying ${modelName} (vision)...`);
 
-                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
-                        'HTTP-Referer': 'https://luks-pied.vercel.app',
-                        'X-Title': 'Lukas Browser AI'
-                    },
-                    body: JSON.stringify({
-                        model,
-                        messages: [{
-                            role: 'user',
-                            content: [
-                                { type: 'text', text: prompt },
-                                {
-                                    type: 'image_url',
-                                    image_url: {
-                                        url: `data:image/jpeg;base64,${screenshotBase64}`
-                                    }
-                                }
-                            ]
-                        }],
-                        max_tokens: 1000
-                    })
-                });
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': 'https://luks-pied.vercel.app',
+                    'X-Title': 'Lukas Browser AI'
+                },
+                body: JSON.stringify({
+                    model,
+                    messages: [{
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: prompt },
+                            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshot}` } }
+                        ]
+                    }],
+                    max_tokens: 1000
+                })
+            });
 
-                // Handle rate limiting with retry
-                if (response.status === 429) {
-                    console.log(`[BrowserAI] ${modelName} rate limited, waiting 5s...`);
-                    await sleep(5000);
-                    continue;
-                }
-
-                const data = await response.json();
-
-                if (data.choices?.[0]?.message?.content) {
-                    const content = data.choices[0].message.content;
-                    // Extract JSON from response
-                    const jsonMatch = content.match(/\{[\s\S]*\}/);
-                    if (jsonMatch) {
-                        console.log(`[BrowserAI] ✅ ${modelName} success`);
-                        return JSON.parse(jsonMatch[0]);
-                    }
-                }
-
-                if (data.error) {
-                    console.log(`[BrowserAI] ${modelName} error: ${data.error.message?.substring(0, 100)}`);
-                    continue;
-                }
-            } catch (error) {
-                console.log(`[BrowserAI] ${modelName} error: ${error.message}`);
+            if (response.status === 429) {
+                console.log(`[BrowserAI] ${modelName} rate limited`);
                 continue;
+            }
+
+            const data = await response.json();
+            const result = parseAIResponse(data);
+            if (result) return result;
+
+        } catch (error) {
+            console.log(`[BrowserAI] ${modelName} error: ${error.message}`);
+        }
+    }
+    return null;
+}
+
+// Text-Only AI (no screenshot)
+async function callTextAI(task, url, title, pageText, stepHistory, clickableElements) {
+    const keys = getOpenRouterKeys();
+    if (keys.length === 0) return null;
+
+    const elementsText = clickableElements.slice(0, 20).map((el, i) =>
+        `[${i}] ${el.tag}: "${el.text}" at (${el.x}, ${el.y})`
+    ).join('\n');
+
+    const prompt = buildPrompt(task, url, title, pageText, stepHistory, false, elementsText);
+
+    for (const model of TEXT_MODELS) {
+        const apiKey = keys[(keyIndex++) % keys.length];
+        const modelName = model.split('/')[1]?.split(':')[0] || model;
+
+        try {
+            console.log(`[BrowserAI] Trying ${modelName} (text-only)...`);
+
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': 'https://luks-pied.vercel.app',
+                    'X-Title': 'Lukas Browser AI'
+                },
+                body: JSON.stringify({
+                    model,
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 1000
+                })
+            });
+
+            if (response.status === 429) {
+                console.log(`[BrowserAI] ${modelName} rate limited`);
+                continue;
+            }
+
+            const data = await response.json();
+            const result = parseAIResponse(data);
+            if (result) return result;
+
+        } catch (error) {
+            console.log(`[BrowserAI] ${modelName} error: ${error.message}`);
+        }
+    }
+    return null;
+}
+
+function buildPrompt(task, url, title, pageText, stepHistory, isVision, elementsText = '') {
+    return `أنت وكيل متصفح ذكي. ${isVision ? 'انظر للصورة المرفقة.' : 'اقرأ محتوى الصفحة التالي.'}
+
+المهمة: ${task}
+الرابط: ${url || 'غير معروف'}
+العنوان: ${title || 'غير معروف'}
+
+الخطوات السابقة:
+${stepHistory || 'لا توجد'}
+
+${elementsText ? `العناصر القابلة للنقر:\n${elementsText}` : ''}
+
+محتوى الصفحة:
+${pageText?.substring(0, 2000) || 'غير متاح'}
+
+أجب بـ JSON فقط:
+{
+    "observation": "ما تراه",
+    "thinking": "تفكيرك",
+    "action": {
+        "type": "click|type|scroll|goto|wait|pressKey|done",
+        "x": 500, "y": 300,
+        "text": "للكتابة",
+        "url": "للانتقال",
+        "direction": "up|down",
+        "key": "Enter|Tab",
+        "description": "وصف بالعربية"
+    },
+    "taskComplete": false,
+    "result": "النتيجة إذا اكتمل"
+}`;
+}
+
+function parseAIResponse(data) {
+    if (data.choices?.[0]?.message?.content) {
+        const content = data.choices[0].message.content;
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
+                return JSON.parse(jsonMatch[0]);
+            } catch (e) {
+                console.log('[BrowserAI] JSON parse error');
             }
         }
     }
-
-    console.error('[BrowserAI] All models failed');
-    return {
-        observation: 'فشل التحليل',
-        thinking: 'لم أتمكن من تحليل الصورة',
-        action: { type: 'wait', description: 'انتظار - خطأ في التحليل' },
-        taskComplete: false
-    };
+    if (data.error) {
+        console.log(`[BrowserAI] API error: ${data.error.message?.substring(0, 80)}`);
+    }
+    return null;
 }
 
 function sleep(ms) {
