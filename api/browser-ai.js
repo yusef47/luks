@@ -5,18 +5,15 @@
  */
 
 const VISION_MODELS = [
-    'qwen/qwen-2.5-vl-7b-instruct:free',
-    'google/gemma-3-27b-it:free',
-    'google/gemini-2.0-flash-exp:free',
+    'google/gemma-3-27b-it:free',           // Confirmed working
     'google/gemma-3-12b-it:free',
 ];
 
-// Text-only models as fallback (no image, just page text)
+// Text-only models as fallback (confirmed working from activity)
 const TEXT_MODELS = [
+    'deepseek/deepseek-r1-0528:free',       // Confirmed working!
+    'xiaomi/mimo-v2-flash:free',            // Confirmed working!
     'meta-llama/llama-3.3-70b-instruct:free',
-    'qwen/qwen3-235b-a22b:free',
-    'deepseek/deepseek-r1:free',
-    'mistralai/mistral-small-3.1-24b-instruct:free',
 ];
 
 function getOpenRouterKeys() {
