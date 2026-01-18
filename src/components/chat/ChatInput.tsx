@@ -6,7 +6,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { PaperclipIcon, CogIcon, ArrowRightIcon, WindowCloseIcon } from '../../../components/icons';
 import { SettingsPopover } from '../common/SettingsPopover';
-import { BrowserAIModal } from '../BrowserAIModal';
+import { BrowserAIPanel } from '../BrowserAIPanel';
 
 interface ChatInputProps {
   // Input
@@ -257,8 +257,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         )}
       </div>
 
-      {/* Browser AI Modal */}
-      <BrowserAIModal
+      {/* Browser AI Panel */}
+      <BrowserAIPanel
         isOpen={showBrowserAIModal}
         onClose={() => setShowBrowserAIModal(false)}
       />

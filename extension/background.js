@@ -18,6 +18,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
+// Listen for messages from Lukas website (external)
+let externalSender = null;
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+    console.log('[Lukas Extension] External message:', message);
+    externalSender = sender;
+
+    if (message.action === 'ping') {
+        sendResponse({ status: 'ok', version: '1.0.0' });
+        return true;
+    }
+
+    if (message.action === 'startTask') {
+        startTaskExternal(message.task, message.maxSteps || 10, sendResponse);
+        return true; // Keep channel open for async response
+    }
+
+    if (message.action === 'stopTask') {
+        shouldStop = true;
+        isRunning = false;
+        sendResponse({ status: 'stopped' });
+    }
+});
+
 // Main task execution loop
 async function startTask(task, maxSteps) {
     if (isRunning) return;
@@ -97,6 +120,69 @@ async function startTask(task, maxSteps) {
     } catch (error) {
         console.error('[Lukas] Error:', error);
         sendToPopup({ type: 'error', error: error.message });
+    } finally {
+        isRunning = false;
+    }
+}
+
+// External task execution (from Lukas website)
+async function startTaskExternal(task, maxSteps, sendResponse) {
+    if (isRunning) {
+        sendResponse({ type: 'error', error: 'مهمة أخرى قيد التنفيذ' });
+        return;
+    }
+
+    isRunning = true;
+    shouldStop = false;
+
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) {
+            sendResponse({ type: 'error', error: 'لا توجد صفحة نشطة' });
+            return;
+        }
+
+        let previousSteps = [];
+        let allUpdates = [];
+
+        for (let step = 1; step <= maxSteps && !shouldStop; step++) {
+            const screenshot = await captureTab(tab.id);
+            const pageInfo = await getPageInfo(tab.id);
+
+            // Send progress update
+            allUpdates.push({ type: 'step', step, maxSteps, action: 'جاري التحليل...', screenshot });
+
+            const aiResponse = await callAI({
+                task, screenshot,
+                url: tab.url,
+                title: tab.title,
+                pageText: pageInfo?.text || '',
+                previousSteps
+            });
+
+            if (!aiResponse || aiResponse.error) {
+                sendResponse({ type: 'error', error: aiResponse?.error || 'فشل الاتصال بالـ AI', updates: allUpdates });
+                return;
+            }
+
+            if (aiResponse.taskComplete) {
+                allUpdates.push({ type: 'complete', result: aiResponse.result, step, maxSteps });
+                sendResponse({ type: 'complete', result: aiResponse.result, updates: allUpdates });
+                return;
+            }
+
+            const action = aiResponse.action;
+            allUpdates.push({ type: 'step', step, maxSteps, action: action.description || action.type, screenshot });
+
+            await executeAction(tab.id, action);
+            previousSteps.push({ step, action: action.type, description: action.description });
+            await sleep(1500);
+        }
+
+        sendResponse({ type: 'complete', result: 'تم إكمال الخطوات', updates: allUpdates });
+
+    } catch (error) {
+        sendResponse({ type: 'error', error: error.message });
     } finally {
         isRunning = false;
     }
