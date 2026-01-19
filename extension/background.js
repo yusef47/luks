@@ -396,3 +396,8 @@ async function executeAction(tabId, action) {
 }
 
 // ... rest of file ...
+
+// Sleep helper
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
