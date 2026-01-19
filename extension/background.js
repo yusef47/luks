@@ -73,8 +73,8 @@ async function startTask(task, maxSteps) {
             // 2. Get page info
             const pageInfo = await getPageInfo(tab.id);
 
-            // 3. Send to AI API
-            sendToPopup({ type: 'step', step, action: 'جاري التحليل...' });
+            // 3. Send to AI API with screenshot for display
+            sendToPopup({ type: 'step', step, maxSteps, action: 'جاري التحليل...', screenshot });
 
             const aiResponse = await callAI({
                 task,
@@ -98,7 +98,7 @@ async function startTask(task, maxSteps) {
 
             // 5. Execute action
             const action = aiResponse.action;
-            sendToPopup({ type: 'step', step, action: action.description || action.type });
+            sendToPopup({ type: 'step', step, maxSteps, action: action.description || action.type, screenshot });
 
             await executeAction(tab.id, action);
 
