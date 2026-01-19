@@ -112,33 +112,80 @@ async function clickAt(x, y) {
     }
 }
 
-// Type text
+// Type text (improved for Google and other sites)
 async function typeText(text, x, y) {
+    console.log('[Lukas Content] Typing:', text, 'at', x, y);
+
     // Click first if coordinates provided
     if (x !== undefined && y !== undefined) {
         await clickAt(x, y);
-        await sleep(300);
+        await sleep(500);
     }
 
-    // Find focused element or active input
-    let target = document.activeElement;
-    if (!target || target === document.body) {
-        target = document.querySelector('input:focus, textarea:focus, [contenteditable]:focus');
+    // Try to find the search input on Google specifically
+    let target = document.querySelector('input[name="q"], input[type="search"], textarea[name="q"]');
+
+    // If not found, try focused element
+    if (!target) {
+        target = document.activeElement;
     }
+
+    // If still not found, try common selectors
+    if (!target || target === document.body) {
+        target = document.querySelector('input:not([type="hidden"]), textarea, [contenteditable="true"]');
+    }
+
+    console.log('[Lukas Content] Target element:', target?.tagName, target?.name);
 
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-        // Clear existing value
-        target.value = '';
+        // Focus the element
+        target.focus();
+        await sleep(100);
 
-        // Type character by character for natural effect
-        for (const char of text) {
-            target.value += char;
-            target.dispatchEvent(new Event('input', { bubbles: true }));
-            await sleep(30);
+        // Clear existing value
+        if (target.value !== undefined) {
+            target.value = '';
         }
 
-        // Dispatch change event
+        // Set value directly (faster and more reliable)
+        if (target.value !== undefined) {
+            target.value = text;
+        } else if (target.isContentEditable) {
+            target.innerText = text;
+        }
+
+        // Dispatch events to trigger any listeners
+        target.dispatchEvent(new Event('input', { bubbles: true }));
         target.dispatchEvent(new Event('change', { bubbles: true }));
+
+        console.log('[Lukas Content] Text typed successfully');
+
+        // Auto-press Enter for search
+        await sleep(500);
+        await pressEnter(target);
+    } else {
+        console.log('[Lukas Content] No suitable input found!');
+    }
+}
+
+// Press Enter on element
+async function pressEnter(target) {
+    console.log('[Lukas Content] Pressing Enter...');
+
+    const enterEvent = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+    });
+    target.dispatchEvent(enterEvent);
+
+    // Also submit form if exists
+    const form = target.closest('form');
+    if (form) {
+        form.submit();
     }
 }
 
