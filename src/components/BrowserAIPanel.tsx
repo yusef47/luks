@@ -14,6 +14,7 @@ interface StepUpdate {
     result?: string;
     screenshot?: string;
     error?: string;
+    url?: string;
 }
 
 interface BrowserAIPanelProps {
@@ -31,6 +32,7 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
     const [steps, setSteps] = useState<StepUpdate[]>([]);
     const [result, setResult] = useState<string | null>(null);
     const [latestScreenshot, setLatestScreenshot] = useState<string | null>(null);
+    const [currentUrl, setCurrentUrl] = useState<string | null>(null);
 
     // Handle extension responses
     const handleExtensionResponse = useCallback((event: Event) => {
@@ -44,11 +46,16 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
         }
 
         if (data.type === 'step') {
+            setIsRunning(true);
             setCurrentStep(data.step || 0);
+            if (data.maxSteps) setMaxSteps(data.maxSteps);
             setSteps(prev => [...prev, data]);
             setStatus(data.action || 'جاري التنفيذ...');
             if (data.screenshot) {
                 setLatestScreenshot(data.screenshot);
+            }
+            if (data.url) {
+                setCurrentUrl(data.url);
             }
         }
 
@@ -248,8 +255,15 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
 
                     {/* Right Panel - Screenshot Preview */}
                     <div className="flex-1 p-4 flex flex-col">
-                        <p className="text-sm text-[var(--text-secondary-color)] mb-2">معاينة المتصفح:</p>
-                        <div className="flex-1 bg-[var(--bg-tertiary-color)] rounded-xl overflow-hidden flex items-center justify-center">
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="text-sm text-[var(--text-secondary-color)]">معاينة المتصفح:</span>
+                            {currentUrl && (
+                                <div className="flex-1 bg-[var(--bg-tertiary-color)] rounded-lg px-3 py-1 text-xs text-[var(--text-secondary-color)] truncate">
+                                    🌐 {currentUrl}
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex-1 bg-[var(--bg-tertiary-color)] rounded-xl overflow-hidden flex items-center justify-center border border-[var(--border-color)]">
                             {latestScreenshot ? (
                                 <img
                                     src={`data:image/jpeg;base64,${latestScreenshot}`}

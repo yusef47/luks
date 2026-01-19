@@ -1,198 +1,226 @@
 /**
  * Lukas Browser AI - Background Service Worker
- * Coordinates between popup, content script, and API
+ * Opens a NEW tab and controls it (user watches from Lukas)
  */
 
 const API_URL = 'https://luks-pied.vercel.app/api/browser-ai';
 let isRunning = false;
 let shouldStop = false;
+let browserTabId = null;  // The tab we control
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'startTask') {
-        startTask(message.task, message.maxSteps || 10);
+        startBrowserTask(message.task, message.maxSteps || 10);
     }
     if (message.action === 'stopTask') {
-        shouldStop = true;
-        isRunning = false;
+        stopTask();
     }
 });
 
-// Listen for messages from Lukas website (external)
-let externalSender = null;
-chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
-    console.log('[Lukas Extension] External message:', message);
-    externalSender = sender;
-
-    if (message.action === 'ping') {
-        sendResponse({ status: 'ok', version: '1.0.0' });
-        return true;
+// Listen for messages from Lukas web page (via content script)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'startTask' && message.fromPage) {
+        startBrowserTask(message.task, message.maxSteps || 10);
     }
-
-    if (message.action === 'startTask') {
-        startTaskExternal(message.task, message.maxSteps || 10, sendResponse);
-        return true; // Keep channel open for async response
-    }
-
     if (message.action === 'stopTask') {
-        shouldStop = true;
-        isRunning = false;
-        sendResponse({ status: 'stopped' });
+        stopTask();
     }
 });
 
-// Main task execution loop
-async function startTask(task, maxSteps) {
+function stopTask() {
+    shouldStop = true;
+    isRunning = false;
+    // Close the browser tab we created
+    if (browserTabId) {
+        chrome.tabs.remove(browserTabId).catch(() => { });
+        browserTabId = null;
+    }
+}
+
+// Main task execution - opens NEW tab
+async function startBrowserTask(task, maxSteps) {
     if (isRunning) return;
 
     isRunning = true;
     shouldStop = false;
 
-    console.log('[Lukas] Starting task:', task);
+    console.log('[Lukas] Starting browser task:', task);
 
     try {
-        // Get active tab
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tab) {
-            sendToPopup({ type: 'error', error: 'لا توجد صفحة نشطة' });
-            return;
-        }
+        // 1. Open a new tab for browsing (start with Google)
+        const newTab = await chrome.tabs.create({
+            url: 'https://www.google.com/search?q=' + encodeURIComponent(task),
+            active: false  // Don't switch to it, user stays on Lukas
+        });
+        browserTabId = newTab.id;
+
+        console.log('[Lukas] Created browser tab:', browserTabId);
+
+        // Wait for tab to load
+        await waitForTabLoad(browserTabId);
+
+        // Send initial update
+        broadcastUpdate({
+            type: 'step',
+            step: 1,
+            maxSteps,
+            action: 'تم فتح Google وبدء البحث...',
+            url: newTab.url
+        });
+
+        // Wait a moment for page to fully render
+        await sleep(2000);
 
         let previousSteps = [];
 
+        // 2. Main task loop
         for (let step = 1; step <= maxSteps && !shouldStop; step++) {
             console.log(`[Lukas] Step ${step}/${maxSteps}`);
 
-            // 1. Capture screenshot
-            const screenshot = await captureTab(tab.id);
-            if (!screenshot) {
-                sendToPopup({ type: 'error', error: 'فشل التقاط الصورة' });
+            // Check if tab still exists
+            try {
+                await chrome.tabs.get(browserTabId);
+            } catch (e) {
+                broadcastUpdate({ type: 'error', error: 'تم إغلاق التبويب' });
                 break;
             }
 
-            // 2. Get page info
-            const pageInfo = await getPageInfo(tab.id);
+            // Capture screenshot from OUR tab (not active tab)
+            const screenshot = await captureTab(browserTabId);
+            if (!screenshot) {
+                broadcastUpdate({ type: 'error', error: 'فشل التقاط الصورة' });
+                break;
+            }
 
-            // 3. Send to AI API with screenshot for display
-            sendToPopup({ type: 'step', step, maxSteps, action: 'جاري التحليل...', screenshot });
+            // Get current tab info
+            const tab = await chrome.tabs.get(browserTabId);
 
+            // Get page info
+            const pageInfo = await getPageInfo(browserTabId);
+
+            // Send screenshot to panel for display
+            broadcastUpdate({
+                type: 'step',
+                step,
+                maxSteps,
+                action: 'جاري التحليل...',
+                screenshot,
+                url: tab.url
+            });
+
+            // Call AI API
             const aiResponse = await callAI({
                 task,
                 screenshot,
                 url: tab.url,
                 title: tab.title,
                 pageText: pageInfo?.text || '',
+                clickableElements: pageInfo?.clickableElements || [],
                 previousSteps
             });
 
             if (!aiResponse || aiResponse.error) {
-                sendToPopup({ type: 'error', error: aiResponse?.error || 'فشل الاتصال بالـ AI' });
-                break;
+                broadcastUpdate({
+                    type: 'step',
+                    step,
+                    maxSteps,
+                    action: 'خطأ في التحليل، جاري المحاولة...',
+                    screenshot,
+                    url: tab.url
+                });
+                await sleep(3000);
+                continue;
             }
 
-            // 4. Check if task complete
+            // Check if task complete
             if (aiResponse.taskComplete) {
-                sendToPopup({ type: 'complete', result: aiResponse.result });
+                broadcastUpdate({
+                    type: 'complete',
+                    result: aiResponse.result,
+                    screenshot,
+                    url: tab.url
+                });
                 break;
             }
 
-            // 5. Execute action
+            // Execute action
             const action = aiResponse.action;
-            sendToPopup({ type: 'step', step, maxSteps, action: action.description || action.type, screenshot });
+            broadcastUpdate({
+                type: 'step',
+                step,
+                maxSteps,
+                action: action.description || action.type,
+                screenshot,
+                url: tab.url
+            });
 
-            await executeAction(tab.id, action);
+            await executeAction(browserTabId, action);
 
-            // 6. Record step
+            // Record step
             previousSteps.push({
                 step,
                 action: action.type,
                 description: action.description
             });
 
-            // 7. Wait before next step
-            await sleep(1500);
+            // Wait for page changes
+            await sleep(2000);
         }
 
         if (shouldStop) {
-            sendToPopup({ type: 'error', error: 'تم الإيقاف بواسطة المستخدم' });
+            broadcastUpdate({ type: 'error', error: 'تم الإيقاف' });
         }
 
     } catch (error) {
         console.error('[Lukas] Error:', error);
-        sendToPopup({ type: 'error', error: error.message });
+        broadcastUpdate({ type: 'error', error: error.message });
     } finally {
         isRunning = false;
+        // Keep tab open for user to see results
     }
 }
 
-// External task execution (from Lukas website)
-async function startTaskExternal(task, maxSteps, sendResponse) {
-    if (isRunning) {
-        sendResponse({ type: 'error', error: 'مهمة أخرى قيد التنفيذ' });
-        return;
-    }
-
-    isRunning = true;
-    shouldStop = false;
-
-    try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tab) {
-            sendResponse({ type: 'error', error: 'لا توجد صفحة نشطة' });
-            return;
-        }
-
-        let previousSteps = [];
-        let allUpdates = [];
-
-        for (let step = 1; step <= maxSteps && !shouldStop; step++) {
-            const screenshot = await captureTab(tab.id);
-            const pageInfo = await getPageInfo(tab.id);
-
-            // Send progress update
-            allUpdates.push({ type: 'step', step, maxSteps, action: 'جاري التحليل...', screenshot });
-
-            const aiResponse = await callAI({
-                task, screenshot,
-                url: tab.url,
-                title: tab.title,
-                pageText: pageInfo?.text || '',
-                previousSteps
-            });
-
-            if (!aiResponse || aiResponse.error) {
-                sendResponse({ type: 'error', error: aiResponse?.error || 'فشل الاتصال بالـ AI', updates: allUpdates });
-                return;
+// Wait for tab to finish loading
+function waitForTabLoad(tabId) {
+    return new Promise((resolve) => {
+        const checkTab = async () => {
+            try {
+                const tab = await chrome.tabs.get(tabId);
+                if (tab.status === 'complete') {
+                    resolve();
+                } else {
+                    setTimeout(checkTab, 200);
+                }
+            } catch (e) {
+                resolve(); // Tab closed
             }
-
-            if (aiResponse.taskComplete) {
-                allUpdates.push({ type: 'complete', result: aiResponse.result, step, maxSteps });
-                sendResponse({ type: 'complete', result: aiResponse.result, updates: allUpdates });
-                return;
-            }
-
-            const action = aiResponse.action;
-            allUpdates.push({ type: 'step', step, maxSteps, action: action.description || action.type, screenshot });
-
-            await executeAction(tab.id, action);
-            previousSteps.push({ step, action: action.type, description: action.description });
-            await sleep(1500);
-        }
-
-        sendResponse({ type: 'complete', result: 'تم إكمال الخطوات', updates: allUpdates });
-
-    } catch (error) {
-        sendResponse({ type: 'error', error: error.message });
-    } finally {
-        isRunning = false;
-    }
+        };
+        checkTab();
+        // Timeout after 10 seconds
+        setTimeout(resolve, 10000);
+    });
 }
 
-// Capture tab screenshot
+// Capture screenshot from specific tab
 async function captureTab(tabId) {
     try {
+        // We need to make the tab temporarily visible to capture it
+        // First, get current active tab
+        const [currentActive] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        // Activate our tab briefly
+        await chrome.tabs.update(tabId, { active: true });
+        await sleep(100);
+
+        // Capture
         const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 70 });
-        // Remove data:image/jpeg;base64, prefix
+
+        // Switch back to original tab
+        if (currentActive) {
+            await chrome.tabs.update(currentActive.id, { active: true });
+        }
+
         return dataUrl.split(',')[1];
     } catch (error) {
         console.error('[Lukas] Screenshot error:', error);
@@ -203,6 +231,12 @@ async function captureTab(tabId) {
 // Get page info from content script
 async function getPageInfo(tabId) {
     try {
+        // Inject content script if needed
+        await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content.js']
+        }).catch(() => { }); // Ignore if already injected
+
         const response = await chrome.tabs.sendMessage(tabId, { action: 'getPageInfo' });
         return response;
     } catch (error) {
@@ -231,39 +265,47 @@ async function callAI(data) {
     }
 }
 
-// Execute action via content script
+// Execute action on the browser tab
 async function executeAction(tabId, action) {
     try {
-        await chrome.tabs.sendMessage(tabId, {
-            action: 'executeAction',
-            data: action
-        });
+        // Inject content script if needed
+        await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['content.js']
+        }).catch(() => { });
+
+        if (action.type === 'goto') {
+            // Navigate to new URL
+            await chrome.tabs.update(tabId, { url: action.url });
+            await waitForTabLoad(tabId);
+        } else {
+            // Send action to content script
+            await chrome.tabs.sendMessage(tabId, {
+                action: 'executeAction',
+                data: action
+            });
+        }
     } catch (error) {
         console.error('[Lukas] Execute error:', error);
     }
 }
 
-// Send message to popup AND to content script (for web page)
-async function sendToPopup(message) {
+// Broadcast update to popup AND to active tab (Lukas page)
+async function broadcastUpdate(message) {
     // Send to popup
-    chrome.runtime.sendMessage(message).catch(() => {
-        // Popup might be closed, ignore
-    });
+    chrome.runtime.sendMessage(message).catch(() => { });
 
-    // Also send to active tab's content script (for Lukas web page)
+    // Send to Lukas tab (the one showing the panel)
     try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.id) {
-            chrome.tabs.sendMessage(tab.id, message).catch(() => {
-                // Content script might not be ready, ignore
-            });
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab && activeTab.url?.includes('luks-pied.vercel.app')) {
+            chrome.tabs.sendMessage(activeTab.id, message).catch(() => { });
         }
-    } catch (e) {
-        // Ignore errors
-    }
+    } catch (e) { }
 }
 
-// Utility
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+console.log('[Lukas] Browser AI background script loaded');
