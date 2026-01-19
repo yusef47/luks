@@ -297,32 +297,24 @@ async function executeAction(tabId, action) {
         } else if (action.type === 'wait') {
             await sleep(action.duration || 2000);
         } else {
+            // General action
             await chrome.tabs.sendMessage(tabId, {
                 action: 'executeAction',
                 data: action
-            });
+            }).catch(e => console.log('[Agent] Action send error (might be navigating):', e));
+
+            // If action might cause navigation (click, type+enter), wait appropriately
+            if (action.type === 'click' || (action.type === 'type' && action.submit)) {
+                console.log('[Agent] Action might cause navigation, waiting...');
+                await sleep(2000); // Wait for potential navigation to start
+                await waitForTabLoad(tabId); // Wait for it to finish
+            } else {
+                await sleep(500);
+            }
         }
     } catch (error) {
         console.error('[Agent] Execute error:', error);
     }
 }
 
-// Broadcast to Lukas panel
-async function broadcastUpdate(message) {
-    chrome.runtime.sendMessage(message).catch(() => { });
-
-    try {
-        const tabs = await chrome.tabs.query({});
-        for (const tab of tabs) {
-            if (tab.url?.includes('luks-pied.vercel.app') || tab.url?.includes('localhost')) {
-                chrome.tabs.sendMessage(tab.id, message).catch(() => { });
-            }
-        }
-    } catch (e) { }
-}
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-console.log('[Agent] 🤖 Lukas Browser Agent loaded!');
+// ... rest of file ...

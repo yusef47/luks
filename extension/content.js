@@ -60,7 +60,7 @@ async function executeAction(action) {
                 break;
 
             case 'type':
-                await typeText(action.text, action.x, action.y);
+                await typeText(action.text, action.x, action.y, action.submit);
                 break;
 
             case 'scroll':
@@ -113,8 +113,8 @@ async function clickAt(x, y) {
 }
 
 // Type text (improved for Google and other sites)
-async function typeText(text, x, y) {
-    console.log('[Lukas Content] Typing:', text, 'at', x, y);
+async function typeText(text, x, y, submit = false) {
+    console.log('[Lukas Content] Typing:', text, 'at', x, y, 'submit:', submit);
 
     // Click first if coordinates provided
     if (x !== undefined && y !== undefined) {
@@ -160,9 +160,11 @@ async function typeText(text, x, y) {
 
         console.log('[Lukas Content] Text typed successfully');
 
-        // Auto-press Enter for search
-        await sleep(500);
-        await pressEnter(target);
+        // Auto-press Enter properly if requested
+        if (submit) {
+            await sleep(500);
+            await pressEnter(target);
+        }
     } else {
         console.log('[Lukas Content] No suitable input found!');
     }
