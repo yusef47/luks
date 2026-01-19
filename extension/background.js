@@ -76,15 +76,22 @@ async function startAgent(task, maxSteps) {
                 break;
             }
 
-            // Capture screenshot
-            console.log('[Agent-Debug] Capturing screenshot...');
-            const screenshot = await captureTab(browserTabId);
-            if (!screenshot) console.warn('[Agent-Debug] Screenshot capture failed or returned null');
+            // Capture screenshot & Page Info safely
+            let screenshot, tab, pageInfo;
+            try {
+                console.log('[Agent-Debug] Capturing screenshot...');
+                screenshot = await captureTab(browserTabId);
+                if (!screenshot) console.warn('[Agent-Debug] Screenshot capture failed or returned null');
 
-            console.log('[Agent-Debug] Getting page info...');
-            const tab = await chrome.tabs.get(browserTabId);
-            const pageInfo = await getPageInfo(browserTabId);
-            console.log('[Agent-Debug] Current URL:', tab.url);
+                console.log('[Agent-Debug] Getting page info...');
+                tab = await chrome.tabs.get(browserTabId);
+                pageInfo = await getPageInfo(browserTabId);
+                console.log('[Agent-Debug] Current URL:', tab.url);
+            } catch (e) {
+                console.error('[Agent-Debug] Failed to get tab info (Tab might be closed):', e);
+                broadcastUpdate({ type: 'error', error: 'تم إغلاق التبويب أثناء العمل' });
+                break;
+            }
 
             // Send progress
             broadcastUpdate({
