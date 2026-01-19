@@ -359,6 +359,12 @@ async function executeAction(tabId, action) {
             await sleep(action.duration || 2000);
         } else {
             // General action
+            // CRITICAL: Activate tab before interaction, otherwise focus/typing fails!
+            if (['click', 'type', 'pressKey'].includes(action.type)) {
+                await chrome.tabs.update(tabId, { active: true });
+                await sleep(500); // Wait for switch
+            }
+
             await chrome.tabs.sendMessage(tabId, {
                 action: 'executeAction',
                 data: action
@@ -369,8 +375,19 @@ async function executeAction(tabId, action) {
                 console.log('[Agent] Action might cause navigation, waiting...');
                 await sleep(2000); // Wait for potential navigation to start
                 await waitForTabLoad(tabId); // Wait for it to finish
+
+                // Switch back to Lukas after navigation to show progress
+                // Find Lukas tab
+                const tabs = await chrome.tabs.query({});
+                const lukasTab = tabs.find(t => t.url?.includes('luks-pied.vercel.app') || t.url?.includes('localhost'));
+                if (lukasTab) {
+                    await chrome.tabs.update(lukasTab.id, { active: true });
+                }
             } else {
                 await sleep(500);
+                // For simple typing/n-navigating actions, we might want to switch back or stay to show user?
+                // staying is better for "visual" feel, but let's switch back to show panel updates if needed.
+                // For now, let's keep it active so user sees the typing!
             }
         }
     } catch (error) {
