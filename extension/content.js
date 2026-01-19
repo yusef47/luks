@@ -138,6 +138,13 @@ async function typeText(text, x, y, submit = false) {
     console.log('[Lukas Content] Target element:', target?.tagName, target?.name);
 
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        // VISUAL DEBUG: Highlight element
+        const originalBorder = target.style.border;
+        const originalBg = target.style.backgroundColor;
+        target.style.border = '3px solid red';
+        target.style.backgroundColor = '#fff0f0';
+        await sleep(300);
+
         // Focus the element
         target.focus();
         await sleep(100);
@@ -153,6 +160,11 @@ async function typeText(text, x, y, submit = false) {
         } else if (target.isContentEditable) {
             target.innerText = text;
         }
+
+        // Remove highlight
+        await sleep(200);
+        target.style.border = originalBorder;
+        target.style.backgroundColor = originalBg;
 
         // Dispatch events to trigger any listeners
         target.dispatchEvent(new Event('input', { bubbles: true }));
