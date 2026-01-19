@@ -245,6 +245,29 @@ function getActionEmoji(type) {
     return emojis[type] || '▶️';
 }
 
+// Broadcast to Lukas panel
+async function broadcastUpdate(message) {
+    chrome.runtime.sendMessage(message).catch(() => { });
+
+    try {
+        const tabs = await chrome.tabs.query({});
+        console.log(`[Agent-Debug] Broadcasting to ${tabs.length} tabs...`);
+        let sentCount = 0;
+        for (const tab of tabs) {
+            if (tab.url?.includes('luks-pied.vercel.app') || tab.url?.includes('localhost')) {
+                console.log(`[Agent-Debug] Found target tab: ${tab.id} (${tab.url})`);
+                chrome.tabs.sendMessage(tab.id, message)
+                    .then(() => console.log(`[Agent-Debug] Message sent to tab ${tab.id}`))
+                    .catch((e) => console.error(`[Agent-Debug] Failed to send to tab ${tab.id}:`, e));
+                sentCount++;
+            }
+        }
+        if (sentCount === 0) console.warn('[Agent-Debug] No target (Lukas) tabs found!');
+    } catch (e) {
+        console.error('[Agent-Debug] Broadcast error:', e);
+    }
+}
+
 // Wait for tab load
 function waitForTabLoad(tabId) {
     return new Promise((resolve) => {
