@@ -65,20 +65,26 @@ async function startAgent(task, maxSteps) {
 
         // Main loop
         for (let step = 1; step <= maxSteps && !shouldStop; step++) {
-            console.log(`[Agent] 📍 Step ${step}/${maxSteps}`);
+            console.log(`[Agent-Debug] 📍 Starting Step ${step}`);
 
             // Check tab exists
             try {
                 await chrome.tabs.get(browserTabId);
             } catch (e) {
+                console.error('[Agent-Debug] Tab check failed:', e);
                 broadcastUpdate({ type: 'error', error: 'تم إغلاق التبويب' });
                 break;
             }
 
             // Capture screenshot
+            console.log('[Agent-Debug] Capturing screenshot...');
             const screenshot = await captureTab(browserTabId);
+            if (!screenshot) console.warn('[Agent-Debug] Screenshot capture failed or returned null');
+
+            console.log('[Agent-Debug] Getting page info...');
             const tab = await chrome.tabs.get(browserTabId);
             const pageInfo = await getPageInfo(browserTabId);
+            console.log('[Agent-Debug] Current URL:', tab.url);
 
             // Send progress
             broadcastUpdate({
@@ -92,6 +98,7 @@ async function startAgent(task, maxSteps) {
             });
 
             // Call Agent API
+            console.log('[Agent-Debug] Calling Agent API...');
             const response = await callAgent({
                 task,
                 screenshot,
@@ -103,12 +110,15 @@ async function startAgent(task, maxSteps) {
                 isFirstStep: step === 1
             });
 
+            console.log('[Agent-Debug] API Response received:', response ? 'Yes' : 'No');
+
             if (!response || response.error) {
+                console.error('[Agent-Debug] API Error:', response?.error);
                 broadcastUpdate({
                     type: 'step',
                     step,
                     maxSteps,
-                    action: '⏳ خطأ، جاري المحاولة...',
+                    action: `⏳ خطأ في الاتصال: ${response?.error || 'غير معروف'}`,
                     screenshot,
                     url: tab.url
                 });
@@ -128,6 +138,7 @@ async function startAgent(task, maxSteps) {
 
             // Check task complete
             if (response.taskComplete) {
+                console.log('[Agent-Debug] Task complete triggered');
                 broadcastUpdate({
                     type: 'complete',
                     result: response.result,
@@ -135,20 +146,20 @@ async function startAgent(task, maxSteps) {
                     url: tab.url,
                     findings: agentMemory.findings
                 });
-                console.log('[Agent] ✅ Task completed!');
                 break;
             }
 
             // Execute action
             const action = response.action;
+            console.log('[Agent-Debug] Action to execute:', action);
 
             if (!action) {
-                console.error('[Agent] No action returned from API:', response);
+                console.error('[Agent-Debug] No action in response object!');
                 broadcastUpdate({
                     type: 'step',
                     step,
                     maxSteps,
-                    action: '⚠️ لم يرجع الذكاء الاصطناعي بإجراء، محاولة مرة أخر...',
+                    action: '⚠️ استجابة غير مكتملة من الذكاء الاصطناعي',
                     screenshot,
                     url: tab.url
                 });
@@ -171,6 +182,9 @@ async function startAgent(task, maxSteps) {
                 consecutiveScrolls = 0;
             }
 
+            // Log before execute
+            console.log(`[Agent-Debug] Executing specific action: ${action.type}`);
+
             broadcastUpdate({
                 type: 'step',
                 step,
@@ -183,6 +197,7 @@ async function startAgent(task, maxSteps) {
             });
 
             await executeAction(browserTabId, action);
+            console.log('[Agent-Debug] Action execution finished');
 
             // Record step
             previousSteps.push({
@@ -193,6 +208,7 @@ async function startAgent(task, maxSteps) {
             });
 
             // Wait for page changes
+            console.log('[Agent-Debug] Waiting for stable state...');
             await sleep(2500);
         }
 
@@ -201,9 +217,10 @@ async function startAgent(task, maxSteps) {
         }
 
     } catch (error) {
-        console.error('[Agent] ❌ Error:', error);
-        broadcastUpdate({ type: 'error', error: error.message });
+        console.error('[Agent-Debug] CRITICAL ERROR in loop:', error);
+        broadcastUpdate({ type: 'error', error: `Critical: ${error.message}` });
     } finally {
+        console.log('[Agent-Debug] Agent loop finished. IsRunning set to false.');
         isRunning = false;
     }
 }
