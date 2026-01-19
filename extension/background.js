@@ -1,84 +1,73 @@
 /**
- * Lukas Browser AI - Background Service Worker
- * Opens a NEW tab and controls it (user watches from Lukas)
+ * Lukas Browser Agent - Background Service Worker
+ * Full Agent with Planning & Memory
  */
 
 const API_URL = 'https://luks-pied.vercel.app/api/browser-ai';
 let isRunning = false;
 let shouldStop = false;
-let browserTabId = null;  // The tab we control
+let browserTabId = null;
+let agentMemory = {};  // Persistent memory across steps
 
-// Listen for messages from popup
+// Listen for messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'startTask') {
-        startBrowserTask(message.task, message.maxSteps || 10);
+        startAgent(message.task, message.maxSteps || 15);
     }
     if (message.action === 'stopTask') {
-        stopTask();
+        stopAgent();
     }
 });
 
-// Listen for messages from Lukas web page (via content script)
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'startTask' && message.fromPage) {
-        startBrowserTask(message.task, message.maxSteps || 10);
-    }
-    if (message.action === 'stopTask') {
-        stopTask();
-    }
-});
-
-function stopTask() {
+function stopAgent() {
     shouldStop = true;
     isRunning = false;
-    // Close the browser tab we created
+    agentMemory = {};
     if (browserTabId) {
         chrome.tabs.remove(browserTabId).catch(() => { });
         browserTabId = null;
     }
 }
 
-// Main task execution - opens NEW tab
-async function startBrowserTask(task, maxSteps) {
+// Main Agent Loop
+async function startAgent(task, maxSteps) {
     if (isRunning) return;
 
     isRunning = true;
     shouldStop = false;
+    agentMemory = { task, startTime: Date.now() };
 
-    console.log('[Lukas] Starting browser task:', task);
+    console.log('[Agent] 🚀 Starting:', task);
 
     try {
-        // 1. Open a new tab for browsing (start with Google)
+        // Step 1: Open browser tab
         const newTab = await chrome.tabs.create({
-            url: 'https://www.google.com/search?q=' + encodeURIComponent(task),
-            active: false  // Don't switch to it, user stays on Lukas
+            url: 'https://www.google.com',
+            active: false
         });
         browserTabId = newTab.id;
 
-        console.log('[Lukas] Created browser tab:', browserTabId);
+        console.log('[Agent] 📱 Browser tab created:', browserTabId);
 
-        // Wait for tab to load
         await waitForTabLoad(browserTabId);
+        await sleep(1000);
 
-        // Send initial update
         broadcastUpdate({
             type: 'step',
-            step: 1,
+            step: 0,
             maxSteps,
-            action: 'تم فتح Google وبدء البحث...',
-            url: newTab.url
+            action: '🧠 جاري إنشاء الخطة...',
+            phase: 'planning'
         });
 
-        // Wait a moment for page to fully render
-        await sleep(2000);
-
         let previousSteps = [];
+        let consecutiveScrolls = 0;
 
-        // 2. Main task loop
+        // Main loop
         for (let step = 1; step <= maxSteps && !shouldStop; step++) {
-            console.log(`[Lukas] Step ${step}/${maxSteps}`);
+            console.log(`[Agent] 📍 Step ${step}/${maxSteps}`);
 
-            // Check if tab still exists
+            // Check tab exists
             try {
                 await chrome.tabs.get(browserTabId);
             } catch (e) {
@@ -86,73 +75,97 @@ async function startBrowserTask(task, maxSteps) {
                 break;
             }
 
-            // Capture screenshot from OUR tab (not active tab)
+            // Capture screenshot
             const screenshot = await captureTab(browserTabId);
-            if (!screenshot) {
-                broadcastUpdate({ type: 'error', error: 'فشل التقاط الصورة' });
-                break;
-            }
-
-            // Get current tab info
             const tab = await chrome.tabs.get(browserTabId);
-
-            // Get page info
             const pageInfo = await getPageInfo(browserTabId);
 
-            // Send screenshot to panel for display
+            // Send progress
             broadcastUpdate({
                 type: 'step',
                 step,
                 maxSteps,
-                action: 'جاري التحليل...',
+                action: '🤔 جاري التحليل...',
                 screenshot,
-                url: tab.url
+                url: tab.url,
+                phase: agentMemory.plan ? 'executing' : 'planning'
             });
 
-            // Call AI API
-            const aiResponse = await callAI({
+            // Call Agent API
+            const response = await callAgent({
                 task,
                 screenshot,
                 url: tab.url,
                 title: tab.title,
                 pageText: pageInfo?.text || '',
-                clickableElements: pageInfo?.clickableElements || [],
-                previousSteps
+                previousSteps,
+                memory: agentMemory,
+                isFirstStep: step === 1
             });
 
-            if (!aiResponse || aiResponse.error) {
+            if (!response || response.error) {
                 broadcastUpdate({
                     type: 'step',
                     step,
                     maxSteps,
-                    action: 'خطأ في التحليل، جاري المحاولة...',
+                    action: '⏳ خطأ، جاري المحاولة...',
                     screenshot,
                     url: tab.url
                 });
-                await sleep(3000);
+                await sleep(2000);
                 continue;
             }
 
-            // Check if task complete
-            if (aiResponse.taskComplete) {
+            // Update memory
+            if (response.memory) {
+                agentMemory = { ...agentMemory, ...response.memory };
+            }
+
+            // Add new findings
+            if (response.newFindings?.length) {
+                agentMemory.findings = [...(agentMemory.findings || []), ...response.newFindings];
+            }
+
+            // Check task complete
+            if (response.taskComplete) {
                 broadcastUpdate({
                     type: 'complete',
-                    result: aiResponse.result,
+                    result: response.result,
                     screenshot,
-                    url: tab.url
+                    url: tab.url,
+                    findings: agentMemory.findings
                 });
+                console.log('[Agent] ✅ Task completed!');
                 break;
             }
 
             // Execute action
-            const action = aiResponse.action;
+            const action = response.action;
+
+            // Track consecutive scrolls
+            if (action.type === 'scroll') {
+                consecutiveScrolls++;
+                if (consecutiveScrolls >= 3) {
+                    console.log('[Agent] ⚠️ Too many scrolls, forcing click');
+                    action.type = 'click';
+                    action.x = 400;
+                    action.y = 280;
+                    action.description = 'النقر على أول نتيجة (تصحيح تلقائي)';
+                    consecutiveScrolls = 0;
+                }
+            } else {
+                consecutiveScrolls = 0;
+            }
+
             broadcastUpdate({
                 type: 'step',
                 step,
                 maxSteps,
-                action: action.description || action.type,
+                action: `${getActionEmoji(action.type)} ${action.description || action.type}`,
                 screenshot,
-                url: tab.url
+                url: tab.url,
+                thinking: response.thinking,
+                phase: 'executing'
             });
 
             await executeAction(browserTabId, action);
@@ -161,27 +174,40 @@ async function startBrowserTask(task, maxSteps) {
             previousSteps.push({
                 step,
                 action: action.type,
-                description: action.description
+                description: action.description,
+                url: tab.url
             });
 
             // Wait for page changes
-            await sleep(2000);
+            await sleep(2500);
         }
 
         if (shouldStop) {
-            broadcastUpdate({ type: 'error', error: 'تم الإيقاف' });
+            broadcastUpdate({ type: 'error', error: '⏹ تم الإيقاف' });
         }
 
     } catch (error) {
-        console.error('[Lukas] Error:', error);
+        console.error('[Agent] ❌ Error:', error);
         broadcastUpdate({ type: 'error', error: error.message });
     } finally {
         isRunning = false;
-        // Keep tab open for user to see results
     }
 }
 
-// Wait for tab to finish loading
+function getActionEmoji(type) {
+    const emojis = {
+        'click': '👆',
+        'type': '⌨️',
+        'scroll': '📜',
+        'goto': '🔗',
+        'pressKey': '⏎',
+        'wait': '⏳',
+        'done': '✅'
+    };
+    return emojis[type] || '▶️';
+}
+
+// Wait for tab load
 function waitForTabLoad(tabId) {
     return new Promise((resolve) => {
         const checkTab = async () => {
@@ -193,60 +219,51 @@ function waitForTabLoad(tabId) {
                     setTimeout(checkTab, 200);
                 }
             } catch (e) {
-                resolve(); // Tab closed
+                resolve();
             }
         };
         checkTab();
-        // Timeout after 10 seconds
         setTimeout(resolve, 10000);
     });
 }
 
-// Capture screenshot from specific tab
+// Capture screenshot
 async function captureTab(tabId) {
     try {
-        // We need to make the tab temporarily visible to capture it
-        // First, get current active tab
         const [currentActive] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-        // Activate our tab briefly
         await chrome.tabs.update(tabId, { active: true });
-        await sleep(100);
+        await sleep(150);
 
-        // Capture
-        const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 70 });
+        const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 75 });
 
-        // Switch back to original tab
         if (currentActive) {
             await chrome.tabs.update(currentActive.id, { active: true });
         }
 
         return dataUrl.split(',')[1];
     } catch (error) {
-        console.error('[Lukas] Screenshot error:', error);
+        console.error('[Agent] Screenshot error:', error);
         return null;
     }
 }
 
-// Get page info from content script
+// Get page info
 async function getPageInfo(tabId) {
     try {
-        // Inject content script if needed
         await chrome.scripting.executeScript({
             target: { tabId },
             files: ['content.js']
-        }).catch(() => { }); // Ignore if already injected
+        }).catch(() => { });
 
-        const response = await chrome.tabs.sendMessage(tabId, { action: 'getPageInfo' });
-        return response;
+        return await chrome.tabs.sendMessage(tabId, { action: 'getPageInfo' });
     } catch (error) {
-        console.error('[Lukas] Page info error:', error);
         return null;
     }
 }
 
-// Call AI API
-async function callAI(data) {
+// Call Agent API
+async function callAgent(data) {
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -255,51 +272,51 @@ async function callAI(data) {
         });
 
         if (!response.ok) {
-            throw new Error('API request failed');
+            throw new Error('API failed');
         }
 
         return await response.json();
     } catch (error) {
-        console.error('[Lukas] API error:', error);
+        console.error('[Agent] API error:', error);
         return { error: error.message };
     }
 }
 
-// Execute action on the browser tab
+// Execute action
 async function executeAction(tabId, action) {
     try {
-        // Inject content script if needed
         await chrome.scripting.executeScript({
             target: { tabId },
             files: ['content.js']
         }).catch(() => { });
 
         if (action.type === 'goto') {
-            // Navigate to new URL
             await chrome.tabs.update(tabId, { url: action.url });
             await waitForTabLoad(tabId);
+            await sleep(1000);
+        } else if (action.type === 'wait') {
+            await sleep(action.duration || 2000);
         } else {
-            // Send action to content script
             await chrome.tabs.sendMessage(tabId, {
                 action: 'executeAction',
                 data: action
             });
         }
     } catch (error) {
-        console.error('[Lukas] Execute error:', error);
+        console.error('[Agent] Execute error:', error);
     }
 }
 
-// Broadcast update to popup AND to active tab (Lukas page)
+// Broadcast to Lukas panel
 async function broadcastUpdate(message) {
-    // Send to popup
     chrome.runtime.sendMessage(message).catch(() => { });
 
-    // Send to Lukas tab (the one showing the panel)
     try {
-        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (activeTab && activeTab.url?.includes('luks-pied.vercel.app')) {
-            chrome.tabs.sendMessage(activeTab.id, message).catch(() => { });
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+            if (tab.url?.includes('luks-pied.vercel.app') || tab.url?.includes('localhost')) {
+                chrome.tabs.sendMessage(tab.id, message).catch(() => { });
+            }
         }
     } catch (e) { }
 }
@@ -308,4 +325,4 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-console.log('[Lukas] Browser AI background script loaded');
+console.log('[Agent] 🤖 Lukas Browser Agent loaded!');

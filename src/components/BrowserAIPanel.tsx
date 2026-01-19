@@ -15,6 +15,9 @@ interface StepUpdate {
     screenshot?: string;
     error?: string;
     url?: string;
+    phase?: string;
+    thinking?: string;
+    findings?: string[];
 }
 
 interface BrowserAIPanelProps {
@@ -33,6 +36,8 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
     const [result, setResult] = useState<string | null>(null);
     const [latestScreenshot, setLatestScreenshot] = useState<string | null>(null);
     const [currentUrl, setCurrentUrl] = useState<string | null>(null);
+    const [currentPhase, setCurrentPhase] = useState<string>('ready');
+    const [currentThinking, setCurrentThinking] = useState<string | null>(null);
 
     // Handle extension responses
     const handleExtensionResponse = useCallback((event: Event) => {
@@ -56,6 +61,12 @@ export const BrowserAIPanel: React.FC<BrowserAIPanelProps> = ({ isOpen, onClose 
             }
             if (data.url) {
                 setCurrentUrl(data.url);
+            }
+            if (data.phase) {
+                setCurrentPhase(data.phase);
+            }
+            if (data.thinking) {
+                setCurrentThinking(data.thinking);
             }
         }
 
