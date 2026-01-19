@@ -142,6 +142,20 @@ async function startAgent(task, maxSteps) {
             // Execute action
             const action = response.action;
 
+            if (!action) {
+                console.error('[Agent] No action returned from API:', response);
+                broadcastUpdate({
+                    type: 'step',
+                    step,
+                    maxSteps,
+                    action: '⚠️ لم يرجع الذكاء الاصطناعي بإجراء، محاولة مرة أخر...',
+                    screenshot,
+                    url: tab.url
+                });
+                await sleep(2000);
+                continue;
+            }
+
             // Track consecutive scrolls
             if (action.type === 'scroll') {
                 consecutiveScrolls++;
