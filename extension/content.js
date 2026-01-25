@@ -3,14 +3,20 @@
  * Injected into every page to execute actions and get page info
  */
 
+console.log('[Lukas Content] 🟢 Script loaded on:', window.location.href);
+
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('[Lukas Content] 📨 Message received:', message.action, message);
+
     if (message.action === 'getPageInfo') {
         sendResponse(getPageInfo());
     }
 
     if (message.action === 'executeAction') {
+        console.log('[Lukas Content] ⚡ Executing action:', message.data?.type);
         executeAction(message.data).then(result => {
+            console.log('[Lukas Content] ✅ Action result:', result);
             sendResponse(result);
         });
         return true; // Keep channel open for async response
