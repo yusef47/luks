@@ -17,14 +17,72 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// Get page information
+// Get page information with data extraction
 function getPageInfo() {
     return {
         url: window.location.href,
         title: document.title,
         text: document.body?.innerText?.substring(0, 5000) || '',
-        clickableElements: getClickableElements()
+        clickableElements: getClickableElements(),
+        extractedData: extractPageData()
     };
+}
+
+// Extract useful data from page (prices, ratings, names)
+function extractPageData() {
+    const text = document.body?.innerText || '';
+    const data = {
+        prices: [],
+        ratings: [],
+        names: [],
+        hotels: [],
+        products: []
+    };
+
+    // Extract prices (multiple currencies)
+    const pricePatterns = [
+        /(\$[\d,]+(?:\.\d{2})?)/g,                    // $500, $1,200.00
+        /([\d,]+)\s*(ريال|SAR|دولار|USD|جنيه|EGP)/g, // 500 ريال
+        /(EUR|€)\s*([\d,]+)/g,                        // EUR 500
+        /AED\s*([\d,]+)/g,                            // AED 500
+    ];
+
+    pricePatterns.forEach(pattern => {
+        const matches = text.match(pattern);
+        if (matches) data.prices.push(...matches.slice(0, 5));
+    });
+
+    // Extract ratings
+    const ratingPatterns = [
+        /(\d+\.?\d*)\s*\/\s*5/g,           // 4.5/5
+        /(\d+\.?\d*)\s*(?:نجوم|stars?)/gi, // 4 نجوم, 4 stars
+        /تقييم[:\s]*(\d+\.?\d*)/g,         // تقييم: 4.5
+    ];
+
+    ratingPatterns.forEach(pattern => {
+        const matches = text.match(pattern);
+        if (matches) data.ratings.push(...matches.slice(0, 5));
+    });
+
+    // Extract hotel/product names from headings
+    const headings = document.querySelectorAll('h1, h2, h3');
+    headings.forEach((h, i) => {
+        if (i < 10 && h.innerText?.trim()) {
+            const name = h.innerText.trim().substring(0, 50);
+            if (name.length > 3) data.names.push(name);
+        }
+    });
+
+    // Try to find hotel cards or product listings
+    const cards = document.querySelectorAll('[class*="hotel"], [class*="card"], [class*="product"], [class*="listing"]');
+    cards.forEach((card, i) => {
+        if (i < 5) {
+            const cardText = card.innerText?.substring(0, 100);
+            if (cardText) data.products.push(cardText.replace(/\n/g, ' | '));
+        }
+    });
+
+    return data;
 }
 
 // Get clickable elements with detailed info for AI

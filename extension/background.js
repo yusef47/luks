@@ -103,7 +103,7 @@ async function startAgent(task, maxSteps) {
                 phase: 'executing'
             });
 
-            // Call Agent API (HTML-based, no vision needed)
+            // Call Agent API (HTML-based with data extraction)
             console.log('[Agent-Debug] Calling Agent API...');
             const response = await callAgent({
                 task,
@@ -111,7 +111,9 @@ async function startAgent(task, maxSteps) {
                 title: tab.title,
                 pageText: pageInfo?.text || '',
                 htmlStructure: pageInfo?.clickableElements || [],
+                extractedData: pageInfo?.extractedData || {},
                 previousSteps,
+                memory: agentMemory,
                 isFirstStep: step === 1
             });
 
@@ -141,15 +143,28 @@ async function startAgent(task, maxSteps) {
                 agentMemory.findings = [...(agentMemory.findings || []), ...response.newFindings];
             }
 
+            // Add extracted data
+            if (response.extractedData) {
+                agentMemory.extractedData = {
+                    ...(agentMemory.extractedData || {}),
+                    prices: [...(agentMemory.extractedData?.prices || []), ...(response.extractedData.prices || [])],
+                    ratings: [...(agentMemory.extractedData?.ratings || []), ...(response.extractedData.ratings || [])],
+                    names: [...(agentMemory.extractedData?.names || []), ...(response.extractedData.names || [])]
+                };
+            }
+
             // Check task complete
             if (response.taskComplete) {
-                console.log('[Agent-Debug] Task complete triggered');
+                console.log('[Agent-Debug] Task complete - generating rich report');
                 broadcastUpdate({
                     type: 'complete',
-                    result: response.result,
+                    result: response.result || 'تمت المهمة بنجاح',
+                    summary: response.summary || '',
+                    recommendation: response.recommendation || '',
+                    findings: agentMemory.findings || [],
+                    extractedData: agentMemory.extractedData || {},
                     screenshot,
-                    url: tab.url,
-                    findings: agentMemory.findings
+                    url: tab.url
                 });
                 break;
             }

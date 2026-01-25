@@ -1,9 +1,9 @@
 /**
- * Lukas Browser AI - HTML Analysis Agent
- * Uses DOM structure analysis instead of vision for reliable execution
+ * Lukas Advanced Browser Agent API
+ * Features: Rich Reports, Data Extraction, Complex Tasks, Memory
  */
 
-const TEXT_MODELS = [
+const MODELS = [
     'google/gemini-2.0-flash-exp:free',
     'deepseek/deepseek-r1-0528:free',
     'meta-llama/llama-3.3-70b-instruct:free',
@@ -37,6 +37,7 @@ export default async function handler(req, res) {
             title,
             pageText,
             htmlStructure = [],
+            extractedData = {},
             previousSteps = [],
             memory = {},
             isFirstStep = false
@@ -50,21 +51,18 @@ export default async function handler(req, res) {
         console.log(`[Agent] URL: ${url}`);
         console.log(`[Agent] Step: ${previousSteps.length + 1}`);
         console.log(`[Agent] Elements: ${htmlStructure?.length || 0}`);
+        console.log(`[Agent] Extracted: ${JSON.stringify(extractedData).substring(0, 100)}`);
 
-        // Detect page context
-        const isGoogleHome = url?.includes('google.com') && !url?.includes('/search');
-        const isGoogleSearch = url?.includes('google.com/search');
-
-        // Build action decision prompt
-        const prompt = buildPrompt({
+        // Build comprehensive prompt
+        const prompt = buildAdvancedPrompt({
             task,
             url,
             title,
             pageText,
             htmlStructure,
+            extractedData,
             previousSteps,
-            isGoogleHome,
-            isGoogleSearch
+            memory
         });
 
         // Call AI
@@ -72,9 +70,17 @@ export default async function handler(req, res) {
 
         if (result) {
             console.log(`[Agent] ✅ Action: ${result.action?.type} - ${result.action?.description}`);
-            res.status(200).json(result);
+
+            // Ensure proper response structure
+            res.status(200).json({
+                ...result,
+                memory: {
+                    ...memory,
+                    findings: [...(memory.findings || []), ...(result.newFindings || [])],
+                    extractedData: { ...(memory.extractedData || {}), ...(result.extractedData || {}) }
+                }
+            });
         } else {
-            console.log(`[Agent] ⚠️ No response, using fallback`);
             res.status(200).json(createFallback("AI unavailable"));
         }
 
@@ -84,13 +90,24 @@ export default async function handler(req, res) {
     }
 }
 
-function buildPrompt({ task, url, title, pageText, htmlStructure, previousSteps, isGoogleHome, isGoogleSearch }) {
-    // Format interactive elements
-    const elements = (htmlStructure || []).slice(0, 20).map((el, i) =>
-        `[${i}] <${el.tag}> "${el.text?.substring(0, 30) || ''}" ${el.tag === 'input' ? `type="${el.type || 'text'}"` : ''}`
+function buildAdvancedPrompt({ task, url, title, pageText, htmlStructure, extractedData, previousSteps, memory }) {
+    const isGoogleHome = url?.includes('google.com') && !url?.includes('/search');
+    const isGoogleSearch = url?.includes('google.com/search');
+    const isProductPage = pageText?.includes('price') || pageText?.includes('سعر') || pageText?.includes('ريال');
+
+    // Format elements
+    const elements = (htmlStructure || []).slice(0, 25).map((el, i) =>
+        `[${i}] <${el.tag}> "${el.text?.substring(0, 40) || ''}" ${el.selector ? `selector="${el.selector}"` : ''}`
     ).join('\n');
 
-    return `أنت Lukas Agent - وكيل متصفح يتحكم في المتصفح عبر تحليل HTML.
+    // Format previous findings
+    const findings = memory.findings?.slice(-5).join('\n') || 'لا توجد';
+
+    return `أنت Lukas Agent - وكيل متصفح ذكي متقدم يمكنه:
+- إجراء بحث معقد متعدد الخطوات
+- استخراج البيانات (أسعار، تقييمات، أسماء)
+- المقارنة بين الخيارات
+- تقديم تقارير غنية
 
 ═════════════════════════════════════
 🎯 المهمة: ${task}
@@ -100,54 +117,56 @@ function buildPrompt({ task, url, title, pageText, htmlStructure, previousSteps,
 - URL: ${url}
 - العنوان: ${title || 'غير معروف'}
 
-📋 العناصر التفاعلية المتاحة:
-${elements || 'لا توجد عناصر'}
+📊 البيانات المستخرجة حتى الآن:
+${JSON.stringify(extractedData, null, 2) || 'لا توجد'}
 
-📜 آخر الإجراءات:
+💡 المعلومات المكتشفة:
+${findings}
+
+📋 العناصر التفاعلية:
+${elements || 'لا توجد'}
+
+📜 الخطوات السابقة (${previousSteps.length}):
 ${previousSteps.slice(-5).map(s => `• ${s.action}: ${s.description}`).join('\n') || 'لا توجد'}
 
-${isGoogleHome ? `
-⚠️ أنت على صفحة Google الرئيسية!
-- استخدم selector: input[name="q"] للكتابة في البحث
-- بعد الكتابة، اضبط submit: true للبحث
-` : ''}
-
-${isGoogleSearch ? `
-⚠️ أنت على صفحة نتائج Google!
-- اختر أفضل نتيجة واضغط عليها
-- استخدم selector للرابط: h3 أو a[href]
-` : ''}
-
-📄 محتوى الصفحة (جزء):
-${pageText?.substring(0, 800) || 'غير متاح'}
+📄 محتوى الصفحة:
+${pageText?.substring(0, 1500) || 'غير متاح'}
 
 ═════════════════════════════════════
-📌 قواعد:
-1. استخدم CSS selectors دائماً (أفضل من الإحداثيات)
-2. للبحث في Google: selector = "input[name='q']", submit = true
-3. للضغط على نتيجة: selector = "h3" أو رقم العنصر
-4. لا تكرر نفس الإجراء
+📌 تعليمات مهمة:
+
+${isGoogleHome ? `🔍 أنت على Google الرئيسية - اكتب البحث في input[name="q"] مع submit: true` : ''}
+${isGoogleSearch ? `📋 أنت على نتائج البحث - اختر أفضل نتيجة واضغط عليها (تجنب الإعلانات)` : ''}
+${isProductPage ? `💰 صفحة منتج/فندق - استخرج الأسعار والتقييمات والأسماء` : ''}
+
+1. استخرج أي بيانات مفيدة من الصفحة (أسعار، أسماء، تقييمات)
+2. إذا وجدت معلومات كافية، أنهِ المهمة بتقرير شامل
+3. إذا كنت تحتاج مزيد من المعلومات، تنقل لصفحة أخرى
+4. استخدم CSS selectors دائماً
 ═════════════════════════════════════
 
 أجب بـ JSON فقط:
 {
-    "thinking": "تحليلي للموقف",
+    "thinking": "تحليلي للموقف والخطة",
     "action": {
-        "type": "type",
-        "selector": "input[name='q']",
-        "text": "نص البحث",
+        "type": "type|click|scroll|goto|done",
+        "selector": "CSS selector",
+        "text": "نص للكتابة",
         "submit": true,
         "description": "وصف الإجراء"
     },
-    "taskComplete": false
-}
-
-أنواع الإجراءات:
-- type: للكتابة (يحتاج selector, text, submit)
-- click: للضغط (يحتاج selector)
-- scroll: للتمرير (direction: up/down)
-- goto: للانتقال (url)
-- done: المهمة اكتملت (result)`;
+    "newFindings": ["معلومة جديدة 1", "معلومة 2"],
+    "extractedData": {
+        "prices": ["سعر 1", "سعر 2"],
+        "names": ["اسم 1", "اسم 2"],
+        "ratings": ["تقييم 1"]
+    },
+    "progress": "نسبة التقدم ووصف",
+    "taskComplete": false,
+    "result": "النتيجة النهائية (عند الانتهاء)",
+    "summary": "ملخص شامل (عند الانتهاء)",
+    "recommendation": "التوصية (عند الانتهاء)"
+}`;
 }
 
 async function callAI(prompt) {
@@ -157,7 +176,7 @@ async function callAI(prompt) {
         return null;
     }
 
-    for (const model of TEXT_MODELS) {
+    for (const model of MODELS) {
         const apiKey = keys[(keyIndex++) % keys.length];
         const modelName = model.split('/')[1]?.split(':')[0] || model;
 
@@ -175,7 +194,7 @@ async function callAI(prompt) {
                 body: JSON.stringify({
                     model,
                     messages: [{ role: 'user', content: prompt }],
-                    max_tokens: 1000,
+                    max_tokens: 1500,
                     temperature: 0.3
                 })
             });
@@ -213,11 +232,9 @@ function createFallback(reason) {
     return {
         thinking: reason,
         action: {
-            type: 'type',
-            selector: "input[name='q']",
-            text: 'افضل فنادق في دبي',
-            submit: true,
-            description: 'محاولة بحث افتراضية'
+            type: 'wait',
+            duration: 2000,
+            description: 'انتظار - ' + reason
         },
         taskComplete: false
     };
