@@ -203,7 +203,9 @@ async function startAgent(task, maxSteps) {
             }
 
             // Log before execute
-            console.log(`[Agent-Debug] Executing specific action: ${action.type}`);
+            console.log(`[Agent-Debug] ===== STEP ${step} EXECUTION =====`);
+            console.log(`[Agent-Debug] Action type: ${action.type}`);
+            console.log(`[Agent-Debug] Action details:`, JSON.stringify(action));
 
             broadcastUpdate({
                 type: 'step',
@@ -216,8 +218,9 @@ async function startAgent(task, maxSteps) {
                 phase: 'executing'
             });
 
+            console.log('[Agent-Debug] Calling executeAction NOW...');
             await executeAction(browserTabId, action);
-            console.log('[Agent-Debug] Action execution finished');
+            console.log('[Agent-Debug] ===== EXECUTION COMPLETE =====');
 
             // Record step
             previousSteps.push({
