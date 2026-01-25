@@ -346,53 +346,71 @@ async function callAgent(data) {
 
 // Execute action
 async function executeAction(tabId, action) {
+    console.log('[Agent-Exec] ========= EXECUTE START =========');
+    console.log('[Agent-Exec] Action:', JSON.stringify(action));
+
     try {
+        // Inject content script
+        console.log('[Agent-Exec] 1. Injecting content script...');
         await chrome.scripting.executeScript({
             target: { tabId },
             files: ['content.js']
-        }).catch(() => { });
+        }).catch(e => console.log('[Agent-Exec] Script inject failed (probably already loaded):', e.message));
 
         if (action.type === 'goto') {
+            console.log('[Agent-Exec] 2. GOTO action:', action.url);
             await chrome.tabs.update(tabId, { url: action.url });
             await waitForTabLoad(tabId);
             await sleep(1000);
         } else if (action.type === 'wait') {
+            console.log('[Agent-Exec] 2. WAIT action:', action.duration);
             await sleep(action.duration || 2000);
         } else {
-            // General action
-            // CRITICAL: Activate tab before interaction, otherwise focus/typing fails!
+            // General action (click, type, etc.)
+            console.log('[Agent-Exec] 2. General action type:', action.type);
+
+            // CRITICAL: Activate tab before interaction
             if (['click', 'type', 'pressKey'].includes(action.type)) {
+                console.log('[Agent-Exec] 3. Activating tab...');
                 await chrome.tabs.update(tabId, { active: true });
-                await sleep(500); // Wait for switch
+                await sleep(500);
+                console.log('[Agent-Exec] 3. Tab activated!');
             }
 
-            await chrome.tabs.sendMessage(tabId, {
-                action: 'executeAction',
-                data: action
-            }).catch(e => console.log('[Agent] Action send error (might be navigating):', e));
+            // Send action to content script
+            console.log('[Agent-Exec] 4. Sending message to content script...');
+            try {
+                const result = await chrome.tabs.sendMessage(tabId, {
+                    action: 'executeAction',
+                    data: action
+                });
+                console.log('[Agent-Exec] 4. Content script response:', result);
+            } catch (sendError) {
+                console.error('[Agent-Exec] 4. ❌ Failed to send to content script:', sendError.message);
+            }
 
-            // If action might cause navigation (click, type+enter), wait appropriately
+            // Wait for navigation if needed
             if (action.type === 'click' || (action.type === 'type' && action.submit)) {
-                console.log('[Agent] Action might cause navigation, waiting...');
-                await sleep(2000); // Wait for potential navigation to start
-                await waitForTabLoad(tabId); // Wait for it to finish
+                console.log('[Agent-Exec] 5. Waiting for navigation...');
+                await sleep(2000);
+                await waitForTabLoad(tabId);
+                console.log('[Agent-Exec] 5. Navigation wait complete');
 
-                // Switch back to Lukas after navigation to show progress
-                // Find Lukas tab
+                // Switch back to Lukas
                 const tabs = await chrome.tabs.query({});
                 const lukasTab = tabs.find(t => t.url?.includes('luks-pied.vercel.app') || t.url?.includes('localhost'));
                 if (lukasTab) {
                     await chrome.tabs.update(lukasTab.id, { active: true });
+                    console.log('[Agent-Exec] 6. Switched back to Lukas tab');
                 }
             } else {
+                console.log('[Agent-Exec] 5. Short wait (no navigation expected)');
                 await sleep(500);
-                // For simple typing/n-navigating actions, we might want to switch back or stay to show user?
-                // staying is better for "visual" feel, but let's switch back to show panel updates if needed.
-                // For now, let's keep it active so user sees the typing!
             }
         }
+        console.log('[Agent-Exec] ========= EXECUTE COMPLETE =========');
     } catch (error) {
-        console.error('[Agent] Execute error:', error);
+        console.error('[Agent-Exec] ❌ EXECUTE ERROR:', error);
     }
 }
 
