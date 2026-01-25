@@ -4,8 +4,11 @@
  */
 
 const VISION_MODELS = [
-    'google/gemma-3-27b-it:free',
-    'google/gemma-3-12b-it:free',
+    'google/gemini-2.0-flash-exp:free',           // Best & newest
+    'qwen/qwen-2.5-vl-7b-instruct:free',          // Good at instructions
+    'mistralai/mistral-small-3.1-24b-instruct:free',
+    'google/gemma-3-27b-it:free',                 // Backup
+    'nvidia/nemotron-nano-12b-v2-vl:free',
 ];
 
 const TEXT_MODELS = [
@@ -239,18 +242,15 @@ ${pageText?.substring(0, 1000) || 'غير متاح'}
     "thinking": "تحليلي للموقف وقراري",
     "action": {
         "type": "click|type|scroll|goto|pressKey|done",
-        "x": 400,
+        "selector": "input[name='q']",  // CSS selector للعنصر (الأفضل)
+        "x": 400,                         // إحداثيات بديلة لو الـ selector فشل
         "y": 300,
         "text": "نص للكتابة",
-        "submit": true,  // أضف هذا للضغط على Enter تلقائياً بعد الكتابة (للبحث)
-        "url": "رابط للانتقال",
-        "direction": "down",
-        "key": "Enter",
+        "submit": true,  // للضغط على Enter بعد الكتابة
         "description": "وصف الإجراء بالعربية"
     },
     "taskComplete": false,
-    "result": "النتيجة النهائية",
-    "newFindings": ["معلومة جديدة اكتشفتها"]
+    "result": "النتيجة النهائية"
 }`;
 
     // Try vision first if screenshot available

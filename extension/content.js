@@ -49,18 +49,18 @@ function getClickableElements() {
     return elements;
 }
 
-// Execute an action
+// Execute an action - Dual Mode (Selector + Coordinates)
 async function executeAction(action) {
-    console.log('[Lukas Content] Executing:', action.type);
+    console.log('[Lukas Content] Executing:', action.type, action);
 
     try {
         switch (action.type) {
             case 'click':
-                await clickAt(action.x, action.y);
+                await dualClick(action);
                 break;
 
             case 'type':
-                await typeText(action.text, action.x, action.y, action.submit);
+                await dualType(action);
                 break;
 
             case 'scroll':
@@ -87,6 +87,110 @@ async function executeAction(action) {
     } catch (error) {
         console.error('[Lukas Content] Action error:', error);
         return { success: false, error: error.message };
+    }
+}
+
+// ==========================================
+// DUAL MODE EXECUTION FUNCTIONS
+// ==========================================
+
+// Click: Try selector first, then coordinates
+async function dualClick(action) {
+    let element = null;
+
+    // Method 1: Try CSS selector
+    if (action.selector) {
+        element = document.querySelector(action.selector);
+        console.log('[Lukas Content] Selector click:', action.selector, element ? '✓' : '✗');
+    }
+
+    // Method 2: Fallback to coordinates
+    if (!element && action.x !== undefined && action.y !== undefined) {
+        element = document.elementFromPoint(action.x, action.y);
+        console.log('[Lukas Content] Coordinate click:', action.x, action.y, element ? '✓' : '✗');
+    }
+
+    if (element) {
+        highlightElement(element);
+        element.click();
+
+        // Dispatch full mouse event for better compatibility
+        const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true,
+            clientX: action.x || 0,
+            clientY: action.y || 0
+        });
+        element.dispatchEvent(clickEvent);
+        console.log('[Lukas Content] Click successful on:', element.tagName);
+    } else {
+        console.error('[Lukas Content] No element found to click!');
+    }
+}
+
+// Type: Try selector first, then coordinates, then common selectors
+async function dualType(action) {
+    const { text, selector, x, y, submit } = action;
+    let target = null;
+
+    console.log('[Lukas Content] Typing:', text, '| Selector:', selector, '| Coords:', x, y);
+
+    // Method 1: Use provided selector
+    if (selector) {
+        target = document.querySelector(selector);
+        console.log('[Lukas Content] Selector found:', target ? '✓' : '✗');
+    }
+
+    // Method 2: Click coordinates first
+    if (!target && x !== undefined && y !== undefined) {
+        await clickAt(x, y);
+        await sleep(300);
+        target = document.activeElement;
+        console.log('[Lukas Content] After click, active:', target?.tagName);
+    }
+
+    // Method 3: Try common search selectors
+    if (!target || target === document.body) {
+        target = document.querySelector('input[name="q"], input[type="search"], textarea[name="q"], input[type="text"]');
+        console.log('[Lukas Content] Common selector:', target ? '✓' : '✗');
+    }
+
+    // Method 4: Try any visible input
+    if (!target || target === document.body) {
+        target = document.querySelector('input:not([type="hidden"]), textarea');
+        console.log('[Lukas Content] Any input:', target ? '✓' : '✗');
+    }
+
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        // Visual feedback
+        highlightElement(target);
+
+        // Focus
+        target.focus();
+        await sleep(100);
+
+        // Clear and set value
+        if (target.value !== undefined) {
+            target.value = '';
+            target.value = text;
+        } else if (target.isContentEditable) {
+            target.innerText = text;
+        }
+
+        // Trigger events
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+
+        console.log('[Lukas Content] ✅ Text typed successfully');
+
+        // Submit if requested
+        if (submit) {
+            await sleep(500);
+            await pressEnter(target);
+        }
+    } else {
+        console.error('[Lukas Content] ❌ No suitable input element found!');
     }
 }
 

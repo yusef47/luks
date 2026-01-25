@@ -112,6 +112,7 @@ async function startAgent(task, maxSteps) {
                 url: tab.url,
                 title: tab.title,
                 pageText: pageInfo?.text || '',
+                htmlStructure: pageInfo?.clickableElements || [], // Send interactive elements
                 previousSteps,
                 memory: agentMemory,
                 isFirstStep: step === 1
