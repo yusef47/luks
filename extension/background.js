@@ -343,71 +343,51 @@ async function callAgent(data) {
 
 // Execute action
 async function executeAction(tabId, action) {
-    console.log('[Agent-Exec] ========= EXECUTE START =========');
-    console.log('[Agent-Exec] Action:', JSON.stringify(action));
+    console.log('[Agent-Exec] Action:', action.type, action.selector || action.text || '');
 
     try {
         // Inject content script
-        console.log('[Agent-Exec] 1. Injecting content script...');
         await chrome.scripting.executeScript({
             target: { tabId },
             files: ['content.js']
-        }).catch(e => console.log('[Agent-Exec] Script inject failed (probably already loaded):', e.message));
+        }).catch(() => { });
 
         if (action.type === 'goto') {
-            console.log('[Agent-Exec] 2. GOTO action:', action.url);
             await chrome.tabs.update(tabId, { url: action.url });
             await waitForTabLoad(tabId);
-            await sleep(1000);
-        } else if (action.type === 'wait') {
-            console.log('[Agent-Exec] 2. WAIT action:', action.duration);
-            await sleep(action.duration || 2000);
-        } else {
-            // General action (click, type, etc.)
-            console.log('[Agent-Exec] 2. General action type:', action.type);
-
-            // CRITICAL: Activate tab before interaction
-            if (['click', 'type', 'pressKey'].includes(action.type)) {
-                console.log('[Agent-Exec] 3. Activating tab...');
-                await chrome.tabs.update(tabId, { active: true });
-                await sleep(500);
-                console.log('[Agent-Exec] 3. Tab activated!');
-            }
-
-            // Send action to content script
-            console.log('[Agent-Exec] 4. Sending message to content script...');
-            try {
-                const result = await chrome.tabs.sendMessage(tabId, {
-                    action: 'executeAction',
-                    data: action
-                });
-                console.log('[Agent-Exec] 4. Content script response:', result);
-            } catch (sendError) {
-                console.error('[Agent-Exec] 4. ❌ Failed to send to content script:', sendError.message);
-            }
-
-            // Wait for navigation if needed
-            if (action.type === 'click' || (action.type === 'type' && action.submit)) {
-                console.log('[Agent-Exec] 5. Waiting for navigation...');
-                await sleep(2000);
-                await waitForTabLoad(tabId);
-                console.log('[Agent-Exec] 5. Navigation wait complete');
-
-                // Switch back to Lukas
-                const tabs = await chrome.tabs.query({});
-                const lukasTab = tabs.find(t => t.url?.includes('luks-pied.vercel.app') || t.url?.includes('localhost'));
-                if (lukasTab) {
-                    await chrome.tabs.update(lukasTab.id, { active: true });
-                    console.log('[Agent-Exec] 6. Switched back to Lukas tab');
-                }
-            } else {
-                console.log('[Agent-Exec] 5. Short wait (no navigation expected)');
-                await sleep(500);
-            }
+            return;
         }
-        console.log('[Agent-Exec] ========= EXECUTE COMPLETE =========');
+
+        if (action.type === 'wait') {
+            await sleep(action.duration || 1000);
+            return;
+        }
+
+        // Activate tab before interaction
+        await chrome.tabs.update(tabId, { active: true });
+        await sleep(300);
+
+        // Send action to content script
+        try {
+            await chrome.tabs.sendMessage(tabId, {
+                action: 'executeAction',
+                data: action
+            });
+            console.log('[Agent-Exec] ✅ Action sent');
+        } catch (e) {
+            console.error('[Agent-Exec] ❌ Send failed:', e.message);
+        }
+
+        // Wait for action to take effect
+        if (action.type === 'click' || action.submit) {
+            await sleep(3000); // Longer wait for navigation
+            await waitForTabLoad(tabId);
+        } else {
+            await sleep(500);
+        }
+
     } catch (error) {
-        console.error('[Agent-Exec] ❌ EXECUTE ERROR:', error);
+        console.error('[Agent-Exec] Error:', error.message);
     }
 }
 
