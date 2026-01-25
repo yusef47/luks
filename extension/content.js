@@ -27,26 +27,43 @@ function getPageInfo() {
     };
 }
 
-// Get clickable elements for AI context
+// Get clickable elements with detailed info for AI
 function getClickableElements() {
     const elements = [];
-    const clickables = document.querySelectorAll('a, button, input, select, [onclick], [role="button"]');
+    const clickables = document.querySelectorAll('a, button, input, select, textarea, [onclick], [role="button"], h3');
 
     clickables.forEach((el, index) => {
-        if (index > 30) return; // Limit to 30 elements
+        if (index > 40) return;
 
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
+        if (rect.top < 0 || rect.top > window.innerHeight) return; // Only visible elements
 
         elements.push({
             tag: el.tagName.toLowerCase(),
-            text: el.innerText?.substring(0, 50) || el.value || el.placeholder || '',
-            x: Math.round(rect.left + rect.width / 2),
-            y: Math.round(rect.top + rect.height / 2)
+            type: el.type || null,
+            name: el.name || null,
+            id: el.id || null,
+            text: (el.innerText?.substring(0, 50) || el.value || el.placeholder || '').trim(),
+            href: el.href || null,
+            selector: getSelector(el)
         });
     });
 
     return elements;
+}
+
+// Generate a unique CSS selector for an element
+function getSelector(el) {
+    if (el.id) return `#${el.id}`;
+    if (el.name) return `${el.tagName.toLowerCase()}[name="${el.name}"]`;
+    if (el.type === 'search') return 'input[type="search"]';
+    if (el.tagName === 'H3') return 'h3';
+    if (el.className) {
+        const cls = el.className.split(' ')[0];
+        if (cls) return `${el.tagName.toLowerCase()}.${cls}`;
+    }
+    return el.tagName.toLowerCase();
 }
 
 // Execute an action - Dual Mode (Selector + Coordinates)

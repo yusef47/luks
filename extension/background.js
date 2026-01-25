@@ -76,22 +76,21 @@ async function startAgent(task, maxSteps) {
                 break;
             }
 
-            // Capture screenshot & Page Info safely
-            let screenshot, tab, pageInfo;
+            // Get Page Info (no screenshot needed for HTML-based approach)
+            let tab, pageInfo;
             try {
-                console.log('[Agent-Debug] Capturing screenshot...');
-                screenshot = await captureTab(browserTabId);
-                if (!screenshot) console.warn('[Agent-Debug] Screenshot capture failed or returned null');
-
                 console.log('[Agent-Debug] Getting page info...');
                 tab = await chrome.tabs.get(browserTabId);
                 pageInfo = await getPageInfo(browserTabId);
-                console.log('[Agent-Debug] Current URL:', tab.url);
+                console.log('[Agent-Debug] URL:', tab.url, '| Elements:', pageInfo?.clickableElements?.length || 0);
             } catch (e) {
-                console.error('[Agent-Debug] Failed to get tab info (Tab might be closed):', e);
-                broadcastUpdate({ type: 'error', error: 'تم إغلاق التبويب أثناء العمل' });
+                console.error('[Agent-Debug] Failed to get tab info:', e);
+                broadcastUpdate({ type: 'error', error: 'تم إغلاق التبويب' });
                 break;
             }
+
+            // Capture screenshot for UI only (optional)
+            const screenshot = await captureTab(browserTabId);
 
             // Send progress
             broadcastUpdate({
@@ -101,20 +100,18 @@ async function startAgent(task, maxSteps) {
                 action: '🤔 جاري التحليل...',
                 screenshot,
                 url: tab.url,
-                phase: agentMemory.plan ? 'executing' : 'planning'
+                phase: 'executing'
             });
 
-            // Call Agent API
+            // Call Agent API (HTML-based, no vision needed)
             console.log('[Agent-Debug] Calling Agent API...');
             const response = await callAgent({
                 task,
-                screenshot,
                 url: tab.url,
                 title: tab.title,
                 pageText: pageInfo?.text || '',
-                htmlStructure: pageInfo?.clickableElements || [], // Send interactive elements
+                htmlStructure: pageInfo?.clickableElements || [],
                 previousSteps,
-                memory: agentMemory,
                 isFirstStep: step === 1
             });
 
